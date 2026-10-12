@@ -1,4 +1,6 @@
-"""Seuils du score : tous les nombres du barème sont réglés ici."""
+"""Réglages de l'application : version et seuils du barème."""
+
+VERSION = "0.1.0"
 
 # Disque système (C:) : 50 points.
 POINTS_DISQUE = 50

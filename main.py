@@ -1,4 +1,6 @@
-"""Bilan santé PC : affiche le résultat des modules dans le terminal (pas encore d'interface)."""
+"""Bilan santé PC : lance l'interface, ou le mode terminal avec `python main.py --cli`."""
+
+import sys
 
 import config
 from modules import demarrage, disque, score
@@ -32,7 +34,7 @@ def afficher_score(resultat: dict) -> None:
         print(f"\n{numero}. {conseil}")
 
 
-def main() -> None:
+def cli() -> None:
     print("=== Démarrage ===")
     resultats_demarrage = demarrage.scan()
     afficher_demarrage(resultats_demarrage)
@@ -46,5 +48,13 @@ def main() -> None:
     afficher_score(score.calculer(resultats_demarrage, resultats_disque))
 
 
+def main() -> int:
+    if "--cli" in sys.argv:
+        cli()
+        return 0
+    from ui.fenetre import lancer_interface  # importé ici : le mode terminal se passe de PySide6
+    return lancer_interface()
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
