@@ -1,5 +1,17 @@
 # Journal des versions
 
+## v0.2.0 - 2026-10-12
+
+- Nouveau module Mémoire et processeur : mémoire vive utilisée, charge du processeur
+  et programmes les plus gourmands.
+- Nouveau module Batterie (PC portables) : niveau, branchement et usure réelle lue auprès
+  de Windows ; « Usure non mesurable sur ce PC » quand l'information n'existe pas.
+- Score v2 : barème rééquilibré sur 4 parties, points de la batterie répartis sur les autres
+  quand elle est absente. Les scores v1 ne sont pas comparables.
+- Historique des analyses : encadré « Depuis la dernière fois », graphique des 20 derniers
+  scores et bouton « Effacer l'historique ». Seulement des chiffres, enregistrés sur le PC.
+- Bouton « Enregistrer le rapport » : page HTML autonome, sans nom d'utilisateur.
+
 ## v0.1.0 - 2026-10-12
 
 Première version installable.

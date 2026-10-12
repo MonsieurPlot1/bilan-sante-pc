@@ -267,6 +267,8 @@ class Fenetre(QMainWindow):
             texte = resultat["erreurs"]["score"]
         elif conseils:
             texte = "\n\n".join(f"{numero}. {conseil}" for numero, conseil in enumerate(conseils, start=1))
+        elif note is None:  # pas de conseil, mais une partie n'a pas pu être vérifiée
+            texte = "Aucun conseil pour les parties vérifiées, mais l'analyse est incomplète."
         else:
             texte = "Rien à signaler : ton PC est en bonne forme."
         self.conseils.setText(texte)
