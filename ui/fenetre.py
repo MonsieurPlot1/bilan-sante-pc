@@ -1,47 +1,29 @@
 """Fenêtre principale de Bilan santé PC (PySide6)."""
 
+import html
 import logging
 import sys
-from datetime import datetime
 
-from PySide6.QtCore import QPointF, QRectF, QStandardPaths, QThread, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen
-from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
-                               QMessageBox, QProgressBar, QPushButton, QScrollArea, QToolTip, QTreeWidget,
-                               QTreeWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtCore import QStandardPaths, QThread, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
+from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
+                               QMessageBox, QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 import config
 import historique
 from modules.disque import taille_lisible
-from ui import analyse
+from ui import analyse, theme
+from ui.widgets import (Carte, CarteConseil, Graphique, Jauge, PastilleIcone, pastille, repolir,
+                        titre_section)
+
+journal = logging.getLogger(__name__)
 
 # Colonnes du détail dépliable de chaque carte (la batterie n'a pas de détail).
 COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élément", "Taille", "Détail"],
             "ressources": ["Programme", "Mémoire"], "batterie": []}
 
-COULEURS = {"vert": "#4caf50", "orange": "#ff9800", "rouge": "#f44336", "gris": "#9e9e9e"}
-
-STYLE = """
-QWidget { background: #1e1f22; color: #e6e6e6; }
-QLabel#sous-titre { color: #9aa0a6; }
-QFrame#carte { background: #2b2d31; border-radius: 10px; }
-QFrame#carte QLabel, QFrame#carte QPushButton#lien { background: transparent; }
-QPushButton { background: #3a3d42; border: none; border-radius: 6px; padding: 8px 16px; }
-QPushButton:hover { background: #4a4e54; }
-QPushButton:disabled { color: #777; background: #2b2d31; }
-QPushButton#principal { background: #3d7eff; font-size: 13pt; font-weight: bold; padding: 12px 32px; }
-QPushButton#principal:hover { background: #5a92ff; }
-QPushButton#principal:disabled { background: #2d4a80; }
-QPushButton#lien { color: #8ab4f8; text-align: left; padding: 2px 0; }
-QTreeWidget { background: #232428; border: none; }
-QHeaderView::section { background: #2b2d31; color: #9aa0a6; border: none; padding: 4px; }
-QProgressBar { border: none; background: #2b2d31; max-height: 6px; border-radius: 3px; }
-QProgressBar::chunk { background: #3d7eff; }
-QScrollBar { background: #232428; width: 10px; height: 10px; }
-QScrollBar::handle { background: #4a4e54; border-radius: 5px; min-height: 20px; min-width: 20px; }
-QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
-QScrollBar::add-page, QScrollBar::sub-page { background: none; }
-"""
+# Mot court affiché au-dessus de la phrase d'interprétation (la couleur n'est jamais seule).
+ETATS = {"vert": "Bon état", "orange": "À surveiller", "rouge": "À améliorer", "gris": "Analyse incomplète"}
 
 
 class Analyse(QThread):
@@ -55,190 +37,203 @@ class Analyse(QThread):
             resultat["historique"] = historique.enregistrer(resultat)
             resultat["comparaison"] = historique.comparer(resultat["historique"], analyse.NOMS)
         except Exception:
-            logging.getLogger(__name__).exception("Échec de l'historique")
+            journal.exception("Échec de l'historique")
             resultat["historique"] = None
         self.termine.emit(resultat)
 
 
-class Graphique(QWidget):
-    """Mini-graphique de l'évolution du score (une seule série : pas de légende)."""
-
-    MARGE = 28
-
-    def __init__(self) -> None:
-        super().__init__(minimumHeight=110, mouseTracking=True)
-        self.entrees: list[dict] = []
-
-    def afficher(self, entrees: list[dict]) -> None:
-        self.entrees = entrees
-        scores = ", ".join(str(e["score"]) for e in entrees)
-        self.setAccessibleDescription(f"Évolution du score sur les dernières analyses : {scores}")
-        self.update()
-
-    def _positions(self) -> list[QPointF]:
-        largeur, hauteur = self.width() - 2 * self.MARGE, self.height() - 20
-        pas = largeur / max(1, len(self.entrees) - 1)
-        return [QPointF(self.MARGE + i * pas, 10 + hauteur * (1 - e["score"] / 100))
-                for i, e in enumerate(self.entrees)]
-
-    def paintEvent(self, _evenement) -> None:
-        peintre = QPainter(self)
-        peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
-        if len(self.entrees) < 2:
-            peintre.setPen(QColor("#9aa0a6"))
-            peintre.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
-                             "Le graphique apparaîtra après deux analyses.")
-            return
-        # Repères discrets à 0, 50 et 100.
-        hauteur = self.height() - 20
-        peintre.setFont(QFont("Segoe UI", 8))
-        for valeur in (0, 50, 100):
-            y = 10 + hauteur * (1 - valeur / 100)
-            peintre.setPen(QPen(QColor("#3a3d42"), 1))
-            peintre.drawLine(QPointF(self.MARGE, y), QPointF(self.width() - self.MARGE, y))
-            peintre.setPen(QColor("#9aa0a6"))
-            peintre.drawText(QRectF(0, y - 8, self.MARGE - 6, 16),
-                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, str(valeur))
-        points = self._positions()
-        peintre.setPen(QPen(QColor("#3d7eff"), 2))
-        peintre.drawPolyline(points)
-        peintre.setPen(QPen(QColor("#2b2d31"), 2))  # anneau couleur du fond autour des points
-        peintre.setBrush(QColor("#3d7eff"))
-        for point in points:
-            peintre.drawEllipse(point, 4, 4)
-        # Seule la dernière valeur est écrite, dans la couleur du texte.
-        peintre.setPen(QColor("#e6e6e6"))
-        dernier = points[-1]
-        peintre.drawText(QRectF(dernier.x() - 20, dernier.y() - 22, 40, 14), Qt.AlignmentFlag.AlignCenter,
-                         str(self.entrees[-1]["score"]))
-
-    def mouseMoveEvent(self, evenement) -> None:
-        points = self._positions()
-        if len(points) < 2:
-            return
-        # Zone de survol plus large que le point : le plus proche horizontalement.
-        index = min(range(len(points)), key=lambda i: abs(points[i].x() - evenement.position().x()))
-        date = datetime.fromisoformat(self.entrees[index]["date"])
-        QToolTip.showText(evenement.globalPosition().toPoint(),
-                          f"{date:%d/%m/%Y %H:%M} : {self.entrees[index]['score']} / 100", self)
+def carte_vide(marges: tuple[int, int, int, int] = (22, 18, 22, 18)) -> tuple[QFrame, QVBoxLayout]:
+    cadre = QFrame(objectName="carte")
+    disposition = QVBoxLayout(cadre)
+    disposition.setContentsMargins(*marges)
+    disposition.setSpacing(12)
+    return cadre, disposition
 
 
-class Carte(QFrame):
-    """Carte d'un module : score partiel, résumé et détail dépliable."""
-
-    def __init__(self, titre: str, colonnes: list[str]) -> None:
-        super().__init__(objectName="carte")
-        self.titre = titre
-        self.entete = QLabel(titre, font=QFont("Segoe UI", 13, QFont.Weight.Bold))
-        self.resume = QLabel("Pas encore analysé.", wordWrap=True)
-        self.bouton = QPushButton("Voir le détail ▸", objectName="lien", cursor=Qt.CursorShape.PointingHandCursor)
-        self.bouton.clicked.connect(self.basculer)
-        self.bouton.hide()
-        self.detail = QTreeWidget(rootIsDecorated=False, minimumHeight=180)
-        self.detail.setHeaderLabels(colonnes)
-        self.detail.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.detail.hide()
-        disposition = QVBoxLayout(self)
-        for widget in (self.entete, self.resume, self.bouton, self.detail):
-            disposition.addWidget(widget)
-
-    def basculer(self) -> None:
-        visible = not self.detail.isVisible()
-        self.detail.setVisible(visible)
-        self.bouton.setText("Masquer le détail ▾" if visible else "Voir le détail ▸")
-
-    def remplir(self, points: str, constats: list[str], lignes: list[list[str]], erreur: str | None) -> None:
-        self.entete.setText(f"{self.titre} : {points}")
-        self.resume.setText(erreur or "\n".join(constats))
-        self.detail.clear()
-        self.detail.addTopLevelItems([QTreeWidgetItem(ligne) for ligne in lignes])
-        self.bouton.setVisible(bool(lignes))
-        if not lignes:
-            self.detail.hide()
+def entete_carte(icone: str, titre: str) -> QHBoxLayout:
+    ligne = QHBoxLayout()
+    ligne.setSpacing(12)
+    ligne.addWidget(PastilleIcone(icone, taille=32))
+    ligne.addWidget(QLabel(titre, font=theme.police(12.5, QFont.Weight.DemiBold, titre=True)))
+    ligne.addStretch()
+    return ligne
 
 
 class Fenetre(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Bilan santé PC")
-        self.resize(900, 650)
+        self.setWindowIcon(theme.icone("logo", theme.ACCENT_CLAIR, 32))
+        self.resize(980, 760)
+        self.setMinimumSize(760, 560)
         self.resultat: dict | None = None
         self.analyse: Analyse | None = None
 
-        titre = QLabel(f"Bilan santé PC  <span style='font-size:10pt; color:#9aa0a6'>v{config.VERSION}</span>",
-                       font=QFont("Segoe UI", 18, QFont.Weight.Bold))
-        rassurant = QLabel("Tout reste sur ton PC. L'application ne modifie rien.", objectName="sous-titre")
-
-        self.score = QLabel("– / 100", alignment=Qt.AlignmentFlag.AlignCenter,
-                            font=QFont("Segoe UI", 44, QFont.Weight.Bold))
-        self.phrase = QLabel("Clique sur « Analyser mon PC » pour commencer.",
-                             alignment=Qt.AlignmentFlag.AlignCenter, wordWrap=True)
-        self.bouton = QPushButton("Analyser mon PC", objectName="principal",
-                                  cursor=Qt.CursorShape.PointingHandCursor)
-        self.bouton.clicked.connect(self.lancer)
-        self.progression = QProgressBar(textVisible=False, maximum=0)  # maximum=0 : indéterminée
-        self.progression.hide()
-
-        self.cartes = {cle: Carte(nom, COLONNES[cle]) for cle, nom, _ in analyse.MODULES}
-        self.cartes["batterie"].hide()  # affichée seulement si une batterie est détectée
-        cartes = QGridLayout()
-        for position, carte in enumerate(self.cartes.values()):
-            cartes.addWidget(carte, position // 2, position % 2, Qt.AlignmentFlag.AlignTop)
-        cartes.setColumnStretch(0, 1)
-        cartes.setColumnStretch(1, 1)
-
-        self.conseils = QLabel(wordWrap=True, textFormat=Qt.TextFormat.PlainText)
-        cadre_conseils = QFrame(objectName="carte")
-        disposition_conseils = QVBoxLayout(cadre_conseils)
-        disposition_conseils.addWidget(QLabel("Conseils", font=QFont("Segoe UI", 13, QFont.Weight.Bold)))
-        disposition_conseils.addWidget(self.conseils)
-        self.conseils.setText("Les conseils s'afficheront après l'analyse.")
-
-        self.copier = QPushButton("Copier le rapport", enabled=False)
-        self.copier.clicked.connect(self.copier_rapport)
-        self.enregistrer = QPushButton("Enregistrer le rapport", enabled=False)
-        self.enregistrer.clicked.connect(self.enregistrer_rapport)
-        boutons = QHBoxLayout()
-        boutons.addStretch()
-        boutons.addWidget(self.copier)
-        boutons.addWidget(self.enregistrer)
-
-        self.comparaison = QLabel(wordWrap=True, textFormat=Qt.TextFormat.PlainText)
-        self.graphique = Graphique()
-        effacer = QPushButton("Effacer l'historique")
-        effacer.clicked.connect(self.effacer_historique)
-        cadre_historique = QFrame(objectName="carte")
-        disposition_historique = QVBoxLayout(cadre_historique)
-        disposition_historique.addWidget(QLabel("Depuis la dernière fois",
-                                                font=QFont("Segoe UI", 13, QFont.Weight.Bold)))
-        disposition_historique.addWidget(self.comparaison)
-        disposition_historique.addWidget(self.graphique)
-        disposition_historique.addWidget(effacer, alignment=Qt.AlignmentFlag.AlignRight)
-        self.afficher_historique_existant()
-
-        contenu = QWidget()
+        contenu = QWidget(objectName="contenu")
         disposition = QVBoxLayout(contenu)
-        disposition.setContentsMargins(24, 16, 24, 16)
-        disposition.setSpacing(12)
-        disposition.addWidget(titre)
-        disposition.addWidget(rassurant)
-        disposition.addWidget(self.score)
-        disposition.addWidget(self.phrase)
-        disposition.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignCenter)
-        disposition.addWidget(self.progression)
-        disposition.addWidget(cadre_historique)
-        disposition.addLayout(cartes)
-        disposition.addWidget(cadre_conseils)
-        disposition.addLayout(boutons)
+        disposition.setContentsMargins(32, 26, 32, 26)
+        disposition.setSpacing(16)
+        disposition.addLayout(self._entete())
+        disposition.addWidget(self._heros())
+        disposition.addWidget(self._historique())
+        disposition.addSpacing(6)
+        disposition.addWidget(titre_section("Détail par partie"))
+        disposition.addLayout(self._cartes())
+        disposition.addSpacing(6)
+        disposition.addWidget(titre_section("Conseils"))
+        disposition.addLayout(self._conseils())
+        disposition.addLayout(self._actions())
         disposition.addStretch()
 
         defilement = QScrollArea(widgetResizable=True, frameShape=QFrame.Shape.NoFrame)
         defilement.setWidget(contenu)
         self.setCentralWidget(defilement)
         self.statusBar().showMessage("Prêt")
+        self.afficher_historique_existant()
+
+    # --- Construction des zones de la fenêtre ---
+
+    def _entete(self) -> QHBoxLayout:
+        titre = QLabel("Bilan santé PC", font=theme.police(18, QFont.Weight.DemiBold, titre=True))
+        version = QLabel(f"v{config.VERSION}", objectName="version", font=theme.police(8.5))
+        ligne_titre = QHBoxLayout()
+        ligne_titre.setSpacing(10)
+        ligne_titre.addWidget(titre)
+        ligne_titre.addWidget(version, alignment=Qt.AlignmentFlag.AlignVCenter)
+        ligne_titre.addStretch()
+
+        bouclier = QLabel()
+        bouclier.setPixmap(theme.pixmap_icone("bouclier", theme.NIVEAUX["vert"], 14))
+        rassurant = QLabel("Tout reste sur ton PC. L'application ne modifie rien.", objectName="secondaire")
+        ligne_rassurante = QHBoxLayout()
+        ligne_rassurante.setSpacing(6)
+        ligne_rassurante.addWidget(bouclier)
+        ligne_rassurante.addWidget(rassurant)
+        ligne_rassurante.addStretch()
+
+        textes = QVBoxLayout()
+        textes.setSpacing(2)
+        textes.addLayout(ligne_titre)
+        textes.addLayout(ligne_rassurante)
+        entete = QHBoxLayout()
+        entete.setSpacing(14)
+        entete.addWidget(PastilleIcone("logo", taille=46))
+        entete.addLayout(textes, 1)
+        return entete
+
+    def _heros(self) -> QFrame:
+        """Zone principale : la jauge du score, son interprétation et le bouton d'analyse."""
+        self.jauge = Jauge()
+        self.etat = pastille("Pas encore analysé")
+        self.phrase = QLabel("Clique sur « Analyser mon PC » pour commencer.", wordWrap=True,
+                             font=theme.police(17, QFont.Weight.DemiBold, titre=True))
+        self.info = QLabel("L'analyse prend environ une minute. Elle lit ton PC sans rien changer.",
+                           objectName="secondaire", wordWrap=True)
+        self.bouton = QPushButton("  Analyser mon PC", objectName="principal",
+                                  cursor=Qt.CursorShape.PointingHandCursor,
+                                  icon=theme.icone("analyser", "white", 16), font=theme.police(11.5, QFont.Weight.DemiBold))
+        self.bouton.clicked.connect(self.lancer)
+        self.progression = QProgressBar(textVisible=False, maximum=0)  # maximum=0 : indéterminée
+        self.progression.hide()
+
+        droite = QVBoxLayout()
+        droite.setSpacing(10)
+        droite.addStretch()
+        droite.addWidget(self.etat, alignment=Qt.AlignmentFlag.AlignLeft)
+        droite.addWidget(self.phrase)
+        droite.addWidget(self.info)
+        droite.addSpacing(8)
+        droite.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignLeft)
+        droite.addWidget(self.progression)
+        droite.addStretch()
+
+        cadre = QFrame(objectName="heros")
+        ligne = QHBoxLayout(cadre)
+        ligne.setContentsMargins(28, 22, 32, 22)
+        ligne.setSpacing(32)
+        ligne.addWidget(self.jauge)
+        ligne.addLayout(droite, 1)
+        return cadre
+
+    def _historique(self) -> QFrame:
+        cadre, disposition = carte_vide()
+        entete = entete_carte("historique", "Depuis la dernière fois")
+        effacer = QPushButton(" Effacer l'historique", objectName="discret", cursor=Qt.CursorShape.PointingHandCursor,
+                              icon=theme.icone("effacer", theme.TEXTE_2, 14))
+        effacer.clicked.connect(self.effacer_historique)
+        entete.addWidget(effacer)
+        self.comparaison = QLabel(wordWrap=True, textFormat=Qt.TextFormat.RichText, minimumWidth=270)
+        self.graphique = Graphique()
+        corps = QHBoxLayout()
+        corps.setSpacing(24)
+        corps.addWidget(self.comparaison, 0, Qt.AlignmentFlag.AlignTop)
+        corps.addWidget(self.graphique, 1)
+        disposition.addLayout(entete)
+        disposition.addLayout(corps)
+        return cadre
+
+    def _cartes(self) -> QHBoxLayout:
+        """Deux colonnes indépendantes : chaque carte garde la hauteur de son contenu."""
+        self.cartes = {cle: Carte(cle, nom, COLONNES[cle]) for cle, nom, _ in analyse.MODULES}
+        self.cartes["batterie"].hide()  # affichée seulement si une batterie est détectée
+        colonnes = [QVBoxLayout(), QVBoxLayout()]
+        for position, carte in enumerate(self.cartes.values()):
+            colonnes[position % 2].addWidget(carte)
+        ligne = QHBoxLayout()
+        ligne.setSpacing(16)
+        for colonne in colonnes:
+            colonne.setSpacing(16)
+            colonne.addStretch()
+            ligne.addLayout(colonne, 1)
+        return ligne
+
+    def _conseils(self) -> QVBoxLayout:
+        self.liste_conseils = QVBoxLayout()
+        self.liste_conseils.setSpacing(10)
+        self._remplacer_conseils([], "Les conseils s'afficheront après l'analyse.")
+        return self.liste_conseils
+
+    def _actions(self) -> QHBoxLayout:
+        self.copier = QPushButton(" Copier le rapport", enabled=False, icon=theme.icone("copier"),
+                                  cursor=Qt.CursorShape.PointingHandCursor)
+        self.copier.clicked.connect(self.copier_rapport)
+        self.enregistrer = QPushButton(" Enregistrer le rapport", enabled=False, icon=theme.icone("enregistrer"),
+                                       cursor=Qt.CursorShape.PointingHandCursor)
+        self.enregistrer.clicked.connect(self.enregistrer_rapport)
+        ligne = QHBoxLayout()
+        ligne.setSpacing(10)
+        ligne.addStretch()
+        ligne.addWidget(self.copier)
+        ligne.addWidget(self.enregistrer)
+        return ligne
+
+    # --- Affichage ---
+
+    def _remplacer_conseils(self, conseils: list[str], message: str = "") -> None:
+        while self.liste_conseils.count():
+            ancien = self.liste_conseils.takeAt(0).widget()
+            ancien.hide()  # caché tout de suite : la suppression n'a lieu qu'au prochain tour de Qt
+            ancien.deleteLater()
+        for numero, conseil in enumerate(conseils, start=1):
+            self.liste_conseils.addWidget(CarteConseil(numero, conseil))
+        if message:
+            cadre, disposition = carte_vide((20, 16, 20, 16))
+            disposition.addWidget(QLabel(message, objectName="secondaire", wordWrap=True))
+            self.liste_conseils.addWidget(cadre)
+
+    def _texte_comparaison(self, lignes: list[str]) -> None:
+        """Une vraie comparaison : le score mis en avant, le reste plus discret. Un message seul : texte simple."""
+        lignes = [html.escape(ligne) for ligne in lignes]
+        if len(lignes) < 2:
+            self.comparaison.setText(f"<span style='color:{theme.TEXTE_2}'>{''.join(lignes)}</span>")
+            return
+        tete, *reste = lignes
+        self.comparaison.setText(f"<div style='font-size:13pt; font-weight:600'>{tete}</div>"
+                                 f"<div style='color:{theme.TEXTE_2}'>{'<br>'.join(reste)}</div>")
 
     def lancer(self) -> None:
         self.bouton.setEnabled(False)
+        self.bouton.setText("  Analyse en cours…")
         self.copier.setEnabled(False)
         self.enregistrer.setEnabled(False)
         self.progression.show()
@@ -251,38 +246,44 @@ class Fenetre(QMainWindow):
         self.resultat = resultat
         note = analyse.score_global(resultat)
         niveau, phrase = analyse.interpretation(note)
-        self.score.setText(f"{note if note is not None else '?'} / 100")
-        self.score.setStyleSheet(f"color: {COULEURS[niveau]};")
+        self.jauge.definir(note, theme.NIVEAUX[niveau])
+        self.etat.setText(ETATS[niveau])
+        self.etat.setProperty("niveau", niveau)
+        repolir(self.etat)
         self.phrase.setText(phrase)
+        self.info.setText(f"Analyse du {resultat['date']:%d/%m/%Y à %H:%M}, terminée en {resultat['duree']:.0f} s.")
 
+        bilan = resultat["bilan"]
         for cle, carte in self.cartes.items():
             carte.setVisible(cle in resultat["modules"])
-            if cle in resultat["modules"]:
-                module = resultat["modules"][cle]
-                carte.remplir(analyse.points_module(resultat, cle), module["constats"] if module else [],
-                              lignes_detail(cle, module) if module else [], resultat["erreurs"].get(cle))
+            if cle not in resultat["modules"]:
+                continue
+            module = resultat["modules"][cle]
+            ratio = bilan["scores"][cle] / bilan["bareme"][cle] if bilan and cle in bilan["scores"] else None
+            carte.remplir(analyse.points_module(resultat, cle), ratio, module["constats"] if module else [],
+                          lignes_detail(cle, module) if module else [], resultat["erreurs"].get(cle))
 
         conseils = analyse.conseils(resultat)
-        if resultat["bilan"] is None:
-            texte = resultat["erreurs"]["score"]
+        if bilan is None:
+            self._remplacer_conseils([], resultat["erreurs"]["score"])
         elif conseils:
-            texte = "\n\n".join(f"{numero}. {conseil}" for numero, conseil in enumerate(conseils, start=1))
+            self._remplacer_conseils(conseils)
         elif note is None:  # pas de conseil, mais une partie n'a pas pu être vérifiée
-            texte = "Aucun conseil pour les parties vérifiées, mais l'analyse est incomplète."
+            self._remplacer_conseils([], "Aucun conseil pour les parties vérifiées, mais l'analyse est incomplète.")
         else:
-            texte = "Rien à signaler : ton PC est en bonne forme."
-        self.conseils.setText(texte)
+            self._remplacer_conseils([], "Rien à signaler : ton PC est en bonne forme.")
 
         if resultat["historique"] is None:
-            self.comparaison.setText(f"L'historique n'a pas pu être lu ou enregistré. {analyse.AIDE}")
+            self._texte_comparaison([f"L'historique n'a pas pu être lu ou enregistré. {analyse.AIDE}"])
         elif note is None:
-            self.comparaison.setText("Analyse incomplète : elle n'est pas enregistrée dans l'historique.")
+            self._texte_comparaison(["Analyse incomplète : elle n'est pas enregistrée dans l'historique."])
             self.graphique.afficher(historique.serie(resultat["historique"]))
         else:
-            self.comparaison.setText("\n".join(resultat["comparaison"]))
+            self._texte_comparaison(resultat["comparaison"])
             self.graphique.afficher(historique.serie(resultat["historique"]))
 
         self.progression.hide()
+        self.bouton.setText("  Relancer l'analyse")
         self.bouton.setEnabled(True)
         self.copier.setEnabled(True)
         self.enregistrer.setEnabled(True)
@@ -294,10 +295,12 @@ class Fenetre(QMainWindow):
             entrees = historique.charger()
             self.graphique.afficher(historique.serie(entrees))
         except Exception:  # un historique illisible ne doit pas empêcher l'ouverture
-            logging.getLogger(__name__).exception("Historique illisible au lancement")
+            journal.exception("Historique illisible au lancement")
             entrees = []
-        self.comparaison.setText("Lance une analyse pour voir ce qui a changé depuis la dernière fois."
-                                 if entrees else "Aucune analyse enregistrée pour l'instant.")
+        self._texte_comparaison(["Lance une analyse pour voir ce qui a changé depuis la dernière fois."]
+                                if entrees else ["Aucune analyse enregistrée pour l'instant."])
+
+    # --- Actions ---
 
     def effacer_historique(self) -> None:
         boite = QMessageBox(QMessageBox.Icon.Question, "Effacer l'historique",
@@ -310,11 +313,11 @@ class Fenetre(QMainWindow):
         try:
             historique.effacer()
         except OSError:
-            logging.getLogger(__name__).exception("Impossible d'effacer l'historique")
+            journal.exception("Impossible d'effacer l'historique")
             self.statusBar().showMessage("L'historique n'a pas pu être effacé.", 6000)
             return
         self.graphique.afficher([])
-        self.comparaison.setText("Historique effacé.")
+        self._texte_comparaison(["Historique effacé."])
         self.statusBar().showMessage("Historique effacé.", 4000)
 
     def copier_rapport(self) -> None:
@@ -336,7 +339,7 @@ class Fenetre(QMainWindow):
             with open(chemin, "w", encoding="utf-8") as fichier:
                 fichier.write(page)
         except Exception:
-            logging.getLogger(__name__).exception("Impossible d'enregistrer le rapport")
+            journal.exception("Impossible d'enregistrer le rapport")
             QMessageBox.warning(self, "Rapport non enregistré",
                                 "Le rapport n'a pas pu être enregistré à cet endroit. Essaie un autre dossier.")
             return
@@ -365,11 +368,26 @@ def lignes_detail(cle: str, module: dict) -> list[list[str]]:
     return []
 
 
+def preparer_application(app: QApplication) -> None:
+    """Thème sombre : style Fusion, palette, police et feuille de style."""
+    app.setStyle("Fusion")
+    app.styleHints().setColorScheme(Qt.ColorScheme.Dark)  # barre de titre Windows sombre
+    palette = QPalette()
+    for role, couleur in ((QPalette.ColorRole.Window, theme.SURFACE), (QPalette.ColorRole.WindowText, theme.TEXTE),
+                          (QPalette.ColorRole.Base, theme.SURFACE_2), (QPalette.ColorRole.Text, theme.TEXTE),
+                          (QPalette.ColorRole.Button, theme.SURFACE_2), (QPalette.ColorRole.ButtonText, theme.TEXTE),
+                          (QPalette.ColorRole.ToolTipBase, theme.SURFACE_2), (QPalette.ColorRole.ToolTipText, theme.TEXTE),
+                          (QPalette.ColorRole.Highlight, theme.ACCENT), (QPalette.ColorRole.HighlightedText, "white")):
+        palette.setColor(role, QColor(couleur))
+    app.setPalette(palette)
+    app.setFont(theme.police(10))
+    app.setStyleSheet(theme.STYLE)
+
+
 def lancer_interface() -> int:
     app = QApplication(sys.argv)
-    app.setFont(QFont("Segoe UI", 10))
-    app.setStyleSheet(STYLE)
+    preparer_application(app)
     fenetre = Fenetre()
     fenetre.show()
-    logging.getLogger(__name__).info("Fenêtre ouverte")
+    journal.info("Fenêtre ouverte")
     return app.exec()

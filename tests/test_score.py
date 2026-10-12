@@ -10,7 +10,8 @@ GO = 1024**3
 
 
 def demarrage(nb: int) -> dict:
-    return {"programmes": [{"nom": f"p{i}"} for i in range(nb)]}
+    return {"programmes": [{"nom": f"p{i}", "editeur": None, "chemin": rf"C:\p{i}.exe", "source": "Registre"}
+                           for i in range(nb)]}
 
 
 def disque(pourcentage: float, gros_dossiers: list[dict] | None = None) -> dict:
