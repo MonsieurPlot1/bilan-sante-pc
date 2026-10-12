@@ -8,9 +8,11 @@ import time
 from typing import Callable
 
 import config
+from journal import dossier_par_defaut
 from modules import demarrage, disque, score
 
 journal = logging.getLogger(__name__)
+AIDE = f"Les détails sont dans le journal : {dossier_par_defaut() / 'bilan.log'}"
 
 # (clé, nom affiché, fonction scan, résultat neutre si le module plante)
 MODULES: list[tuple[str, str, Callable[[], dict], dict]] = [
@@ -28,7 +30,7 @@ def analyser() -> dict:
             resultats[cle] = scan()
         except Exception:  # on veut isoler n'importe quelle panne du module
             journal.exception("Échec du module %s", nom)
-            erreurs[cle] = f"L'analyse « {nom} » n'a pas pu aboutir. Les détails sont dans le journal."
+            erreurs[cle] = f"L'analyse « {nom} » n'a pas pu aboutir. {AIDE}"
             # Le résultat neutre donne tous les points et aucun conseil pour ce module.
             resultats[cle] = neutre
 
@@ -37,7 +39,7 @@ def analyser() -> dict:
     except Exception:
         journal.exception("Échec du calcul du score")
         bilan = None
-        erreurs["score"] = "Le score n'a pas pu être calculé. Les détails sont dans le journal."
+        erreurs["score"] = f"Le score n'a pas pu être calculé. {AIDE}"
 
     duree = time.perf_counter() - debut
     journal.info("Analyse terminée en %.1f s (erreurs : %s)", duree, list(erreurs) or "aucune")

@@ -3,6 +3,7 @@
 import sys
 
 import config
+import journal
 from modules import demarrage, disque, score
 
 
@@ -49,6 +50,7 @@ def cli() -> None:
 
 
 def main() -> int:
+    journal.configurer()
     if "--cli" in sys.argv:
         cli()
         return 0

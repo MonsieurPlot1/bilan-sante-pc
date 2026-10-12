@@ -1,2 +1,7 @@
+# Application
 PySide6==6.12.0
 psutil==7.2.2
+
+# Développement : tests et fabrication du .exe
+pytest==9.1.1
+pyinstaller==6.22.3

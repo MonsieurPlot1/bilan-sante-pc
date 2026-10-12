@@ -1,4 +1,4 @@
-"""Tests du calcul du score. Lancer avec : python -m unittest"""
+"""Tests du calcul du score. Lancer avec : python -m pytest"""
 
 import os
 import unittest
@@ -62,6 +62,35 @@ class TestCalculer(unittest.TestCase):
     def test_disque_systeme_absent(self):
         resultat = score.calculer(demarrage(0), {"disques": [], "gros_dossiers": []})
         self.assertEqual(resultat["scores"]["disque"], 50)
+
+
+class TestCasExtremes(unittest.TestCase):
+    def test_disque_plein_a_99(self):
+        resultat = score.calculer(demarrage(0), disque(99))
+        self.assertEqual(resultat["score"], 50)
+        self.assertEqual(resultat["scores"]["disque"], 0)
+        self.assertIn("plein à 99 %", resultat["conseils"][0])
+
+    def test_40_programmes(self):
+        resultat = score.calculer(demarrage(40), disque(40))
+        self.assertEqual(resultat["scores"]["demarrage"], 0)  # plancher : jamais négatif
+        self.assertIn("40 programmes", resultat["conseils"][0])
+
+    def test_tout_au_pire(self):
+        gros = [{"chemin": r"C:\Users\moi\Videos", "taille": 200 * GO}]
+        resultat = score.calculer(demarrage(40), disque(99, gros))
+        self.assertEqual(resultat["score"], 0)
+        self.assertEqual(len(resultat["conseils"]), 3)
+
+    def test_aucune_donnee(self):
+        resultat = score.calculer({"programmes": []}, {"disques": [], "gros_dossiers": []})
+        self.assertEqual(resultat["score"], 100)
+        self.assertEqual(resultat["conseils"], [])
+
+    def test_gros_dossier_sous_le_seuil(self):
+        petit = [{"chemin": r"C:\Users\moi\Downloads", "taille": 4 * GO}]
+        conseils = score.calculer(demarrage(0), disque(90, petit))["conseils"]
+        self.assertEqual(len(conseils), 1)  # seul le conseil disque, pas celui du dossier
 
 
 if __name__ == "__main__":
