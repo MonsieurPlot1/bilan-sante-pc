@@ -33,3 +33,14 @@ Code commenté en français, fonctions courtes, type hints, pas de dépendance i
 - `graphify-out/` est ignoré par git (chemins propres à la machine).
 - Skills addyosmani/agent-skills dans `.agents/skills/` (versionnés, verrouillés par `skills-lock.json`). `.claude/skills/` = jonctions Windows, ignorées : les recréer avec `npx skills experimental_install`.
 - Plugin ponytail activé via `.claude/settings.json`. Skill graphify installé globalement (`~/.claude/skills/graphify`).
+
+## Versions et tags
+- Format des versions : vMAJEURE.MINEURE.CORRECTIF (ex. v0.1.1). Tant que l'app est en phase de test on reste en v0.x.x.
+  - CORRECTIF (v0.1.0 → v0.1.1) : bug corrigé, petit ajustement visuel ou de texte.
+  - MINEURE (v0.1.x → v0.2.0) : nouvelle fonctionnalité ou nouveau module.
+  - MAJEURE (v0.x → v1.0.0) : seulement quand je le décide.
+- Après chaque série de modifications terminée et testée, fais un commit avec un message clair, puis PROPOSE un tag. Ne crée JAMAIS un tag sans me l'avoir demandé.
+- Quand tu proposes un tag : indique la dernière version existante (git tag --sort=-v:refname), explique en une phrase ce qui a changé, suggère la version adaptée (CORRECTIF ou MINEURE) et demande-moi de choisir : la version suggérée, une autre version que je tape, ou pas de tag pour cette fois.
+- Une fois le tag validé, dans cet ordre : mets à jour VERSION dans config.py, ajoute l'entrée correspondante dans CHANGELOG.md, fais un commit "Version vX.Y.Z", crée le tag annoté avec git tag -a vX.Y.Z -m "...".
+- Ne fais PAS de git push (ni du code ni des tags) sans que je te le demande explicitement. Quand je le demande, le tag se pousse avec git push origin vX.Y.Z.
+- Si un tag existe déjà ou si la version est plus basse que la dernière, préviens-moi au lieu de continuer.
