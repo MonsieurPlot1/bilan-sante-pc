@@ -1,5 +1,6 @@
 """Fenêtre principale de Bilan santé PC (PySide6)."""
 
+import logging
 import sys
 
 from PySide6.QtCore import QThread, Qt, Signal
@@ -205,4 +206,5 @@ def lancer_interface() -> int:
     app.setStyleSheet(STYLE)
     fenetre = Fenetre()
     fenetre.show()
+    logging.getLogger(__name__).info("Fenêtre ouverte")
     return app.exec()
