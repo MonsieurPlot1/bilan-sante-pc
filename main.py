@@ -2,6 +2,7 @@
 
 import sys
 
+import historique
 import journal
 from modules import disque
 from ui import analyse
@@ -32,6 +33,10 @@ def cli() -> None:
     print("Analyse en cours, cela peut prendre une minute...\n")
     resultat = analyse.analyser()
     print(analyse.rapport_texte(resultat))
+    entrees = historique.enregistrer(resultat)
+    if resultat["bilan"] and resultat["bilan"]["score"] is not None:
+        print("\nDepuis la dernière fois :")
+        print("\n".join(historique.comparer(entrees, analyse.NOMS)))
     modules = resultat["modules"]
     print("\n=== Détails ===")
     for cle, afficher in (("demarrage", afficher_demarrage), ("disque", afficher_disque),

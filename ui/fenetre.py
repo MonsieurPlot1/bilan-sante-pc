@@ -2,14 +2,16 @@
 
 import logging
 import sys
+from datetime import datetime
 
-from PySide6.QtCore import QThread, Qt, Signal
-from PySide6.QtGui import QFont, QGuiApplication
+from PySide6.QtCore import QPointF, QRectF, QThread, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHeaderView, QLabel, QMainWindow,
-                               QProgressBar, QPushButton, QScrollArea, QTreeWidget, QTreeWidgetItem,
-                               QVBoxLayout, QWidget)
+                               QMessageBox, QProgressBar, QPushButton, QScrollArea, QToolTip, QTreeWidget,
+                               QTreeWidgetItem, QVBoxLayout, QWidget)
 
 import config
+import historique
 from modules.disque import taille_lisible
 from ui import analyse
 
@@ -48,7 +50,77 @@ class Analyse(QThread):
     termine = Signal(object)
 
     def run(self) -> None:
-        self.termine.emit(analyse.analyser())
+        resultat = analyse.analyser()
+        try:  # l'historique est un plus : s'il échoue, l'analyse s'affiche quand même
+            resultat["historique"] = historique.enregistrer(resultat)
+            resultat["comparaison"] = historique.comparer(resultat["historique"], analyse.NOMS)
+        except Exception:
+            logging.getLogger(__name__).exception("Échec de l'historique")
+            resultat["historique"] = None
+        self.termine.emit(resultat)
+
+
+class Graphique(QWidget):
+    """Mini-graphique de l'évolution du score (une seule série : pas de légende)."""
+
+    MARGE = 28
+
+    def __init__(self) -> None:
+        super().__init__(minimumHeight=110, mouseTracking=True)
+        self.entrees: list[dict] = []
+
+    def afficher(self, entrees: list[dict]) -> None:
+        self.entrees = entrees
+        scores = ", ".join(str(e["score"]) for e in entrees)
+        self.setAccessibleDescription(f"Évolution du score sur les dernières analyses : {scores}")
+        self.update()
+
+    def _positions(self) -> list[QPointF]:
+        largeur, hauteur = self.width() - 2 * self.MARGE, self.height() - 20
+        pas = largeur / max(1, len(self.entrees) - 1)
+        return [QPointF(self.MARGE + i * pas, 10 + hauteur * (1 - e["score"] / 100))
+                for i, e in enumerate(self.entrees)]
+
+    def paintEvent(self, _evenement) -> None:
+        peintre = QPainter(self)
+        peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if len(self.entrees) < 2:
+            peintre.setPen(QColor("#9aa0a6"))
+            peintre.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
+                             "Le graphique apparaîtra après deux analyses.")
+            return
+        # Repères discrets à 0, 50 et 100.
+        hauteur = self.height() - 20
+        peintre.setFont(QFont("Segoe UI", 8))
+        for valeur in (0, 50, 100):
+            y = 10 + hauteur * (1 - valeur / 100)
+            peintre.setPen(QPen(QColor("#3a3d42"), 1))
+            peintre.drawLine(QPointF(self.MARGE, y), QPointF(self.width() - self.MARGE, y))
+            peintre.setPen(QColor("#9aa0a6"))
+            peintre.drawText(QRectF(0, y - 8, self.MARGE - 6, 16),
+                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, str(valeur))
+        points = self._positions()
+        peintre.setPen(QPen(QColor("#3d7eff"), 2))
+        peintre.drawPolyline(points)
+        peintre.setPen(QPen(QColor("#2b2d31"), 2))  # anneau couleur du fond autour des points
+        peintre.setBrush(QColor("#3d7eff"))
+        for point in points:
+            peintre.drawEllipse(point, 4, 4)
+        # Seule la dernière valeur est écrite, dans la couleur du texte.
+        peintre.setPen(QColor("#e6e6e6"))
+        dernier = points[-1]
+        peintre.drawText(QRectF(dernier.x() - 20, dernier.y() - 22, 40, 14), Qt.AlignmentFlag.AlignCenter,
+                         str(self.entrees[-1]["score"]))
+
+    def mouseMoveEvent(self, evenement) -> None:
+        points = self._positions()
+        if len(points) < 2:
+            return
+        # Zone de survol plus large que le point : le plus proche horizontalement.
+        index = min(range(len(points)), key=lambda i: abs(points[i].x() - evenement.position().x()))
+        date = datetime.fromisoformat(self.entrees[index]["date"])
+        QToolTip.showText(evenement.globalPosition().toPoint(),
+                          f"{date:%d/%m/%Y %H:%M} : {self.entrees[index]['score']} / 100", self)
 
 
 class Carte(QFrame):
@@ -125,6 +197,19 @@ class Fenetre(QMainWindow):
         self.copier = QPushButton("Copier le rapport", enabled=False)
         self.copier.clicked.connect(self.copier_rapport)
 
+        self.comparaison = QLabel(wordWrap=True, textFormat=Qt.TextFormat.PlainText)
+        self.graphique = Graphique()
+        effacer = QPushButton("Effacer l'historique")
+        effacer.clicked.connect(self.effacer_historique)
+        cadre_historique = QFrame(objectName="carte")
+        disposition_historique = QVBoxLayout(cadre_historique)
+        disposition_historique.addWidget(QLabel("Depuis la dernière fois",
+                                                font=QFont("Segoe UI", 13, QFont.Weight.Bold)))
+        disposition_historique.addWidget(self.comparaison)
+        disposition_historique.addWidget(self.graphique)
+        disposition_historique.addWidget(effacer, alignment=Qt.AlignmentFlag.AlignRight)
+        self.afficher_historique_existant()
+
         contenu = QWidget()
         disposition = QVBoxLayout(contenu)
         disposition.setContentsMargins(24, 16, 24, 16)
@@ -135,6 +220,7 @@ class Fenetre(QMainWindow):
         disposition.addWidget(self.phrase)
         disposition.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignCenter)
         disposition.addWidget(self.progression)
+        disposition.addWidget(cadre_historique)
         disposition.addLayout(cartes)
         disposition.addWidget(cadre_conseils)
         disposition.addWidget(self.copier, alignment=Qt.AlignmentFlag.AlignRight)
@@ -178,10 +264,48 @@ class Fenetre(QMainWindow):
             texte = "Rien à signaler : ton PC est en bonne forme."
         self.conseils.setText(texte)
 
+        if resultat["historique"] is None:
+            self.comparaison.setText(f"L'historique n'a pas pu être lu ou enregistré. {analyse.AIDE}")
+        elif note is None:
+            self.comparaison.setText("Analyse incomplète : elle n'est pas enregistrée dans l'historique.")
+            self.graphique.afficher(historique.serie(resultat["historique"]))
+        else:
+            self.comparaison.setText("\n".join(resultat["comparaison"]))
+            self.graphique.afficher(historique.serie(resultat["historique"]))
+
         self.progression.hide()
         self.bouton.setEnabled(True)
         self.copier.setEnabled(True)
         self.statusBar().showMessage(f"Terminé en {resultat['duree']:.0f} s")
+
+    def afficher_historique_existant(self) -> None:
+        """Au lancement : le graphique des analyses précédentes, s'il y en a."""
+        try:
+            entrees = historique.charger()
+            self.graphique.afficher(historique.serie(entrees))
+        except Exception:  # un historique illisible ne doit pas empêcher l'ouverture
+            logging.getLogger(__name__).exception("Historique illisible au lancement")
+            entrees = []
+        self.comparaison.setText("Lance une analyse pour voir ce qui a changé depuis la dernière fois."
+                                 if entrees else "Aucune analyse enregistrée pour l'instant.")
+
+    def effacer_historique(self) -> None:
+        boite = QMessageBox(QMessageBox.Icon.Question, "Effacer l'historique",
+                            "Effacer toutes les analyses enregistrées ? Cette action est définitive.", parent=self)
+        confirmer = boite.addButton("Effacer", QMessageBox.ButtonRole.DestructiveRole)
+        boite.setDefaultButton(boite.addButton("Annuler", QMessageBox.ButtonRole.RejectRole))
+        boite.exec()
+        if boite.clickedButton() is not confirmer:
+            return
+        try:
+            historique.effacer()
+        except OSError:
+            logging.getLogger(__name__).exception("Impossible d'effacer l'historique")
+            self.statusBar().showMessage("L'historique n'a pas pu être effacé.", 6000)
+            return
+        self.graphique.afficher([])
+        self.comparaison.setText("Historique effacé.")
+        self.statusBar().showMessage("Historique effacé.", 4000)
 
     def copier_rapport(self) -> None:
         if self.resultat:
