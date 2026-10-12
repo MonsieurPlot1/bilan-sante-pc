@@ -23,7 +23,7 @@ Code commenté en français, fonctions courtes, type hints, pas de dépendance i
 - Utilise les skills de review/tests disponibles quand ils s'appliquent.
 - Ne réécris pas du code qui fonctionne et qui est testé.
 - Si tu es bloqué après 3 tentatives sur le même problème, arrête-toi et explique où ça coince.
-- Un commit git par tâche terminée.
+- Un commit git par tâche terminée, puis `git push` vers GitHub (origin) juste après.
 - Si le dossier graphify-out/ existe, lance `graphify update .` après avoir modifié du code, pour que le graphe ne soit pas périmé. S'il n'existe pas, ne le crée pas.
 
 ## Environnement de dev (hors git)
