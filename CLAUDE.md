@@ -41,6 +41,6 @@ Code commenté en français, fonctions courtes, type hints, pas de dépendance i
   - MAJEURE (v0.x → v1.0.0) : seulement quand je le décide.
 - Après chaque série de modifications terminée et testée, fais un commit avec un message clair, puis PROPOSE un tag. Ne crée JAMAIS un tag sans me l'avoir demandé.
 - Quand tu proposes un tag : indique la dernière version existante (git tag --sort=-v:refname), explique en une phrase ce qui a changé, suggère la version adaptée (CORRECTIF ou MINEURE) et demande-moi de choisir : la version suggérée, une autre version que je tape, ou pas de tag pour cette fois.
-- Une fois le tag validé, dans cet ordre : mets à jour VERSION dans config.py, ajoute l'entrée correspondante dans CHANGELOG.md, fais un commit "Version vX.Y.Z", crée le tag annoté avec git tag -a vX.Y.Z -m "...".
+- Une fois le tag validé, dans cet ordre : mets à jour VERSION dans config.py, ajoute l'entrée correspondante dans CHANGELOG.md, fais un commit "Version vX.Y.Z", crée le tag annoté avec git tag -a vX.Y.Z -F <fichier>. Le message du tag = une ligne de titre « vX.Y.Z : résumé en une phrase », une ligne vide, puis le contenu de l'entrée vX.Y.Z du CHANGELOG (ce qui a changé).
 - Ne fais PAS de git push (ni du code ni des tags) sans que je te le demande explicitement. Quand je le demande, le tag se pousse avec git push origin vX.Y.Z.
 - Si un tag existe déjà ou si la version est plus basse que la dernière, préviens-moi au lieu de continuer.
