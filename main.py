@@ -2,14 +2,13 @@
 
 import sys
 
-import config
 import journal
-from modules import demarrage, disque, score
+from modules import disque
+from ui import analyse
 
 
 def afficher_demarrage(resultat: dict) -> None:
-    for constat in resultat["constats"]:
-        print(constat)
+    print("\nProgrammes lancés au démarrage :")
     for programme in resultat["programmes"]:
         print(f"\n- {programme['nom']}")
         print(f"    Chemin  : {programme['chemin']}")
@@ -18,35 +17,27 @@ def afficher_demarrage(resultat: dict) -> None:
 
 
 def afficher_disque(resultat: dict) -> None:
-    for constat in resultat["constats"]:
-        print(constat)
     print("\nPlus gros dossiers de votre profil :")
     for dossier in resultat["gros_dossiers"]:
         print(f"  {disque.taille_lisible(dossier['taille']):>10}  {dossier['chemin']}")
 
 
-def afficher_score(resultat: dict) -> None:
-    print(f"Score de santé : {resultat['score']} / 100")
-    print(f"  Démarrage : {resultat['scores']['demarrage']} / {config.POINTS_DEMARRAGE}")
-    print(f"  Disque    : {resultat['scores']['disque']} / {config.POINTS_DISQUE}")
-    if not resultat["conseils"]:
-        print("\nRien à signaler : votre PC est en bonne forme.")
-    for numero, conseil in enumerate(resultat["conseils"], start=1):
-        print(f"\n{numero}. {conseil}")
+def afficher_ressources(resultat: dict) -> None:
+    print("\nProgrammes qui occupent le plus de mémoire :")
+    for programme in resultat["processus"]:
+        print(f"  {disque.taille_lisible(programme['octets']):>10}  {programme['nom']}")
 
 
 def cli() -> None:
-    print("=== Démarrage ===")
-    resultats_demarrage = demarrage.scan()
-    afficher_demarrage(resultats_demarrage)
-
-    print("\n=== Disque ===")
-    print("Analyse des dossiers en cours, cela peut prendre une minute...")
-    resultats_disque = disque.scan()
-    afficher_disque(resultats_disque)
-
-    print("\n=== Bilan ===")
-    afficher_score(score.calculer(resultats_demarrage, resultats_disque))
+    print("Analyse en cours, cela peut prendre une minute...\n")
+    resultat = analyse.analyser()
+    print(analyse.rapport_texte(resultat))
+    modules = resultat["modules"]
+    print("\n=== Détails ===")
+    for cle, afficher in (("demarrage", afficher_demarrage), ("disque", afficher_disque),
+                          ("ressources", afficher_ressources)):
+        if modules.get(cle):
+            afficher(modules[cle])
 
 
 def main() -> int:

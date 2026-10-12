@@ -2,15 +2,34 @@
 
 VERSION = "0.1.0"
 
-# Disque système (C:) : 50 points.
-POINTS_DISQUE = 50
-DISQUE_SEUIL_OK = 70     # % de remplissage jusqu'auquel le disque garde tous ses points
-DISQUE_SEUIL_ZERO = 95   # % de remplissage à partir duquel le disque n'a plus aucun point
+# Version du calcul du score : les scores de versions différentes ne se comparent pas.
+SCORE_VERSION = 2
 
-# Programmes au démarrage : 50 points.
-POINTS_DEMARRAGE = 50
-DEMARRAGE_NB_OK = 10     # nombre de programmes sans pénalité
-DEMARRAGE_PENALITE = 3   # points retirés par programme au-delà
+# Points de chaque module (total 100). Sans batterie, ou si son usure n'est pas mesurable,
+# ses points sont répartis sur les autres modules.
+POINTS_AVEC_BATTERIE = {"demarrage": 30, "disque": 30, "ressources": 25, "batterie": 15}
+POINTS_SANS_BATTERIE = {"demarrage": 35, "disque": 35, "ressources": 30}
+
+# Chaque mesure garde tous ses points jusqu'au seuil OK, puis en perd régulièrement
+# jusqu'au seuil ZÉRO, où elle n'en a plus aucun.
+
+# Disque système (C:) : % de remplissage.
+DISQUE_SEUIL_OK = 70
+DISQUE_SEUIL_ZERO = 95
+
+# Démarrage : nombre de programmes lancés avec Windows.
+DEMARRAGE_NB_OK = 10
+DEMARRAGE_NB_ZERO = 27
+
+# Ressources : moyenne de la mémoire vive (% utilisé) et du processeur (% occupé).
+RAM_SEUIL_OK = 70
+RAM_SEUIL_ZERO = 95
+CPU_SEUIL_OK = 50
+CPU_SEUIL_ZERO = 95
+
+# Batterie : usure en % de la capacité d'origine perdue.
+BATTERIE_USURE_OK = 20
+BATTERIE_USURE_ZERO = 60
 
 # Conseils.
 NB_CONSEILS_MAX = 3

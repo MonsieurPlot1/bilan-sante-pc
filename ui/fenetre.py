@@ -5,13 +5,17 @@ import sys
 
 from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtGui import QFont, QGuiApplication
-from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
+from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHeaderView, QLabel, QMainWindow,
                                QProgressBar, QPushButton, QScrollArea, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout, QWidget)
 
 import config
 from modules.disque import taille_lisible
 from ui import analyse
+
+# Colonnes du détail dépliable de chaque carte (la batterie n'a pas de détail).
+COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élément", "Taille", "Détail"],
+            "ressources": ["Programme", "Mémoire"], "batterie": []}
 
 COULEURS = {"vert": "#4caf50", "orange": "#ff9800", "rouge": "#f44336", "gris": "#9e9e9e"}
 
@@ -103,11 +107,13 @@ class Fenetre(QMainWindow):
         self.progression = QProgressBar(textVisible=False, maximum=0)  # maximum=0 : indéterminée
         self.progression.hide()
 
-        self.carte_demarrage = Carte("Démarrage", ["Programme", "Éditeur", "Chemin"])
-        self.carte_disque = Carte("Disque", ["Élément", "Taille", "Détail"])
-        cartes = QHBoxLayout()
-        cartes.addWidget(self.carte_demarrage, 1, Qt.AlignmentFlag.AlignTop)
-        cartes.addWidget(self.carte_disque, 1, Qt.AlignmentFlag.AlignTop)
+        self.cartes = {cle: Carte(nom, COLONNES[cle]) for cle, nom, _ in analyse.MODULES}
+        self.cartes["batterie"].hide()  # affichée seulement si une batterie est détectée
+        cartes = QGridLayout()
+        for position, carte in enumerate(self.cartes.values()):
+            cartes.addWidget(carte, position // 2, position % 2, Qt.AlignmentFlag.AlignTop)
+        cartes.setColumnStretch(0, 1)
+        cartes.setColumnStretch(1, 1)
 
         self.conseils = QLabel(wordWrap=True, textFormat=Qt.TextFormat.PlainText)
         cadre_conseils = QFrame(objectName="carte")
@@ -150,33 +156,24 @@ class Fenetre(QMainWindow):
 
     def afficher(self, resultat: dict) -> None:
         self.resultat = resultat
-        bilan, erreurs = resultat["bilan"], resultat["erreurs"]
         note = analyse.score_global(resultat)
         niveau, phrase = analyse.interpretation(note)
         self.score.setText(f"{note if note is not None else '?'} / 100")
         self.score.setStyleSheet(f"color: {COULEURS[niveau]};")
         self.phrase.setText(phrase)
 
-        def points(cle: str, maximum: int) -> str:
-            return "erreur" if cle in erreurs or not bilan else f"{bilan['scores'][cle]} / {maximum}"
+        for cle, carte in self.cartes.items():
+            carte.setVisible(cle in resultat["modules"])
+            if cle in resultat["modules"]:
+                module = resultat["modules"][cle]
+                carte.remplir(analyse.points_module(resultat, cle), module["constats"] if module else [],
+                              lignes_detail(cle, module) if module else [], resultat["erreurs"].get(cle))
 
-        demarrage = resultat["demarrage"]
-        self.carte_demarrage.remplir(
-            points("demarrage", config.POINTS_DEMARRAGE), demarrage["constats"],
-            [[p["nom"], p["editeur"] or "inconnu", p["chemin"]] for p in demarrage["programmes"]],
-            erreurs.get("demarrage"))
-
-        disque = resultat["disque"]
-        lignes = [[f"Disque {d['disque']}", taille_lisible(d["libre"]) + " libres",
-                   f"{d['pourcentage']:.0f} % utilisé sur {taille_lisible(d['total'])}"] for d in disque["disques"]]
-        lignes += [[d["chemin"], taille_lisible(d["taille"]), "dossier du profil"] for d in disque["gros_dossiers"]]
-        self.carte_disque.remplir(points("disque", config.POINTS_DISQUE), disque["constats"], lignes,
-                                  erreurs.get("disque"))
-
-        if bilan is None:
-            texte = erreurs["score"]
-        elif bilan["conseils"]:
-            texte = "\n\n".join(f"{numero}. {conseil}" for numero, conseil in enumerate(bilan["conseils"], start=1))
+        conseils = analyse.conseils(resultat)
+        if resultat["bilan"] is None:
+            texte = resultat["erreurs"]["score"]
+        elif conseils:
+            texte = "\n\n".join(f"{numero}. {conseil}" for numero, conseil in enumerate(conseils, start=1))
         else:
             texte = "Rien à signaler : ton PC est en bonne forme."
         self.conseils.setText(texte)
@@ -198,6 +195,20 @@ class Fenetre(QMainWindow):
             self.hide()
             self.analyse.wait()
         super().closeEvent(evenement)
+
+
+def lignes_detail(cle: str, module: dict) -> list[list[str]]:
+    """Lignes du détail dépliable d'une carte."""
+    if cle == "demarrage":
+        return [[p["nom"], p["editeur"] or "inconnu", p["chemin"]] for p in module["programmes"]]
+    if cle == "disque":
+        lignes = [[f"Disque {d['disque']}", taille_lisible(d["libre"]) + " libres",
+                   f"{d['pourcentage']:.0f} % utilisé sur {taille_lisible(d['total'])}"] for d in module["disques"]]
+        return lignes + [[d["chemin"], taille_lisible(d["taille"]), "dossier du profil"]
+                         for d in module["gros_dossiers"]]
+    if cle == "ressources":
+        return [[p["nom"], taille_lisible(p["octets"])] for p in module["processus"]]
+    return []
 
 
 def lancer_interface() -> int:

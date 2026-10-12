@@ -6,40 +6,56 @@ import sys
 import pytest
 
 import journal
-from tests.test_score import demarrage, disque
+from tests.test_score import batterie, demarrage, disque, ressources
 from ui import analyse
 
 
-def faux_modules(monkeypatch, scan_demarrage, scan_disque) -> None:
-    (_, nom_dem, _, neutre_dem), (_, nom_dis, _, neutre_dis) = analyse.MODULES
-    monkeypatch.setattr(analyse, "MODULES", [("demarrage", nom_dem, scan_demarrage, neutre_dem),
-                                             ("disque", nom_dis, scan_disque, neutre_dis)])
+def plante():
+    raise PermissionError("Access is denied")
 
 
-def resultat(nb_programmes: int, pourcentage: float):
-    return lambda: {"constats": ["constat"], **demarrage(nb_programmes)}, \
-           lambda: {"constats": ["constat disque"], **disque(pourcentage)}
+def faux_modules(monkeypatch, **scans) -> None:
+    """Remplace les scans des modules : par défaut un PC en forme sans batterie."""
+    defaut = {"demarrage": lambda: {"constats": ["constat démarrage"], **demarrage(5)},
+              "disque": lambda: {"constats": ["constat disque"], **disque(40)},
+              "ressources": lambda: {"constats": ["constat ressources"], **ressources()},
+              "batterie": lambda: {"applicable": False, "constats": []}} | scans
+    monkeypatch.setattr(analyse, "MODULES", [(cle, nom, defaut[cle]) for cle, nom, _ in analyse.MODULES])
 
 
 def test_analyse_normale(monkeypatch):
-    faux_modules(monkeypatch, *resultat(5, 40))
+    faux_modules(monkeypatch)
     r = analyse.analyser()
     assert r["erreurs"] == {}
     assert analyse.score_global(r) == 100
+    assert "batterie" not in r["modules"]  # PC fixe : la batterie n'apparaît pas
 
 
-def test_un_module_qui_plante_n_empeche_pas_l_autre(monkeypatch):
-    def plante():
-        raise PermissionError("Access is denied")
-    _, scan_disque = resultat(0, 90)
-    faux_modules(monkeypatch, plante, scan_disque)
+def test_un_module_qui_plante_n_empeche_pas_les_autres(monkeypatch):
+    faux_modules(monkeypatch, demarrage=plante, disque=lambda: {"constats": [], **disque(90)})
     r = analyse.analyser()
     assert list(r["erreurs"]) == ["demarrage"]
     assert "Démarrage" in r["erreurs"]["demarrage"]
-    assert r["bilan"]["scores"]["disque"] == 10  # le disque a quand même été évalué
+    assert r["bilan"]["scores"]["disque"] == 7  # le disque a quand même été évalué
     assert analyse.score_global(r) is None  # pas de score global trompeur
     rapport = analyse.rapport_texte(r)
-    assert "Démarrage : erreur" in rapport and "Disque : 10 / 50" in rapport
+    assert "Démarrage : erreur" in rapport and "Disque : 7 / 35" in rapport
+
+
+def test_tous_les_modules_plantent(monkeypatch):
+    faux_modules(monkeypatch, demarrage=plante, disque=plante, ressources=plante, batterie=plante)
+    r = analyse.analyser()
+    assert set(r["erreurs"]) == {"demarrage", "disque", "ressources", "batterie"}
+    assert analyse.score_global(r) is None
+    assert analyse.conseils(r) == []
+    assert analyse.rapport_texte(r).count(": erreur") == 4
+
+
+def test_batterie_hors_score(monkeypatch):
+    faux_modules(monkeypatch, batterie=lambda: {"constats": ["Usure non mesurable sur ce PC."], **batterie(None)})
+    r = analyse.analyser()
+    assert analyse.points_module(r, "batterie") == "hors score"
+    assert analyse.score_global(r) == 100
 
 
 @pytest.mark.parametrize("note, niveau", [(100, "vert"), (80, "vert"), (79, "orange"),
@@ -49,9 +65,10 @@ def test_interpretation(note, niveau):
 
 
 def test_rapport_avec_conseils(monkeypatch):
-    faux_modules(monkeypatch, *resultat(20, 99))
+    faux_modules(monkeypatch, demarrage=lambda: {"constats": [], **demarrage(40)},
+                 disque=lambda: {"constats": [], **disque(99)})
     rapport = analyse.rapport_texte(analyse.analyser())
-    assert "Score : 20 / 100" in rapport
+    assert "Score : 30 / 100" in rapport
     assert "1. " in rapport and "Conseils :" in rapport
 
 
