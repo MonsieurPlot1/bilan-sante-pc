@@ -134,7 +134,7 @@ def scan() -> dict:
     nb = len(programmes)
     phrase = f"{nb} programme se lance" if nb <= 1 else f"{nb} programmes se lancent"
     return {
-        "score": None,  # shortcut: barème non défini, à fixer quand le score /100 sera conçu
+        "score": None,  # calculé ensuite par modules/score.calculer()
         "constats": [f"{phrase} au démarrage de Windows."],
         "programmes": programmes,
     }

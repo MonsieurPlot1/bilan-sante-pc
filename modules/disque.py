@@ -73,7 +73,7 @@ def scan() -> dict:
     """Point d'entrée du module : renvoie le score partiel et les constats."""
     disques = lister_disques()
     return {
-        "score": None,  # shortcut: barème non défini, à fixer quand le score /100 sera conçu
+        "score": None,  # calculé ensuite par modules/score.calculer()
         "constats": [f"Disque {d['disque']} : {taille_lisible(d['libre'])} libres sur "
                      f"{taille_lisible(d['total'])} ({d['pourcentage']:.0f} % utilisé)." for d in disques],
         "disques": disques,
