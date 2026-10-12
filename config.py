@@ -1,6 +1,6 @@
 """Réglages de l'application : version et seuils du barème."""
 
-VERSION = "0.1.0"
+VERSION = "0.1.3"
 
 # Version du calcul du score : les scores de versions différentes ne se comparent pas.
 SCORE_VERSION = 2

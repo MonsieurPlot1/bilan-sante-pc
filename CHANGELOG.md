@@ -1,6 +1,6 @@
 # Journal des versions
 
-## v0.2.0 - 2026-10-12
+## v0.1.3 - 2026-10-12
 
 - Nouveau module Mémoire et processeur : mémoire vive utilisée, charge du processeur
   et programmes les plus gourmands.

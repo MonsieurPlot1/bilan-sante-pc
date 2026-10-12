@@ -32,7 +32,7 @@ Ton dossier personnel y apparaît sous la forme `%USERPROFILE%`, sans ton nom d'
 Le score sur 100 additionne les points de chaque partie : Démarrage 30, Disque 30,
 Mémoire et processeur 25, Batterie 15. Sans batterie, ou si son usure n'est pas mesurable, ses
 points vont aux autres parties (35, 35 et 30). Tous les seuils sont dans `config.py`.
-Les scores de la v0.1 (calcul v1) ne se comparent pas avec ceux d'aujourd'hui (calcul v2).
+Les scores de la v0.1.0 (calcul v1) ne se comparent pas avec ceux d'aujourd'hui (calcul v2).
 
 ## Lancer en mode développement
 
