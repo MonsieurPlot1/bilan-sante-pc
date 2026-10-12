@@ -2,11 +2,12 @@
 
 import logging
 import sys
+from pathlib import Path
 
 import pytest
 
 import journal
-from tests.test_score import batterie, demarrage, disque, ressources
+from tests.test_score import GO, batterie, demarrage, disque, ressources
 from ui import analyse
 
 
@@ -79,3 +80,18 @@ def test_journal_ecrit_dans_le_dossier(tmp_path, monkeypatch):
     logging.shutdown()
     assert fichier == tmp_path / "bilan.log"
     assert "bonjour" in fichier.read_text(encoding="utf-8")
+
+
+def test_rapport_html_sans_nom_utilisateur(monkeypatch):
+    maison = str(Path.home())
+    programme = {"nom": "<script>alert(1)</script>", "chemin": maison + r"\AppData\outil.exe",
+                 "editeur": None, "source": "Registre"}
+    faux_modules(monkeypatch, demarrage=lambda: {"constats": [], "programmes": [programme] * 12},
+                 disque=lambda: {"constats": [], **disque(90, [{"chemin": maison + r"\Downloads", "taille": 9 * GO}])},
+                 ressources=plante)
+    page = analyse.rapport_html(analyse.analyser())
+    assert maison.lower() not in page.lower()  # ni le profil, ni le chemin du journal
+    assert r"%USERPROFILE%\Downloads" in page and r"%USERPROFILE%\AppData\outil.exe" in page
+    assert "<script>" not in page and "&lt;script&gt;" in page  # texte échappé
+    assert "src=" not in page and "<link" not in page  # un seul fichier, sans ressource externe
+    assert "Conseils" in page and "Mémoire et processeur : erreur" in page and "? / 100" in page

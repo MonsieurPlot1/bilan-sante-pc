@@ -4,9 +4,9 @@ import logging
 import sys
 from datetime import datetime
 
-from PySide6.QtCore import QPointF, QRectF, QThread, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, QStandardPaths, QThread, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen
-from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHeaderView, QLabel, QMainWindow,
+from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
                                QMessageBox, QProgressBar, QPushButton, QScrollArea, QToolTip, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
@@ -196,6 +196,12 @@ class Fenetre(QMainWindow):
 
         self.copier = QPushButton("Copier le rapport", enabled=False)
         self.copier.clicked.connect(self.copier_rapport)
+        self.enregistrer = QPushButton("Enregistrer le rapport", enabled=False)
+        self.enregistrer.clicked.connect(self.enregistrer_rapport)
+        boutons = QHBoxLayout()
+        boutons.addStretch()
+        boutons.addWidget(self.copier)
+        boutons.addWidget(self.enregistrer)
 
         self.comparaison = QLabel(wordWrap=True, textFormat=Qt.TextFormat.PlainText)
         self.graphique = Graphique()
@@ -223,7 +229,7 @@ class Fenetre(QMainWindow):
         disposition.addWidget(cadre_historique)
         disposition.addLayout(cartes)
         disposition.addWidget(cadre_conseils)
-        disposition.addWidget(self.copier, alignment=Qt.AlignmentFlag.AlignRight)
+        disposition.addLayout(boutons)
         disposition.addStretch()
 
         defilement = QScrollArea(widgetResizable=True, frameShape=QFrame.Shape.NoFrame)
@@ -234,6 +240,7 @@ class Fenetre(QMainWindow):
     def lancer(self) -> None:
         self.bouton.setEnabled(False)
         self.copier.setEnabled(False)
+        self.enregistrer.setEnabled(False)
         self.progression.show()
         self.statusBar().showMessage("Analyse en cours... (la mesure des dossiers peut prendre une minute)")
         self.analyse = Analyse()
@@ -276,6 +283,7 @@ class Fenetre(QMainWindow):
         self.progression.hide()
         self.bouton.setEnabled(True)
         self.copier.setEnabled(True)
+        self.enregistrer.setEnabled(True)
         self.statusBar().showMessage(f"Terminé en {resultat['duree']:.0f} s")
 
     def afficher_historique_existant(self) -> None:
@@ -311,6 +319,26 @@ class Fenetre(QMainWindow):
         if self.resultat:
             QGuiApplication.clipboard().setText(analyse.rapport_texte(self.resultat))
             self.statusBar().showMessage("Rapport copié dans le presse-papiers.", 4000)
+
+    def enregistrer_rapport(self) -> None:
+        """Écrit le rapport HTML uniquement à l'endroit choisi dans la boîte de dialogue."""
+        if not self.resultat:
+            return
+        dossier = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+        nom = f"{dossier}/bilan-sante-pc-{self.resultat['date']:%Y-%m-%d}.html"
+        chemin, _ = QFileDialog.getSaveFileName(self, "Enregistrer le rapport", nom, "Page web (*.html)")
+        if not chemin:
+            return  # annulé : aucun fichier créé
+        try:
+            page = analyse.rapport_html(self.resultat)  # avant d'ouvrir : jamais de fichier vide en cas d'échec
+            with open(chemin, "w", encoding="utf-8") as fichier:
+                fichier.write(page)
+        except Exception:
+            logging.getLogger(__name__).exception("Impossible d'enregistrer le rapport")
+            QMessageBox.warning(self, "Rapport non enregistré",
+                                "Le rapport n'a pas pu être enregistré à cet endroit. Essaie un autre dossier.")
+            return
+        self.statusBar().showMessage("Rapport enregistré.", 4000)
 
     def closeEvent(self, evenement) -> None:
         # Fermer pendant l'analyse : on cache la fenêtre puis on attend la fin du thread,

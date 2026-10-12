@@ -3,14 +3,18 @@
 Sans PySide6 : ce code tourne dans le thread d'analyse et se teste sans interface.
 """
 
+import html
 import logging
+import re
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 import config
 from journal import dossier_par_defaut
 from modules import batterie, demarrage, disque, ressources, score
+from modules.disque import taille_lisible
 
 journal = logging.getLogger(__name__)
 AIDE = f"Les détails sont dans le journal : {dossier_par_defaut() / 'bilan.log'}"
@@ -101,3 +105,72 @@ def rapport_texte(resultat: dict) -> str:
         lignes += ["", resultat["erreurs"]["score"]]
     lignes += ["", f"Analyse faite en {resultat['duree']:.0f} s (calcul du score v{config.SCORE_VERSION})."]
     return "\n".join(lignes)
+
+
+STYLE_HTML = """
+body { font-family: "Segoe UI", Arial, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px;
+       color: #1f2328; background: #ffffff; line-height: 1.45; }
+h1 { margin-bottom: 0; } .discret { color: #59636e; }
+.score { font-size: 48px; font-weight: bold; margin: 16px 0 0; }
+section { border: 1px solid #d1d9e0; border-radius: 8px; padding: 4px 16px 12px; margin: 16px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #eef1f4; overflow-wrap: anywhere; }
+th { color: #59636e; font-weight: 600; }
+"""
+COULEURS_HTML = {"vert": "#1a7f37", "orange": "#bc4c00", "rouge": "#cf222e", "gris": "#59636e"}
+
+
+def anonymiser(texte: str) -> str:
+    """Remplace le dossier personnel (qui contient le nom d'utilisateur) par %USERPROFILE%."""
+    return re.sub(re.escape(str(Path.home())), "%USERPROFILE%", texte, flags=re.IGNORECASE)
+
+
+def _tableau(colonnes: list[str], lignes: list[list[str]]) -> str:
+    if not lignes:
+        return ""
+    entete = "".join(f"<th>{html.escape(c)}</th>" for c in colonnes)
+    corps = "".join("<tr>" + "".join(f"<td>{html.escape(anonymiser(str(v)))}</td>" for v in ligne) + "</tr>"
+                    for ligne in lignes)
+    return f"<table><tr>{entete}</tr>{corps}</table>"
+
+
+def _detail(cle: str, module: dict) -> str:
+    if cle == "demarrage":
+        return _tableau(["Programme", "Éditeur", "Chemin"],
+                        [[p["nom"], p["editeur"] or "inconnu", p["chemin"]] for p in module["programmes"]])
+    if cle == "disque":
+        return _tableau(["Plus gros dossiers du profil", "Taille"],
+                        [[d["chemin"], taille_lisible(d["taille"])] for d in module["gros_dossiers"]])
+    if cle == "ressources":
+        return _tableau(["Programmes gourmands en mémoire", "Mémoire"],
+                        [[p["nom"], taille_lisible(p["octets"])] for p in module["processus"]])
+    return ""
+
+
+def rapport_html(resultat: dict) -> str:
+    """Rapport autonome (un seul fichier, sans ressource externe), sans nom d'utilisateur."""
+    note = score_global(resultat)
+    niveau, phrase = interpretation(note)
+    e = html.escape
+    parties = ["<h1>Bilan santé PC</h1>",
+               f"<p class='discret'>Analyse du {resultat['date']:%d/%m/%Y à %H:%M} - version {config.VERSION} "
+               f"(calcul du score v{config.SCORE_VERSION})</p>",
+               f"<p class='score' style='color:{COULEURS_HTML[niveau]}'>{note if note is not None else '?'} / 100</p>",
+               f"<p>{e(phrase)}</p>"]
+    conseils_ = conseils(resultat)
+    if conseils_:
+        parties.append("<section><h2>Conseils</h2><ol>"
+                       + "".join(f"<li>{e(anonymiser(c))}</li>" for c in conseils_) + "</ol></section>")
+    for cle, module in resultat["modules"].items():
+        lignes = [resultat["erreurs"][cle]] if module is None else module["constats"]
+        parties.append(f"<section><h2>{e(NOMS[cle])} : {e(points_module(resultat, cle))}</h2>"
+                       + "".join(f"<p>{e(anonymiser(ligne))}</p>" for ligne in lignes)
+                       + (_detail(cle, module) if module else "") + "</section>")
+    if "score" in resultat["erreurs"]:
+        parties.append(f"<p>{e(anonymiser(resultat['erreurs']['score']))}</p>")
+    parties.append("<p class='discret'>Rapport créé sur ce PC par Bilan santé PC. "
+                   "L'application ne modifie rien et n'envoie aucune donnée.</p>")
+    return ("<!doctype html>\n<html lang='fr'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+            f"<title>Bilan santé PC - {resultat['date']:%d/%m/%Y}</title><style>{STYLE_HTML}</style></head>"
+            f"<body>{''.join(parties)}</body></html>\n")
