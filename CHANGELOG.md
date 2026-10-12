@@ -1,5 +1,16 @@
 # Journal des versions
 
+## v0.1.5 - 2026-10-12
+
+Refonte complète de l'interface, sans changement de fonctionnement.
+
+- Thème sombre retravaillé, polices et icônes de Windows 11 (Segoe UI Variable, Segoe Fluent Icons).
+- Score affiché dans une jauge circulaire animée, avec un état en toutes lettres
+  (« Bon état », « À surveiller », « À améliorer »).
+- Cartes par partie avec icône, score en pastille colorée, barre de progression et détail en tableau.
+- Conseils présentés en cartes numérotées ; graphique de l'historique redessiné.
+- Barre de titre Windows sombre.
+
 ## v0.1.3 - 2026-10-12
 
 - Nouveau module Mémoire et processeur : mémoire vive utilisée, charge du processeur
