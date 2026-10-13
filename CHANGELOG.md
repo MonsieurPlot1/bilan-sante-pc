@@ -1,5 +1,12 @@
 # Journal des versions
 
+## v0.1.8 - 2026-10-13
+
+- Nouveau module Fichiers inutiles (hors score) : taille de la Corbeille et des fichiers temporaires.
+  Le conseil (vérifier puis vider la Corbeille, fichiers temporaires via Paramètres) n'apparaît que
+  si libérer cette place aide vraiment un disque presque plein.
+- Les cartes sans note (hors score ou en erreur) n'affichent plus de barre vide qui ferait croire à un 0.
+
 ## v0.1.7 - 2026-10-13
 
 - Nouveau module Redémarrage : nombre de jours depuis le dernier vrai redémarrage (« Arrêter » ne
