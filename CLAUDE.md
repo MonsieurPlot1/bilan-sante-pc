@@ -4,6 +4,8 @@ App Windows grand public : scanne le PC et explique en français clair pourquoi 
 
 ## Règles
 - LECTURE SEULE : l'app ne modifie, ne supprime, ne désactive rien sur le système.
+  Seule exception : le bouton « Vider la Corbeille » (module fichiers), uniquement sur clic,
+  avec la confirmation de Windows. Aucune autre action ne s'ajoute sans mon accord explicite.
 - 100 % local : aucune donnée n'est envoyée ailleurs, aucun réseau.
 - Un module = un fichier dans `modules/`, avec une fonction `scan()` qui renvoie un dict (score partiel + constats).
 - La logique (modules/) est séparée de l'interface (ui/) : les modules doivent tourner sans PySide6.

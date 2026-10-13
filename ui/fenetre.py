@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, Q
 
 import config
 import historique
+from modules import fichiers
 from modules.disque import taille_lisible
 from ui import analyse, theme
 from ui.widgets import (Carte, CarteConseil, Graphique, Jauge, PastilleIcone, pastille, repolir,
@@ -104,7 +105,8 @@ class Fenetre(QMainWindow):
 
         bouclier = QLabel()
         bouclier.setPixmap(theme.pixmap_icone("bouclier", theme.NIVEAUX["vert"], 14))
-        rassurant = QLabel("Tout reste sur ton PC. L'application ne modifie rien.", objectName="secondaire")
+        rassurant = QLabel("Tout reste sur ton PC. L'application ne modifie rien sans ton accord.",
+                           objectName="secondaire")
         ligne_rassurante = QHBoxLayout()
         ligne_rassurante.setSpacing(6)
         ligne_rassurante.addWidget(bouclier)
@@ -176,6 +178,10 @@ class Fenetre(QMainWindow):
         """Deux colonnes indépendantes : chaque carte garde la hauteur de son contenu."""
         self.cartes = {cle: Carte(cle, nom, COLONNES[cle]) for cle, nom, _ in analyse.MODULES}
         self.cartes["batterie"].hide()  # affichée seulement si une batterie est détectée
+        self.vider = QPushButton(" Vider la Corbeille", enabled=False, cursor=Qt.CursorShape.PointingHandCursor,
+                                 icon=theme.icone("effacer", theme.TEXTE_2, 14))
+        self.vider.clicked.connect(self.vider_corbeille)
+        self.cartes["fichiers"].layout().addWidget(self.vider, alignment=Qt.AlignmentFlag.AlignLeft)
         colonnes = [QVBoxLayout(), QVBoxLayout()]
         for position, carte in enumerate(self.cartes.values()):
             colonnes[position % 2].addWidget(carte)
@@ -236,6 +242,7 @@ class Fenetre(QMainWindow):
         self.bouton.setText("  Analyse en cours…")
         self.copier.setEnabled(False)
         self.enregistrer.setEnabled(False)
+        self.vider.setEnabled(False)
         self.progression.show()
         self.statusBar().showMessage("Analyse en cours... (la mesure des dossiers peut prendre une minute)")
         self.analyse = Analyse()
@@ -262,6 +269,9 @@ class Fenetre(QMainWindow):
             ratio = bilan["scores"][cle] / bilan["bareme"][cle] if bilan and cle in bilan["scores"] else None
             carte.remplir(analyse.points_module(resultat, cle), ratio, module["constats"] if module else [],
                           lignes_detail(cle, module) if module else [], resultat["erreurs"].get(cle))
+
+        module_fichiers = resultat["modules"].get("fichiers")
+        self.vider.setEnabled(bool(module_fichiers and module_fichiers["corbeille"]))
 
         conseils = analyse.conseils(resultat)
         if bilan is None:
@@ -319,6 +329,27 @@ class Fenetre(QMainWindow):
         self.graphique.afficher([])
         self._texte_comparaison(["Historique effacé."])
         self.statusBar().showMessage("Historique effacé.", 4000)
+
+    def vider_corbeille(self) -> None:
+        """Seule action qui modifie le PC, et seulement sur ce clic : Windows demande lui-même confirmation."""
+        try:
+            avant = fichiers.corbeille()
+            fichiers.vider_corbeille(int(self.winId()))
+            module = fichiers.scan()
+        except Exception:
+            journal.exception("Impossible de vider la Corbeille")
+            self.statusBar().showMessage("La Corbeille n'a pas pu être vidée.", 6000)
+            return
+        libere = avant - module["corbeille"]
+        if libere <= 0:  # confirmation refusée
+            self.statusBar().showMessage("La Corbeille n'a pas été vidée.", 4000)
+            return
+        self.resultat["modules"]["fichiers"] = module
+        self.cartes["fichiers"].remplir(analyse.points_module(self.resultat, "fichiers"), None, module["constats"],
+                                        [], None)
+        self.vider.setEnabled(bool(module["corbeille"]))
+        self.statusBar().showMessage(f"Corbeille vidée : {taille_lisible(libere)} libérés. "
+                                     "Relance l'analyse pour mettre le score à jour.")
 
     def copier_rapport(self) -> None:
         if self.resultat:

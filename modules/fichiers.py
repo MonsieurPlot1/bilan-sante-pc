@@ -1,6 +1,7 @@
 """Module fichiers inutiles : taille de la Corbeille et des fichiers temporaires.
 
-Lecture seule : on mesure les tailles, on ne vide ni ne supprime rien.
+Le scan est en lecture seule. Seule exception de toute l'application : vider_corbeille(),
+lancée uniquement par le bouton « Vider la Corbeille », après la confirmation de Windows.
 """
 
 import ctypes
@@ -26,6 +27,19 @@ def corbeille(racine: str | None = None) -> int:
     if erreur:
         raise OSError(f"SHQueryRecycleBinW : erreur 0x{erreur & 0xFFFFFFFF:08X}")
     return info.taille
+
+
+def vider_corbeille(fenetre: int = 0) -> None:
+    """Vide la Corbeille de tous les disques, après la demande de confirmation de Windows.
+
+    Aucun drapeau : Windows affiche sa confirmation, sa progression et son son habituels. Si
+    l'utilisateur refuse, rien n'est supprimé ; l'appelant le constate en remesurant la Corbeille.
+    `fenetre` : identifiant de la fenêtre parente, pour que la confirmation s'affiche par-dessus.
+    """
+    shell32 = ctypes.WinDLL("shell32")
+    shell32.SHEmptyRecycleBinW.argtypes = [wintypes.HWND, wintypes.LPCWSTR, wintypes.DWORD]
+    shell32.SHEmptyRecycleBinW.restype = ctypes.c_long
+    shell32.SHEmptyRecycleBinW(fenetre, None, 0)
 
 
 def scan() -> dict:

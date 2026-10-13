@@ -8,7 +8,8 @@ un score sur 100 et 3 conseils au maximum.
 - **Démarrage** : les programmes lancés avec Windows (registre `Run` et dossiers Démarrage).
 - **Disque** : l'espace libre de chaque disque et les plus gros dossiers de ton profil utilisateur.
 - **Fichiers inutiles** (hors score) : la taille de la Corbeille et des fichiers temporaires. Un conseil
-  n'apparaît que si les vider ferait vraiment de la place sur un disque presque plein.
+  n'apparaît que si les vider ferait vraiment de la place sur un disque presque plein. Un bouton
+  permet de vider la Corbeille, après confirmation.
 - **Mémoire et processeur** : la mémoire vive utilisée, la charge du processeur mesurée pendant
   3 secondes et les 5 programmes qui prennent le plus de mémoire.
 - **Redémarrage** : depuis combien de jours Windows n'a pas vraiment redémarré (« Arrêter » ne
@@ -20,6 +21,8 @@ un score sur 100 et 3 conseils au maximum.
 ## Ce qu'elle ne fait jamais
 
 - Elle ne modifie, ne supprime et ne désactive rien : elle se contente de lire.
+  Seule exception : le bouton « Vider la Corbeille », qui n'agit que si tu cliques dessus
+  et que tu confirmes dans la fenêtre de Windows. Pense à vérifier la Corbeille avant : c'est définitif.
 - Elle n'envoie aucune donnée : tout reste sur ton PC, sans aucun accès au réseau.
 
 Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` :

@@ -8,8 +8,9 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 import historique
+from modules import fichiers as module_fichiers
 from tests.test_analyse import faux_modules, plante
-from tests.test_score import batterie, demarrage, disque
+from tests.test_score import GO, batterie, demarrage, disque, fichiers
 from ui import analyse
 from ui.fenetre import Fenetre, preparer_application
 
@@ -19,6 +20,14 @@ def app():
     application = QApplication.instance() or QApplication([])
     preparer_application(application)
     return application
+
+
+@pytest.fixture(autouse=True)
+def corbeille_protegee(monkeypatch):
+    """Aucun test ne doit vider la vraie Corbeille : il faut remplacer vider_corbeille explicitement."""
+    def interdit(*_):
+        raise AssertionError("un test a tenté de vider la vraie Corbeille")
+    monkeypatch.setattr(module_fichiers, "vider_corbeille", interdit)
 
 
 @pytest.fixture
@@ -91,3 +100,39 @@ def test_famille_de_police(monkeypatch):
         assert theme.famille(("Segoe Fluent Icons", "Segoe MDL2 Assets")) == "Segoe MDL2 Assets"
     finally:
         theme.famille.cache_clear()  # ne pas garder ce faux résultat pour les autres tests
+
+
+def corbeille_simulee(monkeypatch, avant: float, apres: float) -> list:
+    """Corbeille de `avant` Go, qui en contient `apres` une fois la confirmation de Windows passée."""
+    appels = []
+    monkeypatch.setattr(module_fichiers, "corbeille", lambda *_: avant * GO)
+    monkeypatch.setattr(module_fichiers, "vider_corbeille", appels.append)
+    monkeypatch.setattr(module_fichiers, "scan", lambda: {"constats": ["apres"], **fichiers(apres)})
+    return appels
+
+
+def test_vider_la_corbeille(fenetre, tmp_path, monkeypatch):
+    faux_modules(monkeypatch, fichiers=lambda: {"constats": ["c"], **fichiers(2)})
+    fenetre.afficher(analyse_faite(tmp_path))
+    assert fenetre.vider.isEnabled()
+    appels = corbeille_simulee(monkeypatch, avant=2, apres=0)
+    fenetre.vider.click()
+    assert appels == [int(fenetre.winId())]  # confirmation de Windows rattachée à notre fenêtre
+    assert "2,0 Go libérés" in fenetre.statusBar().currentMessage()
+    assert fenetre.cartes["fichiers"].resume.text() == "apres"
+    assert not fenetre.vider.isEnabled()  # Corbeille vide
+
+
+def test_vidage_refuse(fenetre, tmp_path, monkeypatch):
+    faux_modules(monkeypatch, fichiers=lambda: {"constats": ["c"], **fichiers(2)})
+    fenetre.afficher(analyse_faite(tmp_path))
+    corbeille_simulee(monkeypatch, avant=2, apres=2)
+    fenetre.vider.click()
+    assert fenetre.statusBar().currentMessage() == "La Corbeille n'a pas été vidée."
+    assert fenetre.cartes["fichiers"].resume.text() == "c" and fenetre.vider.isEnabled()
+
+
+def test_bouton_grise_si_corbeille_vide(fenetre, tmp_path, monkeypatch):
+    faux_modules(monkeypatch)  # Corbeille vide par défaut
+    fenetre.afficher(analyse_faite(tmp_path))
+    assert not fenetre.vider.isEnabled()
