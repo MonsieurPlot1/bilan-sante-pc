@@ -1,5 +1,13 @@
 # Journal des versions
 
+## v0.1.7 - 2026-10-13
+
+- Nouveau module Redémarrage : nombre de jours depuis le dernier vrai redémarrage (« Arrêter » ne
+  suffit pas, à cause du démarrage rapide de Windows) et mise à jour de Windows en attente d'un
+  redémarrage. Conseil : Démarrer > Marche/Arrêt > Redémarrer.
+- Score v3 : Démarrage 25, Disque 25, Mémoire et processeur 20, Redémarrage 15, Batterie 15
+  (sans batterie : 30, 30, 25 et 15). Les scores v2 ne sont pas comparables.
+
 ## v0.1.6 - 2026-10-13
 
 Application plus légère, sans changement de fonctionnement.
