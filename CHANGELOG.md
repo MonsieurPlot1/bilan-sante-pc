@@ -1,5 +1,15 @@
 # Journal des versions
 
+## v0.1.6 - 2026-10-13
+
+Application plus légère, sans changement de fonctionnement.
+
+- Mémoire vive de la fenêtre : environ 130 Mo -> 81 Mo (les polices de Windows ne sont plus
+  toutes chargées pour rien).
+- Liste des programmes gourmands lue en une seule fois : 1 s de processeur -> 0,02 s.
+- L'analyse tourne en arrière-plan (priorité basse) : elle ne ralentit plus ce que tu fais pendant ce temps.
+- Icônes gardées en mémoire : défilement de la fenêtre un peu plus léger.
+
 ## v0.1.5 - 2026-10-12
 
 Refonte complète de l'interface, sans changement de fonctionnement.
