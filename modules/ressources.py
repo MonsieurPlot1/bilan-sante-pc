@@ -3,28 +3,69 @@
 Lecture seule : on mesure, on ne ferme ni ne modifie aucun programme.
 """
 
+import ctypes
+from ctypes import wintypes
+
 import psutil
 
 from modules.disque import taille_lisible
 
 DUREE_MESURE_CPU = 3  # secondes : une mesure instantanée serait trop bruitée
 NB_PROCESSUS = 5
+SYSTEM_PROCESS_INFORMATION = 5
+STATUS_INFO_LENGTH_MISMATCH = 0xC0000004
 
 
-def plus_gourmands(processus, nombre: int = NB_PROCESSUS) -> list[dict]:
+class _Texte(ctypes.Structure):  # UNICODE_STRING
+    _fields_ = [("longueur", wintypes.USHORT), ("maximum", wintypes.USHORT), ("tampon", ctypes.c_void_p)]
+
+
+class _Processus(ctypes.Structure):  # début de SYSTEM_PROCESS_INFORMATION (winternl.h)
+    _fields_ = [("suivant", wintypes.ULONG), ("nb_threads", wintypes.ULONG), ("reserve1", ctypes.c_ubyte * 48),
+                ("nom", _Texte), ("priorite", wintypes.LONG), ("pid", ctypes.c_void_p),
+                ("reserve2", ctypes.c_void_p), ("handles", wintypes.ULONG), ("session", wintypes.ULONG),
+                ("reserve3", ctypes.c_void_p), ("pic_virtuel", ctypes.c_size_t), ("virtuel", ctypes.c_size_t),
+                ("reserve4", wintypes.ULONG), ("pic_memoire", ctypes.c_size_t), ("memoire", ctypes.c_size_t)]
+
+
+def memoire_par_processus() -> list[tuple[str, int]]:
+    """(nom, mémoire vive utilisée) de chaque processus, en une seule photo du système.
+
+    psutil interroge chaque processus un par un, et refait une photo complète du système pour
+    chaque processus protégé : environ 1 s de processeur au lieu de quelques millisecondes ici.
+    """
+    ntdll, taille = ctypes.WinDLL("ntdll"), 1 << 20
+    while True:
+        tampon, necessaire = ctypes.create_string_buffer(taille), wintypes.ULONG()
+        statut = ntdll.NtQuerySystemInformation(SYSTEM_PROCESS_INFORMATION, tampon, taille,
+                                                ctypes.byref(necessaire)) & 0xFFFFFFFF
+        if statut != STATUS_INFO_LENGTH_MISMATCH:
+            break
+        # Tampon trop petit : on recommence plus grand, avec une marge pour les processus nés entre-temps.
+        taille = necessaire.value + 65536
+    if statut:
+        raise OSError(f"NtQuerySystemInformation : erreur 0x{statut:08X}")
+    processus, position = [], 0
+    while True:
+        info = _Processus.from_buffer(tampon, position)
+        nom = ctypes.wstring_at(info.nom.tampon, info.nom.longueur // 2) if info.nom.tampon else ""
+        processus.append((nom, info.memoire))
+        if not info.suivant:
+            return processus
+        position += info.suivant
+
+
+def plus_gourmands(processus: list[tuple[str, int]], nombre: int = NB_PROCESSUS) -> list[dict]:
     """Les `nombre` programmes qui occupent le plus de mémoire, regroupés par nom.
 
     Regroupés : un navigateur lance des dizaines de processus du même nom,
     les lister un par un ne dirait rien d'utile.
     """
     totaux: dict[str, int] = {}
-    for proc in processus:
-        # process_iter(attrs) saute les processus disparus (NoSuchProcess) et met None
-        # quand l'accès est refusé (AccessDenied) : on ignore ces derniers.
-        nom, memoire = proc.info.get("name"), proc.info.get("memory_info")
-        if not nom or memoire is None:
+    for nom, octets in processus:
+        if not nom:  # processus inactif du système, sans nom
             continue
-        totaux[nom] = totaux.get(nom, 0) + memoire.rss
+        totaux[nom] = totaux.get(nom, 0) + octets
     tries = sorted(totaux.items(), key=lambda element: element[1], reverse=True)[:nombre]
     return [{"nom": nom, "octets": octets} for nom, octets in tries]
 
@@ -41,5 +82,5 @@ def scan() -> dict:
                      f"Processeur : occupé à {cpu:.0f} % en moyenne pendant {DUREE_MESURE_CPU} secondes."],
         "ram": ram,
         "cpu": cpu,
-        "processus": plus_gourmands(psutil.process_iter(["name", "memory_info"])),
+        "processus": plus_gourmands(memoire_par_processus()),
     }

@@ -95,3 +95,16 @@ def test_rapport_html_sans_nom_utilisateur(monkeypatch):
     assert "<script>" not in page and "&lt;script&gt;" in page  # texte échappé
     assert "src=" not in page and "<link" not in page  # un seul fichier, sans ressource externe
     assert "Conseils" in page and "Mémoire et processeur : erreur" in page and "? / 100" in page
+
+
+def test_arriere_plan_baisse_puis_retablit_la_priorite():
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.GetCurrentThread.restype = wintypes.HANDLE
+    kernel32.GetThreadPriority.argtypes = [wintypes.HANDLE]
+    priorite = lambda: kernel32.GetThreadPriority(kernel32.GetCurrentThread())
+    avant = priorite()
+    with analyse.arriere_plan():
+        assert priorite() < avant
+    assert priorite() == avant

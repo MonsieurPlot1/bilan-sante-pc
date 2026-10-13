@@ -3,10 +3,13 @@
 Sans PySide6 : ce code tourne dans le thread d'analyse et se teste sans interface.
 """
 
+import ctypes
 import html
 import logging
 import re
 import time
+from contextlib import contextmanager
+from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -28,6 +31,24 @@ MODULES: list[tuple[str, str, Callable[[], dict]]] = [
 ]
 NOMS = {cle: nom for cle, nom, _ in MODULES}
 
+THREAD_MODE_BACKGROUND_BEGIN = 0x00010000
+THREAD_MODE_BACKGROUND_END = 0x00020000
+
+
+@contextmanager
+def arriere_plan():
+    """Mode arrière-plan de Windows pour le thread courant : processeur, disque et mémoire
+    en priorité basse, pour que l'analyse ne ralentisse pas ce que l'utilisateur fait à côté."""
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.GetCurrentThread.restype = wintypes.HANDLE
+    kernel32.SetThreadPriority.argtypes = [wintypes.HANDLE, ctypes.c_int]
+    actif = kernel32.SetThreadPriority(kernel32.GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN)
+    try:
+        yield
+    finally:
+        if actif:
+            kernel32.SetThreadPriority(kernel32.GetCurrentThread(), THREAD_MODE_BACKGROUND_END)
+
 
 def analyser() -> dict:
     """Lance chaque module ; un module qui plante n'empêche pas les autres.
@@ -37,16 +58,17 @@ def analyser() -> dict:
     """
     debut = time.perf_counter()
     modules, erreurs = {}, {}
-    for cle, nom, scan in MODULES:
-        try:
-            resultat = scan()
-        except Exception:  # on veut isoler n'importe quelle panne du module
-            journal.exception("Échec du module %s", nom)
-            erreurs[cle] = f"L'analyse « {nom} » n'a pas pu aboutir. {AIDE}"
-            modules[cle] = None
-            continue
-        if resultat.get("applicable", True):
-            modules[cle] = resultat
+    with arriere_plan():
+        for cle, nom, scan in MODULES:
+            try:
+                resultat = scan()
+            except Exception:  # on veut isoler n'importe quelle panne du module
+                journal.exception("Échec du module %s", nom)
+                erreurs[cle] = f"L'analyse « {nom} » n'a pas pu aboutir. {AIDE}"
+                modules[cle] = None
+                continue
+            if resultat.get("applicable", True):
+                modules[cle] = resultat
 
     try:
         bilan = score.calculer(modules)

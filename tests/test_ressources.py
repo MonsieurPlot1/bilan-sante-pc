@@ -1,6 +1,6 @@
 """Tests du module ressources. Lancer avec : python -m pytest"""
 
-from types import SimpleNamespace
+import psutil
 
 from modules import ressources
 
@@ -8,8 +8,7 @@ MO = 1024**2
 
 
 def proc(nom, mo):
-    memoire = None if mo is None else SimpleNamespace(rss=mo * MO)
-    return SimpleNamespace(info={"name": nom, "memory_info": memoire})
+    return nom, mo * MO
 
 
 def test_regroupe_par_nom_et_trie():
@@ -20,10 +19,16 @@ def test_regroupe_par_nom_et_trie():
         {"nom": "explorer.exe", "octets": 100 * MO}]
 
 
-def test_ignore_les_processus_inaccessibles():
-    # AccessDenied : psutil met None à la place de la valeur.
-    processus = [proc("System", None), proc(None, 50), proc("notepad.exe", 20)]
+def test_ignore_le_processus_sans_nom():
+    processus = [proc("", 50), proc("notepad.exe", 20)]
     assert ressources.plus_gourmands(processus) == [{"nom": "notepad.exe", "octets": 20 * MO}]
+
+
+def test_photo_du_systeme_coherente_avec_psutil():
+    processus = ressources.memoire_par_processus()
+    noms = {nom for nom, _ in processus}
+    assert "System" in noms and "python.exe" in {n.lower() for n in noms}
+    assert abs(len(processus) - len(psutil.pids())) < 20  # des processus naissent et meurent entre-temps
 
 
 def test_garde_les_5_premiers():
