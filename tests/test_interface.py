@@ -75,3 +75,16 @@ def test_batterie_affichee(fenetre, tmp_path, monkeypatch):
     fenetre.afficher(analyse_faite(tmp_path))
     assert not fenetre.cartes["batterie"].isHidden()
     assert fenetre.cartes["batterie"].points.text() == "4 / 15"
+
+
+
+def test_famille_de_police(monkeypatch):
+    from ui import theme
+    # La plateforme hors écran des tests ne voit aucune police : on simule celles installées.
+    monkeypatch.setattr(theme.QFontDatabase, "hasFamily", lambda nom: nom == "Segoe UI")
+    theme.famille.cache_clear()
+    try:
+        assert theme.famille(("Segoe UI Variable Text", "Segoe UI")) == "Segoe UI"
+        assert theme.famille(("Segoe Fluent Icons", "Segoe MDL2 Assets")) == "Segoe MDL2 Assets"
+    finally:
+        theme.famille.cache_clear()  # ne pas garder ce faux résultat pour les autres tests

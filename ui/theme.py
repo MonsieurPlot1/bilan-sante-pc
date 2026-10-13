@@ -4,8 +4,10 @@ Tout l'aspect visuel est réglé ici. Polices et icônes sont celles de Windows 
 (Segoe UI Variable, Segoe Fluent Icons) : rien à installer en plus.
 """
 
+from functools import cache
+
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 
 # --- Couleurs ---
 FOND = "#0f1117"
@@ -23,9 +25,9 @@ ACCENT_CLAIR = "#7aa2ff"  # liens, courbe du graphique
 NIVEAUX = {"vert": "#34d399", "orange": "#fbbf24", "rouge": "#f87171", "gris": "#6f7789"}
 
 # --- Polices ---
-TITRE = ["Segoe UI Variable Display", "Segoe UI"]
-CORPS = ["Segoe UI Variable Text", "Segoe UI"]
-ICONES = ["Segoe Fluent Icons", "Segoe MDL2 Assets"]  # Windows 11, sinon Windows 10
+TITRE = ("Segoe UI Variable Display", "Segoe UI")
+CORPS = ("Segoe UI Variable Text", "Segoe UI")
+ICONES = ("Segoe Fluent Icons", "Segoe MDL2 Assets")  # Windows 11, sinon Windows 10
 
 # Codes des icônes (communs à Segoe Fluent Icons et Segoe MDL2 Assets).
 ICONE = {
@@ -36,10 +38,19 @@ ICONE = {
 }
 
 
+@cache
+def famille(choix: tuple[str, ...]) -> str:
+    """Première police installée parmi `choix` (la dernière si aucune ne l'est).
+
+    Une seule famille est donnée à Qt : avec une liste (setFamilies), Qt charge toute la base
+    des polices du système, soit environ 45 Mo de mémoire en plus.
+    """
+    return next((nom for nom in choix if QFontDatabase.hasFamily(nom)), choix[-1])
+
+
 def police(taille: float, poids: QFont.Weight = QFont.Weight.Normal, titre: bool = False) -> QFont:
     """Police du thème, avec repli sur Segoe UI si Segoe UI Variable manque."""
-    resultat = QFont()
-    resultat.setFamilies(TITRE if titre else CORPS)
+    resultat = QFont(famille(TITRE if titre else CORPS))
     resultat.setPointSizeF(taille)
     resultat.setWeight(poids)
     return resultat
@@ -57,8 +68,7 @@ def pixmap_icone(nom: str, couleur: str, taille: int = 16, ratio_ecran: float = 
     image.fill(Qt.GlobalColor.transparent)
     peintre = QPainter(image)
     peintre.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-    fonte = QFont()
-    fonte.setFamilies(ICONES)
+    fonte = QFont(famille(ICONES))
     fonte.setPixelSize(taille)
     peintre.setFont(fonte)
     peintre.setPen(QColor(couleur))
