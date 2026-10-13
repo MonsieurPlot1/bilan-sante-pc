@@ -1,5 +1,12 @@
 # Journal des versions
 
+## v0.1.9 - 2026-10-13
+
+- Bouton « Vider la Corbeille » dans la carte Fichiers inutiles : seule action de l'application qui
+  modifie le PC, uniquement sur clic et après la confirmation de Windows. Si la confirmation est
+  refusée, rien n'est supprimé. Le bouton est grisé quand la Corbeille est vide.
+- Textes rassurants mis à jour : « L'application ne modifie rien sans ton accord ».
+
 ## v0.1.8 - 2026-10-13
 
 - Nouveau module Fichiers inutiles (hors score) : taille de la Corbeille et des fichiers temporaires.
