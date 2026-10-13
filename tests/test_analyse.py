@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import journal
-from tests.test_score import GO, batterie, demarrage, disque, ressources
+from tests.test_score import GO, batterie, demarrage, disque, redemarrage, ressources
 from ui import analyse
 
 
@@ -20,6 +20,7 @@ def faux_modules(monkeypatch, **scans) -> None:
     defaut = {"demarrage": lambda: {"constats": ["constat démarrage"], **demarrage(5)},
               "disque": lambda: {"constats": ["constat disque"], **disque(40)},
               "ressources": lambda: {"constats": ["constat ressources"], **ressources()},
+              "redemarrage": lambda: {"constats": ["constat redémarrage"], **redemarrage()},
               "batterie": lambda: {"applicable": False, "constats": []}} | scans
     monkeypatch.setattr(analyse, "MODULES", [(cle, nom, defaut[cle]) for cle, nom, _ in analyse.MODULES])
 
@@ -37,10 +38,10 @@ def test_un_module_qui_plante_n_empeche_pas_les_autres(monkeypatch):
     r = analyse.analyser()
     assert list(r["erreurs"]) == ["demarrage"]
     assert "Démarrage" in r["erreurs"]["demarrage"]
-    assert r["bilan"]["scores"]["disque"] == 7  # le disque a quand même été évalué
+    assert r["bilan"]["scores"]["disque"] == 6  # le disque a quand même été évalué
     assert analyse.score_global(r) is None  # pas de score global trompeur
     rapport = analyse.rapport_texte(r)
-    assert "Démarrage : erreur" in rapport and "Disque : 7 / 35" in rapport
+    assert "Démarrage : erreur" in rapport and "Disque : 6 / 30" in rapport
 
 
 def test_tous_les_modules_plantent(monkeypatch):
@@ -69,7 +70,7 @@ def test_rapport_avec_conseils(monkeypatch):
     faux_modules(monkeypatch, demarrage=lambda: {"constats": [], **demarrage(40)},
                  disque=lambda: {"constats": [], **disque(99)})
     rapport = analyse.rapport_texte(analyse.analyser())
-    assert "Score : 30 / 100" in rapport
+    assert "Score : 40 / 100" in rapport
     assert "1. " in rapport and "Conseils :" in rapport
 
 

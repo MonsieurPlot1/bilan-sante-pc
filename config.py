@@ -3,12 +3,12 @@
 VERSION = "0.1.6"
 
 # Version du calcul du score : les scores de versions différentes ne se comparent pas.
-SCORE_VERSION = 2
+SCORE_VERSION = 3
 
 # Points de chaque module (total 100). Sans batterie, ou si son usure n'est pas mesurable,
 # ses points sont répartis sur les autres modules.
-POINTS_AVEC_BATTERIE = {"demarrage": 30, "disque": 30, "ressources": 25, "batterie": 15}
-POINTS_SANS_BATTERIE = {"demarrage": 35, "disque": 35, "ressources": 30}
+POINTS_AVEC_BATTERIE = {"demarrage": 25, "disque": 25, "ressources": 20, "redemarrage": 15, "batterie": 15}
+POINTS_SANS_BATTERIE = {"demarrage": 30, "disque": 30, "ressources": 25, "redemarrage": 15}
 
 # Chaque mesure garde tous ses points jusqu'au seuil OK, puis en perd régulièrement
 # jusqu'au seuil ZÉRO, où elle n'en a plus aucun.
@@ -26,6 +26,12 @@ RAM_SEUIL_OK = 70
 RAM_SEUIL_ZERO = 95
 CPU_SEUIL_OK = 50
 CPU_SEUIL_ZERO = 95
+
+# Redémarrage : jours depuis le dernier redémarrage complet.
+REDEMARRAGE_JOURS_OK = 7
+REDEMARRAGE_JOURS_ZERO = 30
+# Mise à jour en attente d'un redémarrage : la partie garde au plus cette part de ses points.
+REDEMARRAGE_EN_ATTENTE_MAX = 0.5
 
 # Batterie : usure en % de la capacité d'origine perdue.
 BATTERIE_USURE_OK = 20

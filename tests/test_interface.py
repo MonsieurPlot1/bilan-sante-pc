@@ -49,9 +49,9 @@ def test_analyse_complete(fenetre, tmp_path, monkeypatch):
                  disque=lambda: {"constats": ["c"], **disque(90)})
     resultat = analyse_faite(tmp_path)
     fenetre.afficher(resultat)
-    assert fenetre.jauge.note == analyse.score_global(resultat) == 0 + 7 + 30
+    assert fenetre.jauge.note == analyse.score_global(resultat) == 0 + 6 + 25 + 15
     assert fenetre.etat.text() == "À améliorer" and fenetre.etat.property("niveau") == "rouge"
-    assert fenetre.cartes["demarrage"].points.text() == "0 / 35"
+    assert fenetre.cartes["demarrage"].points.text() == "0 / 30"
     assert fenetre.cartes["batterie"].isHidden()  # PC fixe
     assert fenetre.liste_conseils.count() == len(analyse.conseils(resultat)) == 2
     assert fenetre.copier.isEnabled() and fenetre.enregistrer.isEnabled()
@@ -62,7 +62,8 @@ def test_analyse_complete(fenetre, tmp_path, monkeypatch):
 
 
 def test_tous_les_modules_en_erreur(fenetre, tmp_path, monkeypatch):
-    faux_modules(monkeypatch, demarrage=plante, disque=plante, ressources=plante, batterie=plante)
+    faux_modules(monkeypatch, demarrage=plante, disque=plante, ressources=plante, redemarrage=plante,
+                 batterie=plante)
     fenetre.afficher(analyse_faite(tmp_path))
     assert fenetre.jauge.note is None and fenetre.jauge.texte_vide == "?"
     assert fenetre.etat.text() == "Analyse incomplète"

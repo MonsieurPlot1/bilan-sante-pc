@@ -9,6 +9,8 @@ un score sur 100 et 3 conseils au maximum.
 - **Disque** : l'espace libre de chaque disque et les plus gros dossiers de ton profil utilisateur.
 - **Mémoire et processeur** : la mémoire vive utilisée, la charge du processeur mesurée pendant
   3 secondes et les 5 programmes qui prennent le plus de mémoire.
+- **Redémarrage** : depuis combien de jours Windows n'a pas vraiment redémarré (« Arrêter » ne
+  suffit pas, à cause du démarrage rapide), et si une mise à jour attend un redémarrage.
 - **Batterie** (PC portables seulement) : le niveau de charge, le branchement et l'usure, lue auprès
   du pilote de batterie de Windows. Si le PC ne donne pas cette information, l'application l'écrit
   au lieu d'inventer un chiffre.
@@ -29,10 +31,11 @@ Ton dossier personnel y apparaît sous la forme `%USERPROFILE%`, sans ton nom d'
 
 ## Le score
 
-Le score sur 100 additionne les points de chaque partie : Démarrage 30, Disque 30,
-Mémoire et processeur 25, Batterie 15. Sans batterie, ou si son usure n'est pas mesurable, ses
-points vont aux autres parties (35, 35 et 30). Tous les seuils sont dans `config.py`.
-Les scores de la v0.1.0 (calcul v1) ne se comparent pas avec ceux d'aujourd'hui (calcul v2).
+Le score sur 100 additionne les points de chaque partie : Démarrage 25, Disque 25,
+Mémoire et processeur 20, Redémarrage 15, Batterie 15. Sans batterie, ou si son usure n'est pas
+mesurable, ses points vont aux autres parties (30, 30, 25 et 15). Tous les seuils sont dans `config.py`.
+Les scores d'une version du calcul ne se comparent pas avec ceux d'une autre (calcul v3 depuis
+l'ajout du module Redémarrage).
 
 ## Lancer en mode développement
 

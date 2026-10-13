@@ -16,7 +16,7 @@ from typing import Callable
 
 import config
 from journal import dossier_par_defaut
-from modules import batterie, demarrage, disque, ressources, score
+from modules import batterie, demarrage, disque, redemarrage, ressources, score
 from modules.disque import taille_lisible
 
 journal = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ MODULES: list[tuple[str, str, Callable[[], dict]]] = [
     ("demarrage", "Démarrage", demarrage.scan),
     ("disque", "Disque", disque.scan),
     ("ressources", "Mémoire et processeur", ressources.scan),
+    ("redemarrage", "Redémarrage", redemarrage.scan),
     ("batterie", "Batterie", batterie.scan),
 ]
 NOMS = {cle: nom for cle, nom, _ in MODULES}

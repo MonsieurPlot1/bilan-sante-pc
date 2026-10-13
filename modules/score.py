@@ -1,4 +1,4 @@
-"""Calcul du score /100 et des conseils à partir des résultats des modules (calcul v2).
+"""Calcul du score /100 et des conseils à partir des résultats des modules (calcul v3).
 
 Lecture seule : on ne fait que lire les résultats déjà collectés.
 """
@@ -8,6 +8,7 @@ from pathlib import Path
 
 import config
 from modules.disque import taille_lisible
+from modules.redemarrage import duree_lisible
 
 # Dossiers personnels qu'on peut conseiller de trier (noms affichés en français).
 # AppData et les dossiers techniques sont exclus : y faire le ménage à la main est risqué.
@@ -62,6 +63,11 @@ def sante_ressources(resultat: dict) -> float:
     return (sante_ram(resultat) + sante_cpu(resultat)) / 2
 
 
+def sante_redemarrage(resultat: dict) -> float:
+    sante = lineaire(resultat["jours"], config.REDEMARRAGE_JOURS_OK, config.REDEMARRAGE_JOURS_ZERO)
+    return min(sante, config.REDEMARRAGE_EN_ATTENTE_MAX) if resultat["en_attente"] else sante
+
+
 def sante_batterie(resultat: dict) -> float:
     usure = (1 - resultat["sante"]) * 100
     return lineaire(usure, config.BATTERIE_USURE_OK, config.BATTERIE_USURE_ZERO)
@@ -109,6 +115,18 @@ def conseil_cpu(cpu: float) -> str:
             "Une mise à jour de Windows ou une analyse de l'antivirus, c'est normal : laissez-les finir.")
 
 
+def conseil_redemarrage(resultat: dict) -> str:
+    raisons = []
+    if resultat["en_attente"]:
+        raisons.append("Une mise à jour de Windows attend un redémarrage pour s'installer.")
+    if resultat["jours"] > config.REDEMARRAGE_JOURS_OK:
+        raisons.append(f"Votre PC n'a pas redémarré depuis {duree_lisible(resultat['jours'])} : "
+                       "avec le temps, Windows s'encombre et ralentit.")
+    return " ".join(raisons) + (" Enregistrez votre travail, puis choisissez Démarrer > Marche/Arrêt > Redémarrer. "
+                                "« Arrêter » ne suffit pas : avec le démarrage rapide, Windows ne repart pas "
+                                "vraiment de zéro.")
+
+
 def conseil_batterie(sante: float) -> str:
     return (f"La batterie ne garde plus que {sante * 100:.0f} % de sa capacité d'origine : c'est l'usure "
             "normale avec le temps, et c'est pour ça que l'autonomie baisse. Si cela vous gêne, "
@@ -136,6 +154,10 @@ def conseils_ressources(resultat: dict, points: int) -> list[tuple[float, str]]:
             (points / 2 * (1 - sante_cpu(resultat)), conseil_cpu(resultat["cpu"]))]
 
 
+def conseils_redemarrage(resultat: dict, points: int) -> list[tuple[float, str]]:
+    return [(points * (1 - sante_redemarrage(resultat)), conseil_redemarrage(resultat))]
+
+
 def conseils_batterie(resultat: dict, points: int) -> list[tuple[float, str]]:
     return [(points * (1 - sante_batterie(resultat)), conseil_batterie(resultat["sante"]))]
 
@@ -144,6 +166,7 @@ MODULES = {
     "demarrage": (sante_demarrage, conseils_demarrage),
     "disque": (sante_disque, conseils_disque),
     "ressources": (sante_ressources, conseils_ressources),
+    "redemarrage": (sante_redemarrage, conseils_redemarrage),
     "batterie": (sante_batterie, conseils_batterie),
 }
 

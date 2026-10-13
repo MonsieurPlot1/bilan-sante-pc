@@ -1,4 +1,4 @@
-"""Tests du calcul du score (v2). Lancer avec : python -m pytest"""
+"""Tests du calcul du score (v3). Lancer avec : python -m pytest"""
 
 import os
 import unittest
@@ -28,13 +28,18 @@ def ressources(ram: float = 40, cpu: float = 10, processus: list[dict] | None = 
             "processus": processus}
 
 
+def redemarrage(jours: float = 1, en_attente: bool = False) -> dict:
+    return {"jours": jours, "en_attente": en_attente}
+
+
 def batterie(sante: float | None = 0.9) -> dict:
     return {"applicable": True, "niveau": 80, "branche": True, "sante": sante}
 
 
 def pc(**modules) -> dict:
     """Résultats d'un PC en forme, sans batterie, où l'on remplace certains modules."""
-    return {"demarrage": demarrage(5), "disque": disque(40), "ressources": ressources()} | modules
+    return {"demarrage": demarrage(5), "disque": disque(40), "ressources": ressources(),
+            "redemarrage": redemarrage()} | modules
 
 
 class TestBareme(unittest.TestCase):
@@ -79,15 +84,37 @@ class TestBatterie(unittest.TestCase):
         # Usure 50 % : entre 20 et 60 % -> 1/4 des 15 points (3,75 arrondi à 4).
         resultat = score.calculer(pc(batterie=batterie(0.5)))
         self.assertEqual(resultat["scores"]["batterie"], 4)
-        self.assertEqual(resultat["score"], 30 + 30 + 25 + 4)
+        self.assertEqual(resultat["score"], 25 + 25 + 20 + 15 + 4)
         self.assertIn("50 % de sa capacité", resultat["conseils"][0])
+
+
+class TestRedemarrage(unittest.TestCase):
+    def test_seuils(self):
+        points = lambda jours: score.calculer(pc(redemarrage=redemarrage(jours)))["scores"]["redemarrage"]
+        self.assertEqual(points(7), 15)
+        self.assertEqual(points(18.5), 8)  # à mi-chemin entre 7 et 30 jours : 7,5 arrondi
+        self.assertEqual(points(30), 0)
+
+    def test_mise_a_jour_en_attente(self):
+        resultat = score.calculer(pc(redemarrage=redemarrage(1, en_attente=True)))
+        self.assertEqual(resultat["scores"]["redemarrage"], 8)  # plafonné à la moitié des 15 points
+        conseil = resultat["conseils"][0]
+        self.assertIn("mise à jour", conseil)
+        self.assertIn("Redémarrer", conseil)
+        self.assertNotIn("n'a pas redémarré depuis", conseil)  # redémarré hier : on n'en parle pas
+
+    def test_longtemps_sans_redemarrer(self):
+        conseil = score.calculer(pc(redemarrage=redemarrage(20)))["conseils"][0]
+        self.assertIn("depuis 20 jours", conseil)
+        self.assertIn("« Arrêter » ne suffit pas", conseil)
+        self.assertNotIn("mise à jour", conseil)
 
 
 class TestCasExtremes(unittest.TestCase):
     def test_ram_a_95(self):
         resultat = score.calculer(pc(ressources=ressources(ram=95)))
-        self.assertEqual(resultat["scores"]["ressources"], 15)  # RAM à 0, processeur au maximum
-        self.assertEqual(resultat["score"], 35 + 35 + 15)
+        self.assertEqual(resultat["scores"]["ressources"], 12)  # RAM à 0, processeur au maximum : 12,5 arrondi
+        self.assertEqual(resultat["score"], 30 + 30 + 12 + 15)
         conseil = resultat["conseils"][0]
         self.assertIn("95 %", conseil)
         self.assertIn("chrome (3,0 Go)", conseil)
@@ -99,13 +126,13 @@ class TestCasExtremes(unittest.TestCase):
 
     def test_processeur_occupe(self):
         resultat = score.calculer(pc(ressources=ressources(cpu=100)))
-        self.assertEqual(resultat["scores"]["ressources"], 15)
+        self.assertEqual(resultat["scores"]["ressources"], 12)
         self.assertIn("Gestionnaire des tâches", resultat["conseils"][0])
 
     def test_disque_plein_a_99(self):
         resultat = score.calculer(pc(disque=disque(99)))
         self.assertEqual(resultat["scores"]["disque"], 0)
-        self.assertEqual(resultat["score"], 65)
+        self.assertEqual(resultat["score"], 70)
         self.assertIn("plein à 99 %", resultat["conseils"][0])
 
     def test_40_programmes(self):
@@ -116,13 +143,15 @@ class TestCasExtremes(unittest.TestCase):
     def test_tout_au_pire(self):
         gros = [{"chemin": r"C:\Users\moi\Videos", "taille": 200 * GO}]
         resultat = score.calculer({"demarrage": demarrage(40), "disque": disque(99, gros),
-                                   "ressources": ressources(ram=99, cpu=100), "batterie": batterie(0.3)})
+                                   "ressources": ressources(ram=99, cpu=100), "redemarrage": redemarrage(40, True),
+                                   "batterie": batterie(0.3)})
         self.assertEqual(resultat["score"], 0)
         self.assertEqual(len(resultat["conseils"]), config.NB_CONSEILS_MAX)
 
     def test_aucune_donnee(self):
         resultat = score.calculer({"demarrage": {"programmes": []}, "disque": {"disques": [], "gros_dossiers": []},
-                                   "ressources": ressources(ram=0, cpu=0, processus=[])})
+                                   "ressources": ressources(ram=0, cpu=0, processus=[]),
+                                   "redemarrage": redemarrage(0)})
         self.assertEqual(resultat["score"], 100)
         self.assertEqual(resultat["conseils"], [])
 
@@ -135,7 +164,7 @@ class TestCasExtremes(unittest.TestCase):
     def test_un_module_en_erreur(self):
         resultat = score.calculer(pc(disque=None, demarrage=demarrage(40)))
         self.assertIsNone(resultat["score"])  # score global trompeur sans le disque
-        self.assertEqual(resultat["scores"], {"demarrage": 0, "ressources": 30})
+        self.assertEqual(resultat["scores"], {"demarrage": 0, "ressources": 25, "redemarrage": 15})
         self.assertIn("40 programmes", resultat["conseils"][0])
 
     def test_module_manquant(self):
@@ -144,11 +173,11 @@ class TestCasExtremes(unittest.TestCase):
 
 class TestConseils(unittest.TestCase):
     def test_tries_par_impact(self):
-        # Démarrage : -4 points ; disque à 90 % : -28 points -> le disque passe en premier.
+        # Démarrage : -3,5 points ; disque à 90 % : -24 points -> le disque passe en premier.
         gros = [{"chemin": r"C:\Users\moi\AppData", "taille": 80 * GO},
                 {"chemin": r"C:\Users\moi\Downloads", "taille": 30 * GO}]
         resultat = score.calculer(pc(demarrage=demarrage(12), disque=disque(90, gros)))
-        self.assertEqual(resultat["score"], 31 + 7 + 30)
+        self.assertEqual(resultat["score"], 26 + 6 + 25 + 15)
         conseils = resultat["conseils"]
         self.assertEqual(len(conseils), 3)
         self.assertIn("plein à 90 %", conseils[0])
@@ -172,7 +201,7 @@ class TestConseils(unittest.TestCase):
 
     def test_disque_systeme_absent(self):
         resultat = score.calculer(pc(disque={"disques": [], "gros_dossiers": []}))
-        self.assertEqual(resultat["scores"]["disque"], 35)
+        self.assertEqual(resultat["scores"]["disque"], 30)
 
 
 if __name__ == "__main__":
