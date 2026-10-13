@@ -61,6 +61,7 @@ def niveau_ratio(ratio: float) -> str:
     return "vert" if ratio >= 0.8 else "orange" if ratio >= 0.5 else "rouge"
 
 
+@cache  # gardée en mémoire : redessinée à chaque défilement de la fenêtre, sinon
 def pixmap_icone(nom: str, couleur: str, taille: int = 16, ratio_ecran: float = 2.0) -> QPixmap:
     """Dessine une icône de la police Segoe dans une image (nette sur les écrans haute densité)."""
     image = QPixmap(round(taille * ratio_ecran), round(taille * ratio_ecran))
