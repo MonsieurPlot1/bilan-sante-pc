@@ -7,6 +7,8 @@ un score sur 100 et 3 conseils au maximum.
 
 - **Démarrage** : les programmes lancés avec Windows (registre `Run` et dossiers Démarrage).
 - **Disque** : l'espace libre de chaque disque et les plus gros dossiers de ton profil utilisateur.
+- **Fichiers inutiles** (hors score) : la taille de la Corbeille et des fichiers temporaires. Un conseil
+  n'apparaît que si les vider ferait vraiment de la place sur un disque presque plein.
 - **Mémoire et processeur** : la mémoire vive utilisée, la charge du processeur mesurée pendant
   3 secondes et les 5 programmes qui prennent le plus de mémoire.
 - **Redémarrage** : depuis combien de jours Windows n'a pas vraiment redémarré (« Arrêter » ne

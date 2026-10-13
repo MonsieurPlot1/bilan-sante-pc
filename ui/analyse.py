@@ -16,7 +16,7 @@ from typing import Callable
 
 import config
 from journal import dossier_par_defaut
-from modules import batterie, demarrage, disque, redemarrage, ressources, score
+from modules import batterie, demarrage, disque, fichiers, redemarrage, ressources, score
 from modules.disque import taille_lisible
 
 journal = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ AIDE = f"Les détails sont dans le journal : {dossier_par_defaut() / 'bilan.log'
 MODULES: list[tuple[str, str, Callable[[], dict]]] = [
     ("demarrage", "Démarrage", demarrage.scan),
     ("disque", "Disque", disque.scan),
+    ("fichiers", "Fichiers inutiles", fichiers.scan),
     ("ressources", "Mémoire et processeur", ressources.scan),
     ("redemarrage", "Redémarrage", redemarrage.scan),
     ("batterie", "Batterie", batterie.scan),

@@ -192,6 +192,7 @@ class Carte(QFrame):
         self.points.setProperty("niveau", "rouge" if erreur else niveau)
         repolir(self.points)
         self.barre.definir(ratio or 0.0, theme.NIVEAUX[niveau])
+        self.barre.setVisible(ratio is not None)  # une barre vide ferait croire à un 0 (hors score, erreur)
         self.resume.setText(erreur or "\n".join(constats))
         self.resume.setObjectName("erreur" if erreur else "secondaire")
         repolir(self.resume)

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import journal
-from tests.test_score import GO, batterie, demarrage, disque, redemarrage, ressources
+from tests.test_score import GO, batterie, demarrage, disque, fichiers, redemarrage, ressources
 from ui import analyse
 
 
@@ -19,6 +19,7 @@ def faux_modules(monkeypatch, **scans) -> None:
     """Remplace les scans des modules : par défaut un PC en forme sans batterie."""
     defaut = {"demarrage": lambda: {"constats": ["constat démarrage"], **demarrage(5)},
               "disque": lambda: {"constats": ["constat disque"], **disque(40)},
+              "fichiers": lambda: {"constats": ["constat fichiers"], **fichiers()},
               "ressources": lambda: {"constats": ["constat ressources"], **ressources()},
               "redemarrage": lambda: {"constats": ["constat redémarrage"], **redemarrage()},
               "batterie": lambda: {"applicable": False, "constats": []}} | scans

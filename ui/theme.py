@@ -32,7 +32,7 @@ ICONES = ("Segoe Fluent Icons", "Segoe MDL2 Assets")  # Windows 11, sinon Window
 # Codes des icônes (communs à Segoe Fluent Icons et Segoe MDL2 Assets).
 ICONE = {
     "logo": "", "demarrage": "", "disque": "", "ressources": "",
-    "redemarrage": "", "batterie": "", "bouclier": "", "conseil": "", "historique": "",
+    "fichiers": "", "redemarrage": "", "batterie": "", "bouclier": "", "conseil": "", "historique": "",
     "analyser": "", "copier": "", "enregistrer": "", "effacer": "",
     "deplier": "", "replier": "", "erreur": "",
 }

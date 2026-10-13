@@ -28,6 +28,12 @@ def ressources(ram: float = 40, cpu: float = 10, processus: list[dict] | None = 
             "processus": processus}
 
 
+def fichiers(corbeille: float = 0, temporaires: float = 0) -> dict:
+    """Tailles en Go, toutes sur le disque de Windows."""
+    return {"corbeille": corbeille * GO, "temporaires": temporaires * GO,
+            "recuperable_systeme": (corbeille + temporaires) * GO}
+
+
 def redemarrage(jours: float = 1, en_attente: bool = False) -> dict:
     return {"jours": jours, "en_attente": en_attente}
 
@@ -108,6 +114,30 @@ class TestRedemarrage(unittest.TestCase):
         self.assertIn("depuis 20 jours", conseil)
         self.assertIn("« Arrêter » ne suffit pas", conseil)
         self.assertNotIn("mise à jour", conseil)
+
+
+class TestFichiers(unittest.TestCase):
+    def test_hors_score(self):
+        resultat = score.calculer(pc(fichiers=fichiers(50, 5)))
+        self.assertEqual(resultat["score"], 100)
+        self.assertNotIn("fichiers", resultat["scores"])
+        self.assertEqual(resultat["conseils"], [])  # disque à 40 % : rien à gagner, pas de conseil
+
+    def test_conseil_quand_le_disque_est_plein(self):
+        # Disque à 90 % de 100 Go : libérer 10 Go le ramène à 80 % -> 30 x (0,6 - 0,2) = 12 points regagnés.
+        resultat = score.calculer(pc(disque=disque(90), fichiers=fichiers(8, 2)))
+        conseil = resultat["conseils"][1]  # après le conseil disque (24 points)
+        self.assertTrue(conseil.startswith("La Corbeille contient 8,0 Go et les fichiers temporaires occupent 2,0 Go"))
+        self.assertIn("rien d'important", conseil)  # prudence : vider la Corbeille est définitif
+
+    def test_corbeille_vide(self):
+        conseil = score.calculer(pc(disque=disque(90), fichiers=fichiers(0, 10)))["conseils"][1]
+        self.assertTrue(conseil.startswith("Les fichiers temporaires occupent 10,0 Go"))
+
+    def test_trop_peu_pour_un_conseil(self):
+        # 100 Mo sur 100 Go : moins d'un point à regagner.
+        resultat = score.calculer(pc(disque=disque(90), fichiers=fichiers(0, 0.1)))
+        self.assertEqual(len(resultat["conseils"]), 1)
 
 
 class TestCasExtremes(unittest.TestCase):

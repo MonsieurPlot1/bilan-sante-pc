@@ -127,6 +127,16 @@ def conseil_redemarrage(resultat: dict) -> str:
                                 "vraiment de zéro.")
 
 
+def conseil_fichiers(fichiers: dict) -> str:
+    morceaux = [f"la Corbeille contient {taille_lisible(fichiers['corbeille'])}"] if fichiers["corbeille"] else []
+    morceaux.append(f"les fichiers temporaires occupent {taille_lisible(fichiers['temporaires'])}")
+    debut = " et ".join(morceaux)
+    return (f"{debut[0].upper()}{debut[1:]} : c'est de la place facile à récupérer sur un disque presque plein. "
+            "Ouvrez la Corbeille pour vérifier qu'elle ne contient rien d'important, puis faites un clic droit "
+            "dessus > Vider la Corbeille (c'est définitif). Pour les fichiers temporaires : "
+            "Paramètres > Système > Stockage > Fichiers temporaires.")
+
+
 def conseil_batterie(sante: float) -> str:
     return (f"La batterie ne garde plus que {sante * 100:.0f} % de sa capacité d'origine : c'est l'usure "
             "normale avec le temps, et c'est pour ça que l'autonomie baisse. Si cela vous gêne, "
@@ -156,6 +166,17 @@ def conseils_ressources(resultat: dict, points: int) -> list[tuple[float, str]]:
 
 def conseils_redemarrage(resultat: dict, points: int) -> list[tuple[float, str]]:
     return [(points * (1 - sante_redemarrage(resultat)), conseil_redemarrage(resultat))]
+
+
+def conseils_fichiers(fichiers: dict, disque: dict, points: int) -> list[tuple[float, str]]:
+    """Hors score : le conseil vaut les points que le disque regagnerait une fois cette place libérée."""
+    systeme = disque_systeme(disque["disques"])
+    if not systeme or not systeme["total"]:
+        return []
+    apres = systeme["pourcentage"] - fichiers["recuperable_systeme"] / systeme["total"] * 100
+    gain = points * (lineaire(apres, config.DISQUE_SEUIL_OK, config.DISQUE_SEUIL_ZERO)
+                     - lineaire(systeme["pourcentage"], config.DISQUE_SEUIL_OK, config.DISQUE_SEUIL_ZERO))
+    return [(gain, conseil_fichiers(fichiers))]
 
 
 def conseils_batterie(resultat: dict, points: int) -> list[tuple[float, str]]:
@@ -196,6 +217,9 @@ def calculer(resultats: dict[str, dict | None]) -> dict:
         sante, conseils_module = MODULES[cle]
         scores[cle] = round(sante(resultats[cle]) * maximum)
         conseils += [c for c in conseils_module(resultats[cle], maximum) if c[0] >= IMPACT_MIN]
+    if resultats.get("fichiers") and resultats.get("disque") and "disque" in points:
+        conseils += [c for c in conseils_fichiers(resultats["fichiers"], resultats["disque"], points["disque"])
+                     if c[0] >= IMPACT_MIN]
     conseils.sort(key=lambda conseil: conseil[0], reverse=True)
 
     return {
