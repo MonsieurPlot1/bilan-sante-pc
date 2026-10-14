@@ -189,3 +189,9 @@ def test_ouverture_impossible(fenetre, monkeypatch):
     monkeypatch.setattr(os, "startfile", echec)
     fenetre.ouvrir("ms-settings:inexistant")
     assert fenetre.statusBar().currentMessage() == "Cette page n'a pas pu s'ouvrir sur ce PC."
+
+
+def test_couleurs_du_theme():
+    from ui import theme
+    assert isinstance(theme.windows_en_clair(), bool)
+    assert theme.rgba("#34d399", 31) == "rgba(52, 211, 153, 31)"  # même rendu qu'avant en thème sombre

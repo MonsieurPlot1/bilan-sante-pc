@@ -213,7 +213,8 @@ class CarteConseil(QFrame):
         rond = QLabel(str(numero), alignment=Qt.AlignmentFlag.AlignCenter,
                       font=theme.police(10.5, QFont.Weight.Bold))
         rond.setFixedSize(28, 28)
-        rond.setStyleSheet(f"color: {theme.ACCENT_CLAIR}; background: rgba(122, 162, 255, 36); border-radius: 14px;")
+        rond.setStyleSheet(f"color: {theme.ACCENT_CLAIR}; background: {theme.rgba(theme.ACCENT_CLAIR, 36)}; "
+                           "border-radius: 14px;")
         corps = QLabel(texte, wordWrap=True, textFormat=Qt.TextFormat.PlainText,
                        textInteractionFlags=Qt.TextInteractionFlag.TextSelectableByMouse)
         droite = QVBoxLayout()

@@ -423,9 +423,10 @@ def lignes_detail(cle: str, module: dict) -> list[list[str]]:
 
 
 def preparer_application(app: QApplication) -> None:
-    """Thème sombre : style Fusion, palette, police et feuille de style."""
+    """Thème clair ou sombre comme Windows : style Fusion, palette, police et feuille de style."""
     app.setStyle("Fusion")
-    app.styleHints().setColorScheme(Qt.ColorScheme.Dark)  # barre de titre Windows sombre
+    # Barre de titre Windows dans le même mode que le thème.
+    app.styleHints().setColorScheme(Qt.ColorScheme.Light if theme.CLAIR else Qt.ColorScheme.Dark)
     palette = QPalette()
     for role, couleur in ((QPalette.ColorRole.Window, theme.SURFACE), (QPalette.ColorRole.WindowText, theme.TEXTE),
                           (QPalette.ColorRole.Base, theme.SURFACE_2), (QPalette.ColorRole.Text, theme.TEXTE),
