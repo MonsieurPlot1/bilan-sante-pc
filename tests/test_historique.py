@@ -60,6 +60,30 @@ def test_versions_differentes_pas_comparees(tmp_path):
     assert [e["score"] for e in historique.serie(entrees)] == [60]  # la v1 n'est pas dans le graphique
 
 
+def test_evolution_du_disque_sur_le_mois(tmp_path):
+    historique.enregistrer(resultat(70, utilise=40, jours=0), tmp_path)  # plus d'un mois avant : ignorée
+    historique.enregistrer(resultat(70, utilise=50, jours=10), tmp_path)  # référence : la plus ancienne du mois
+    historique.enregistrer(resultat(70, utilise=60, jours=20), tmp_path)
+    entrees = historique.enregistrer(resultat(70, utilise=62, jours=35), tmp_path)
+    lignes = historique.comparer(entrees, NOMS)
+    assert lignes[-2].startswith("(comparé à l'analyse du 21/10/2026")
+    assert lignes[-1] == "Depuis le 11/10 : 12,0 Go de plus utilisés sur le disque de Windows"
+
+
+def test_pas_d_evolution_sans_assez_de_recul(tmp_path):
+    historique.enregistrer(resultat(70, utilise=40), tmp_path)
+    entrees = historique.enregistrer(resultat(70, utilise=50, jours=6), tmp_path)  # moins d'une semaine
+    assert historique.tendance_disque(entrees) is None
+    assert historique.tendance_disque([]) is None
+
+
+def test_evolution_meme_apres_changement_de_calcul(tmp_path):
+    historique.enregistrer(resultat(90, utilise=55, version=1), tmp_path)
+    entrees = historique.enregistrer(resultat(60, utilise=50, jours=8), tmp_path)
+    assert historique.comparer(entrees, NOMS) == ["Nouvelle version du calcul, pas de comparaison possible.",
+                                                  "Depuis le 01/10 : 5,0 Go de moins utilisés sur le disque de Windows"]
+
+
 def test_serie_limitee_a_20(tmp_path):
     for jour in range(25):
         historique.enregistrer(resultat(50 + jour, jours=jour), tmp_path)

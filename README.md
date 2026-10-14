@@ -34,7 +34,7 @@ un score sur 100 et 3 conseils au maximum.
 Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` :
 - `bilan.log` : un journal, utile en cas de problème ;
 - `historique.json` : les chiffres de chaque analyse (date, scores, espace disque utilisé), pour
-  l'encadré « Depuis la dernière fois » et le graphique. Aucun nom de programme ni de fichier.
+  l'encadré « Depuis la dernière fois » (avec l'évolution du disque sur le dernier mois) et le graphique. Aucun nom de programme ni de fichier.
   Le bouton « Effacer l'historique » le supprime.
 
 Le bouton « Enregistrer le rapport » crée une page HTML, uniquement à l'endroit que tu choisis.

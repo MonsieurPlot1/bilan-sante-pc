@@ -7,7 +7,7 @@ Rien n'est envoyé ailleurs.
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import config
@@ -20,6 +20,9 @@ journal = logging.getLogger(__name__)
 NB_MAX_ENTREES = 200  # le fichier ne grossit pas sans fin
 NB_POINTS_GRAPHIQUE = 20
 SEUIL_DISQUE = 500 * 1024**2  # en dessous, la différence d'espace disque n'est pas signalée
+# Évolution du disque sur le dernier mois : au moins une semaine de recul, signalée à partir de 1 Go.
+RECUL_MIN, RECUL_MAX = timedelta(days=7), timedelta(days=30)
+SEUIL_TENDANCE = 1024**3
 
 
 def fichier(dossier: Path | None = None) -> Path:
@@ -87,13 +90,36 @@ def ecart(valeur: int) -> str:
     return f"+{valeur}" if valeur > 0 else "=" if valeur == 0 else str(valeur)
 
 
+def tendance_disque(entrees: list[dict]) -> str | None:
+    """Évolution de l'espace utilisé sur le disque de Windows sur le dernier mois, ou None.
+
+    Référence : la plus ancienne analyse du dernier mois qui a au moins une semaine (sinon, pas assez de recul).
+    """
+    derniere = entrees[-1] if entrees else {}
+    if derniere.get("disque_utilise") is None:
+        return None
+    fin = datetime.fromisoformat(derniere["date"])
+    reference = next((e for e in entrees if e.get("disque_utilise") is not None
+                      and RECUL_MIN <= fin - datetime.fromisoformat(e["date"]) <= RECUL_MAX), None)
+    if reference is None:
+        return None
+    difference = derniere["disque_utilise"] - reference["disque_utilise"]
+    if abs(difference) < SEUIL_TENDANCE:
+        return None
+    sens = "de plus" if difference > 0 else "de moins"
+    return (f"Depuis le {datetime.fromisoformat(reference['date']):%d/%m} : {taille_lisible(abs(difference))} "
+            f"{sens} utilisés sur le disque de Windows")
+
+
 def comparer(entrees: list[dict], noms: dict[str, str]) -> list[str]:
-    """Lignes « Depuis la dernière fois » entre les deux dernières analyses."""
+    """Lignes « Depuis la dernière fois » entre les deux dernières analyses, puis l'évolution du disque."""
     if len(entrees) < 2:
         return ["Première analyse enregistrée : la comparaison sera possible la prochaine fois."]
     avant, apres = entrees[-2], entrees[-1]
+    tendance = tendance_disque(entrees)
     if avant.get("score_version") != apres.get("score_version"):
-        return ["Nouvelle version du calcul, pas de comparaison possible."]
+        # L'espace disque ne dépend pas du calcul du score : son évolution reste valable.
+        return ["Nouvelle version du calcul, pas de comparaison possible."] + ([tendance] if tendance else [])
     lignes = [f"Score : {apres['score']} ({ecart(apres['score'] - avant['score'])})"]
     for cle, nom in noms.items():
         if cle in apres["scores"] and cle in avant["scores"]:
@@ -105,4 +131,4 @@ def comparer(entrees: list[dict], noms: dict[str, str]) -> list[str]:
             lignes.append(f"Disque : {taille_lisible(abs(difference))} {sens} utilisés")
     date = datetime.fromisoformat(avant["date"])
     lignes.append(f"(comparé à l'analyse du {date:%d/%m/%Y à %H:%M})")
-    return lignes
+    return lignes + ([tendance] if tendance else [])
