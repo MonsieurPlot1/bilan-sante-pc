@@ -1,10 +1,12 @@
 """Fenêtre principale de Bilan santé PC (PySide6)."""
 
+import ctypes
 import html
 import importlib
 import logging
 import os
 import sys
+from ctypes import wintypes
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QStandardPaths, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette, QPixmap
@@ -28,6 +30,7 @@ COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élém
             "batterie": []}
 
 DUREE_FONDU = 400  # millisecondes : passage en douceur entre le mode clair et le mode sombre
+DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 35, 36  # Windows 11 : fond et texte de la barre de titre
 
 # Mot court affiché au-dessus de la phrase d'interprétation (la couleur n'est jamais seule).
 ETATS = {"vert": "Bon état", "orange": "À surveiller", "rouge": "À améliorer", "gris": "Analyse incomplète"}
@@ -77,6 +80,7 @@ class Fenetre(QMainWindow):
         self.analyse: Analyse | None = None
         self.statusBar().showMessage("Prêt")
         self.construire()
+        colorer_barre_titre(self, QColor(theme.FOND), QColor(theme.TEXTE))  # barre de titre fondue dans le fond
 
     def construire(self) -> None:
         """Crée le contenu de la fenêtre avec les couleurs du thème, et y remet la dernière analyse.
@@ -397,6 +401,7 @@ class Fenetre(QMainWindow):
             self.statusBar().showMessage("Le mode d'affichage n'a pas pu être changé.", 6000)
             return
         ancien = self.grab()  # image de l'affichage actuel, pour le fondu
+        ancien_fond, ancien_texte = QColor(theme.FOND), QColor(theme.TEXTE)
         position = self.centralWidget().verticalScrollBar().value()
         importlib.reload(theme)  # les couleurs sont des constantes du module : on le relit pour les recalculer
         preparer_application(QApplication.instance())
@@ -404,10 +409,14 @@ class Fenetre(QMainWindow):
         # Les tailles du nouveau contenu ne sont connues qu'au prochain tour de Qt (caché sous le fondu).
         barre = self.centralWidget().verticalScrollBar()
         QTimer.singleShot(0, lambda: barre.setValue(position))
-        self._fondu(ancien)
+        self._fondu(ancien, ancien_fond, ancien_texte)
 
-    def _fondu(self, image: QPixmap) -> None:
-        """Pose l'image de l'ancien affichage par-dessus la fenêtre, puis l'efface en douceur."""
+    def _fondu(self, image: QPixmap, ancien_fond: QColor, ancien_texte: QColor) -> None:
+        """Pose l'image de l'ancien affichage par-dessus la fenêtre, puis l'efface en douceur.
+
+        La barre de titre suit le même mélange de couleurs, image par image, pour rester synchronisée.
+        """
+        nouveau_fond, nouveau_texte = QColor(theme.FOND), QColor(theme.TEXTE)
         voile = QLabel(self, objectName="voile")
         voile.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)  # les clics passent au travers
         voile.setPixmap(image)
@@ -418,8 +427,12 @@ class Fenetre(QMainWindow):
         voile.raise_()
         animation = QPropertyAnimation(effet, b"opacity", voile, duration=DUREE_FONDU, startValue=1.0, endValue=0.0,
                                        easingCurve=QEasingCurve.Type.InOutCubic)
+        animation.valueChanged.connect(lambda opacite: colorer_barre_titre(
+            self, melange(ancien_fond, nouveau_fond, opacite), melange(ancien_texte, nouveau_texte, opacite)))
         animation.finished.connect(voile.deleteLater)
         animation.start()
+        # Les boutons réduire/fermer ne savent que basculer : à mi-chemin, quand les deux thèmes se valent.
+        QTimer.singleShot(DUREE_FONDU // 2, lambda: mode_barre_titre(QApplication.instance()))
 
     def ouvrir(self, cible: str) -> None:
         """Bouton « Ouvrir » d'un conseil : la page des Paramètres, le dossier ou l'outil, sans rien modifier."""
@@ -477,11 +490,30 @@ def lignes_detail(cle: str, module: dict) -> list[list[str]]:
     return []
 
 
-def preparer_application(app: QApplication) -> None:
-    """Thème clair ou sombre comme Windows : style Fusion, palette, police et feuille de style."""
-    app.setStyle("Fusion")
-    # Barre de titre Windows dans le même mode que le thème.
+def melange(a: QColor, b: QColor, part_de_a: float) -> QColor:
+    """Couleur entre `b` (0) et `a` (1), comme deux images superposées en transparence."""
+    return QColor(*(round(x * part_de_a + y * (1 - part_de_a))
+                    for x, y in ((a.red(), b.red()), (a.green(), b.green()), (a.blue(), b.blue()))))
+
+
+def colorer_barre_titre(fenetre: QWidget, fond: QColor, texte: QColor) -> None:
+    """Couleurs de la barre de titre dessinée par Windows 11 (sans effet sur Windows 10)."""
+    dwmapi = ctypes.WinDLL("dwmapi")
+    dwmapi.DwmSetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    for attribut, couleur in ((DWMWA_CAPTION_COLOR, fond), (DWMWA_TEXT_COLOR, texte)):
+        colorref = wintypes.DWORD(couleur.red() | couleur.green() << 8 | couleur.blue() << 16)  # 0x00BBGGRR
+        dwmapi.DwmSetWindowAttribute(int(fenetre.winId()), attribut, ctypes.byref(colorref),
+                                     ctypes.sizeof(colorref))
+
+
+def mode_barre_titre(app: QApplication) -> None:
+    """Boutons de la barre de titre (réduire, fermer) clairs ou sombres comme le thème."""
     app.styleHints().setColorScheme(Qt.ColorScheme.Light if theme.CLAIR else Qt.ColorScheme.Dark)
+
+
+def preparer_application(app: QApplication) -> None:
+    """Thème clair ou sombre : style Fusion, palette, police et feuille de style."""
+    app.setStyle("Fusion")
     palette = QPalette()
     for role, couleur in ((QPalette.ColorRole.Window, theme.SURFACE), (QPalette.ColorRole.WindowText, theme.TEXTE),
                           (QPalette.ColorRole.Base, theme.SURFACE_2), (QPalette.ColorRole.Text, theme.TEXTE),
@@ -497,6 +529,7 @@ def preparer_application(app: QApplication) -> None:
 def lancer_interface() -> int:
     app = QApplication(sys.argv)
     preparer_application(app)
+    mode_barre_titre(app)
     fenetre = Fenetre()
     fenetre.show()
     journal.info("Fenêtre ouverte")

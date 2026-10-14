@@ -226,3 +226,11 @@ def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
     finally:
         theme.fichier_reglages().unlink(missing_ok=True)
         importlib.reload(theme)  # les autres tests retrouvent le mode de Windows
+
+
+def test_melange_des_couleurs_de_la_barre_de_titre():
+    from PySide6.QtGui import QColor
+    noir, blanc = QColor("#000000"), QColor("#ffffff")
+    assert fenetre_module.melange(noir, blanc, 1.0) == noir  # début du fondu : l'ancienne couleur
+    assert fenetre_module.melange(noir, blanc, 0.0) == blanc  # fin : la nouvelle
+    assert fenetre_module.melange(noir, blanc, 0.5).red() == 128
