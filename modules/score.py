@@ -129,13 +129,19 @@ def conseil_redemarrage(resultat: dict) -> str:
 
 
 def conseil_fichiers(fichiers: dict) -> str:
+    caches = sum(fichiers["navigateurs"].values())
     morceaux = [f"la Corbeille contient {taille_lisible(fichiers['corbeille'])}"] if fichiers["corbeille"] else []
     morceaux.append(f"les fichiers temporaires occupent {taille_lisible(fichiers['temporaires'])}")
-    debut = " et ".join(morceaux)
+    if caches:
+        morceaux.append(f"le cache des navigateurs {taille_lisible(caches)}")
+    debut = ", ".join(morceaux[:-1]) + " et " + morceaux[-1] if len(morceaux) > 1 else morceaux[0]
     return (f"{debut[0].upper()}{debut[1:]} : c'est de la place facile à récupérer sur un disque presque plein. "
             "Ouvre la Corbeille pour vérifier qu'elle ne contient rien d'important, puis fais un clic droit "
             "dessus > Vider la Corbeille (c'est définitif). Pour les fichiers temporaires : "
-            "Paramètres > Système > Stockage > Fichiers temporaires.")
+            "Paramètres > Système > Stockage > Fichiers temporaires."
+            + (" Pour le cache : dans chaque navigateur, « Effacer les données de navigation », en ne cochant que "
+               "« Images et fichiers en cache » (tu restes connecté à tes sites, et le cache se reconstitue "
+               "peu à peu)." if caches else ""))
 
 
 def conseil_alimentation(resultat: dict) -> str | None:

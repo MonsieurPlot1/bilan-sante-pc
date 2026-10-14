@@ -1,4 +1,4 @@
-"""Module fichiers inutiles : taille de la Corbeille et des fichiers temporaires.
+"""Module fichiers inutiles : taille de la Corbeille, des fichiers temporaires et du cache des navigateurs.
 
 Le scan est en lecture seule. Seule exception de toute l'application : vider_corbeille(),
 lancée uniquement par le bouton « Vider la Corbeille », après la confirmation de Windows.
@@ -8,8 +8,17 @@ import ctypes
 import os
 import tempfile
 from ctypes import wintypes
+from pathlib import Path
 
 from modules.disque import taille_dossier, taille_lisible
+
+# Dossiers de cache sous %LOCALAPPDATA% (« * » : un dossier par profil). Ce que le navigateur
+# efface avec « Images et fichiers en cache », sans toucher aux mots de passe ni à l'historique.
+CACHES_NAVIGATEURS = {
+    "Chrome": ["Google/Chrome/User Data/*/Cache", "Google/Chrome/User Data/*/Code Cache"],
+    "Edge": ["Microsoft/Edge/User Data/*/Cache", "Microsoft/Edge/User Data/*/Code Cache"],
+    "Firefox": ["Mozilla/Firefox/Profiles/*/cache2"],
+}
 
 
 class _InfoCorbeille(ctypes.Structure):  # SHQUERYRBINFO
@@ -42,27 +51,48 @@ def vider_corbeille(fenetre: int = 0) -> None:
     shell32.SHEmptyRecycleBinW(fenetre, None, 0)
 
 
-def scan(taille_temporaires: int | None = None) -> dict:
+def dossier_local() -> Path:
+    """%LOCALAPPDATA%, où les navigateurs rangent leur cache."""
+    return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+
+
+def caches_navigateurs() -> dict[str, int]:
+    """Taille du cache de chaque navigateur présent (tous profils confondus), en octets."""
+    tailles = {}
+    for navigateur, motifs in CACHES_NAVIGATEURS.items():
+        dossiers = [d for motif in motifs for d in dossier_local().glob(motif) if d.is_dir()]
+        if dossiers:
+            tailles[navigateur] = sum(taille_dossier(str(d)) for d in dossiers)
+    return tailles
+
+
+def scan(precedent: dict | None = None) -> dict:
     """Point d'entrée du module (hors score) : renvoie les tailles et les constats.
 
-    `taille_temporaires` : taille déjà mesurée, pour ne remesurer que la Corbeille (après l'avoir vidée) :
-    parcourir les fichiers temporaires peut prendre plusieurs secondes.
+    `precedent` : résultat d'une analyse précédente, pour ne remesurer que la Corbeille (après l'avoir
+    vidée) : parcourir les fichiers temporaires et les caches peut prendre plusieurs secondes.
     """
-    lecteur = os.environ.get("SystemDrive", "C:")
+    lecteur = os.environ.get("SystemDrive", "C:").upper()
     temporaires = tempfile.gettempdir()
-    if taille_temporaires is None:
-        taille_temporaires = taille_dossier(temporaires)
+    taille_temporaires = precedent["temporaires"] if precedent else taille_dossier(temporaires)
+    navigateurs = precedent["navigateurs"] if precedent else caches_navigateurs()
     taille_corbeille = corbeille()
     # Ce qui libérerait de la place sur le disque de Windows, le seul qui compte dans le score.
     sur_systeme = corbeille(lecteur + os.sep)
-    if temporaires.upper().startswith(lecteur.upper()):
+    if temporaires.upper().startswith(lecteur):
         sur_systeme += taille_temporaires
+    if str(dossier_local()).upper().startswith(lecteur):
+        sur_systeme += sum(navigateurs.values())
+    constats = [f"Corbeille : {taille_lisible(taille_corbeille)}." if taille_corbeille else "La Corbeille est vide.",
+                f"Fichiers temporaires : {taille_lisible(taille_temporaires)}."]
+    if navigateurs:
+        detail = ", ".join(f"{nom} {taille_lisible(taille)}" for nom, taille in navigateurs.items())
+        constats.append(f"Cache des navigateurs : {taille_lisible(sum(navigateurs.values()))} ({detail}).")
     return {
         "score": None,  # hors score : voir modules/score.conseils_fichiers()
-        "constats": [f"Corbeille : {taille_lisible(taille_corbeille)}." if taille_corbeille
-                     else "La Corbeille est vide.",
-                     f"Fichiers temporaires : {taille_lisible(taille_temporaires)}."],
+        "constats": constats,
         "corbeille": taille_corbeille,
         "temporaires": taille_temporaires,
+        "navigateurs": navigateurs,
         "recuperable_systeme": sur_systeme,
     }

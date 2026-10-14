@@ -28,10 +28,11 @@ def ressources(ram: float = 40, cpu: float = 10, processus: list[dict] | None = 
             "processus": processus}
 
 
-def fichiers(corbeille: float = 0, temporaires: float = 0) -> dict:
+def fichiers(corbeille: float = 0, temporaires: float = 0, caches: float = 0) -> dict:
     """Tailles en Go, toutes sur le disque de Windows."""
     return {"corbeille": corbeille * GO, "temporaires": temporaires * GO,
-            "recuperable_systeme": (corbeille + temporaires) * GO}
+            "navigateurs": {"Chrome": caches * GO} if caches else {},
+            "recuperable_systeme": (corbeille + temporaires + caches) * GO}
 
 
 def redemarrage(jours: float = 1, en_attente: bool = False) -> dict:
@@ -134,6 +135,12 @@ class TestFichiers(unittest.TestCase):
         conseil = resultat["conseils"][1]  # après le conseil disque (24 points)
         self.assertTrue(conseil.startswith("La Corbeille contient 8,0 Go et les fichiers temporaires occupent 2,0 Go"))
         self.assertIn("rien d'important", conseil)  # prudence : vider la Corbeille est définitif
+
+    def test_cache_des_navigateurs(self):
+        conseil = score.calculer(pc(disque=disque(90), fichiers=fichiers(8, 2, caches=1)))["conseils"][1]
+        self.assertTrue(conseil.startswith("La Corbeille contient 8,0 Go, les fichiers temporaires occupent 2,0 Go "
+                                           "et le cache des navigateurs 1,0 Go"))
+        self.assertIn("« Images et fichiers en cache »", conseil)  # pas les mots de passe ni l'historique
 
     def test_corbeille_vide(self):
         conseil = score.calculer(pc(disque=disque(90), fichiers=fichiers(0, 10)))["conseils"][1]

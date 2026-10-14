@@ -105,14 +105,14 @@ def test_famille_de_police(monkeypatch):
 def corbeille_simulee(monkeypatch, avant: float, apres: float) -> list:
     """Corbeille de `avant` Go, qui en contient `apres` une fois la confirmation de Windows passée.
 
-    Renvoie les appels : ("vider", fenêtre) puis ("scan", taille des temporaires transmise).
+    Renvoie les appels : ("vider", fenêtre) puis ("scan", résultat précédent transmis).
     """
     appels = []
     monkeypatch.setattr(module_fichiers, "corbeille", lambda *_: avant * GO)
     monkeypatch.setattr(module_fichiers, "vider_corbeille", lambda fenetre: appels.append(("vider", fenetre)))
 
-    def scan(taille_temporaires=None):
-        appels.append(("scan", taille_temporaires))
+    def scan(precedent=None):
+        appels.append(("scan", precedent))
         return {"constats": ["apres"], **fichiers(apres)}
     monkeypatch.setattr(module_fichiers, "scan", scan)
     return appels
@@ -125,7 +125,8 @@ def test_vider_la_corbeille(fenetre, tmp_path, monkeypatch):
     appels = corbeille_simulee(monkeypatch, avant=2, apres=0)
     fenetre.vider.click()
     # Confirmation de Windows rattachée à notre fenêtre, puis temporaires repris sans les remesurer.
-    assert appels == [("vider", int(fenetre.winId())), ("scan", 1 * GO)]
+    assert appels[0] == ("vider", int(fenetre.winId()))
+    assert appels[1][0] == "scan" and appels[1][1]["temporaires"] == 1 * GO
     assert "2,0 Go libérés" in fenetre.statusBar().currentMessage()
     assert fenetre.cartes["fichiers"].resume.text() == "apres"
     assert not fenetre.vider.isEnabled()  # Corbeille vide
