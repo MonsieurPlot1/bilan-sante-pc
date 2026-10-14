@@ -30,6 +30,14 @@ def corbeille_protegee(monkeypatch):
     monkeypatch.setattr(module_fichiers, "vider_corbeille", interdit)
 
 
+@pytest.fixture(autouse=True)
+def rien_ne_s_ouvre(monkeypatch):
+    """Aucun test n'ouvre les Paramètres ou un dossier pour de vrai : remplacer os.startfile explicitement."""
+    def interdit(*_):
+        raise AssertionError("un test a tenté d'ouvrir une page ou un dossier")
+    monkeypatch.setattr(os, "startfile", interdit)
+
+
 @pytest.fixture
 def fenetre(app, tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))  # historique de test, pas celui de l'utilisateur
@@ -162,3 +170,22 @@ def test_analyse_en_arriere_plan(fenetre, app, monkeypatch):
     app.processEvents()  # livre les signaux envoyés depuis le thread
     assert fenetre.progression.value() == len(analyse.MODULES) - 1  # dernière étape reçue
     assert fenetre.jauge.note == 100 and fenetre.bouton.isEnabled()
+
+
+def test_bouton_ouvrir_d_un_conseil(fenetre, tmp_path, monkeypatch):
+    ouvertures = []
+    monkeypatch.setattr(os, "startfile", ouvertures.append)
+    faux_modules(monkeypatch, demarrage=lambda: {"constats": ["c"], **demarrage(40)})
+    fenetre.afficher(analyse_faite(tmp_path))
+    carte = fenetre.liste_conseils.itemAt(0).widget()
+    assert carte.bouton.text() == "Ouvrir les Paramètres"
+    carte.bouton.click()
+    assert ouvertures == ["ms-settings:startupapps"]
+
+
+def test_ouverture_impossible(fenetre, monkeypatch):
+    def echec(_):
+        raise OSError("introuvable")
+    monkeypatch.setattr(os, "startfile", echec)
+    fenetre.ouvrir("ms-settings:inexistant")
+    assert fenetre.statusBar().currentMessage() == "Cette page n'a pas pu s'ouvrir sur ce PC."

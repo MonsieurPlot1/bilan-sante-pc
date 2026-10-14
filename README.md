@@ -29,6 +29,8 @@ un score sur 100 et 3 conseils au maximum.
 - Elle ne modifie, ne supprime et ne désactive rien : elle se contente de lire.
   Seule exception : le bouton « Vider la Corbeille », qui n'agit que si tu cliques dessus
   et que tu confirmes dans la fenêtre de Windows. Pense à vérifier la Corbeille avant : c'est définitif.
+- Les boutons « Ouvrir » sous les conseils affichent seulement la bonne page des Paramètres, le dossier
+  concerné ou le Gestionnaire des tâches : c'est toi qui décides ensuite quoi changer.
 - Elle n'envoie aucune donnée : tout reste sur ton PC, sans aucun accès au réseau.
 
 Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` :

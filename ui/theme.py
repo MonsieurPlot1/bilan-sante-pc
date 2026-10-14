@@ -34,7 +34,7 @@ ICONE = {
     "logo": "", "demarrage": "", "disque": "", "ressources": "",
     "fichiers": "", "redemarrage": "", "batterie": "", "alimentation": "",
     "bouclier": "", "conseil": "", "historique": "",
-    "analyser": "", "copier": "", "enregistrer": "", "effacer": "",
+    "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "",
     "deplier": "", "replier": "", "erreur": "",
 }
 

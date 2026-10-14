@@ -1,6 +1,7 @@
 """Composants de l'interface : jauge du score, cartes des modules, conseils, graphique."""
 
 from datetime import datetime
+from typing import Callable
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
@@ -204,9 +205,10 @@ class Carte(QFrame):
 
 
 class CarteConseil(QFrame):
-    """Un conseil : numéro dans un rond, puis le texte."""
+    """Un conseil : numéro dans un rond, le texte, et un bouton « Ouvrir » s'il y a un endroit où agir."""
 
-    def __init__(self, numero: int, texte: str) -> None:
+    def __init__(self, numero: int, texte: str, lien: tuple[str, str] | None = None,
+                 ouvrir: Callable[[str], None] | None = None) -> None:
         super().__init__(objectName="conseil")
         rond = QLabel(str(numero), alignment=Qt.AlignmentFlag.AlignCenter,
                       font=theme.police(10.5, QFont.Weight.Bold))
@@ -214,11 +216,21 @@ class CarteConseil(QFrame):
         rond.setStyleSheet(f"color: {theme.ACCENT_CLAIR}; background: rgba(122, 162, 255, 36); border-radius: 14px;")
         corps = QLabel(texte, wordWrap=True, textFormat=Qt.TextFormat.PlainText,
                        textInteractionFlags=Qt.TextInteractionFlag.TextSelectableByMouse)
+        droite = QVBoxLayout()
+        droite.setSpacing(6)
+        droite.addWidget(corps)
+        self.bouton: QPushButton | None = None
+        if lien and ouvrir:
+            libelle, cible = lien
+            self.bouton = QPushButton(libelle, objectName="lien", cursor=Qt.CursorShape.PointingHandCursor,
+                                      icon=theme.icone("ouvrir", theme.ACCENT_CLAIR, 12))
+            self.bouton.clicked.connect(lambda: ouvrir(cible))
+            droite.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignLeft)
         disposition = QHBoxLayout(self)
         disposition.setContentsMargins(16, 14, 18, 14)
         disposition.setSpacing(14)
         disposition.addWidget(rond, alignment=Qt.AlignmentFlag.AlignTop)
-        disposition.addWidget(corps, 1)
+        disposition.addLayout(droite, 1)
 
 
 class Graphique(QWidget):

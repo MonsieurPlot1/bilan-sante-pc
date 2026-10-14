@@ -2,6 +2,7 @@
 
 import html
 import logging
+import os
 import sys
 
 from PySide6.QtCore import QStandardPaths, QThread, Qt, Signal
@@ -219,13 +220,13 @@ class Fenetre(QMainWindow):
 
     # --- Affichage ---
 
-    def _remplacer_conseils(self, conseils: list[str], message: str = "") -> None:
+    def _remplacer_conseils(self, conseils: list[str], message: str = "", liens: list | None = None) -> None:
         while self.liste_conseils.count():
             ancien = self.liste_conseils.takeAt(0).widget()
             ancien.hide()  # caché tout de suite : la suppression n'a lieu qu'au prochain tour de Qt
             ancien.deleteLater()
-        for numero, conseil in enumerate(conseils, start=1):
-            self.liste_conseils.addWidget(CarteConseil(numero, conseil))
+        for numero, (conseil, lien) in enumerate(zip(conseils, liens or [None] * len(conseils)), start=1):
+            self.liste_conseils.addWidget(CarteConseil(numero, conseil, lien, self.ouvrir))
         if message:
             cadre, disposition = carte_vide((20, 16, 20, 16))
             disposition.addWidget(QLabel(message, objectName="secondaire", wordWrap=True))
@@ -290,7 +291,7 @@ class Fenetre(QMainWindow):
         if bilan is None:
             self._remplacer_conseils([], resultat["erreurs"]["score"])
         elif conseils:
-            self._remplacer_conseils(conseils)
+            self._remplacer_conseils(conseils, liens=bilan["liens"])
         elif note is None:  # pas de conseil, mais une partie n'a pas pu être vérifiée
             self._remplacer_conseils([], "Aucun conseil pour les parties vérifiées, mais l'analyse est incomplète.")
         else:
@@ -364,6 +365,14 @@ class Fenetre(QMainWindow):
         self.vider.setEnabled(bool(module["corbeille"]))
         self.statusBar().showMessage(f"Corbeille vidée : {taille_lisible(libere)} libérés. "
                                      "Relance l'analyse pour mettre le score à jour.")
+
+    def ouvrir(self, cible: str) -> None:
+        """Bouton « Ouvrir » d'un conseil : la page des Paramètres, le dossier ou l'outil, sans rien modifier."""
+        try:
+            os.startfile(cible)  # comme un double-clic
+        except OSError:
+            journal.exception("Impossible d'ouvrir %s", cible)
+            self.statusBar().showMessage("Cette page n'a pas pu s'ouvrir sur ce PC.", 6000)
 
     def copier_rapport(self) -> None:
         if self.resultat:

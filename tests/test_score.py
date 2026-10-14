@@ -287,6 +287,19 @@ class TestConseils(unittest.TestCase):
         self.assertIn("plein à 90 %", conseils[0])
         self.assertIn("Téléchargements", conseils[1])  # AppData n'est jamais proposé
         self.assertIn("12 programmes", conseils[2])
+        # Un bouton « Ouvrir » par conseil, dans le même ordre.
+        self.assertEqual(resultat["liens"], [score.LIEN_STOCKAGE, ("Ouvrir le dossier", r"C:\Users\moi\Downloads"),
+                                             score.LIEN_DEMARRAGE])
+
+    def test_liens_selon_le_cas(self):
+        def lien(**modules):
+            return score.calculer(pc(**modules))["liens"][0]
+        self.assertEqual(lien(redemarrage=redemarrage(20)), None)  # redémarrer : depuis le menu Démarrer
+        self.assertEqual(lien(redemarrage=redemarrage(1, en_attente=True)), score.LIEN_MISES_A_JOUR)
+        self.assertEqual(lien(ressources=ressources(ram=95)), score.LIEN_GESTIONNAIRE)
+        self.assertEqual(lien(alimentation=alimentation(2, plan_economies=True)), score.LIEN_OPTIONS_ALIMENTATION)
+        self.assertEqual(lien(alimentation=alimentation(0)), score.LIEN_ALIMENTATION)
+        self.assertEqual(lien(batterie=batterie(0.3)), None)
 
     def test_demarrage_prudent(self):
         conseil = score.calculer(pc(demarrage=demarrage(20)))["conseils"][0]

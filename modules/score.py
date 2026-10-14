@@ -24,6 +24,17 @@ DOSSIERS_A_TRIER = {
 
 IMPACT_MIN = 1  # un conseil qui ferait regagner moins d'un point n'est pas affiché
 
+# Boutons « Ouvrir » des conseils : (texte du bouton, cible). La cible s'ouvre comme un double-clic
+# (page des Paramètres, dossier ou outil de Windows) : elle montre où agir, sans rien modifier.
+Lien = tuple[str, str] | None
+PARAMETRES = "Ouvrir les Paramètres"
+LIEN_DEMARRAGE: Lien = (PARAMETRES, "ms-settings:startupapps")
+LIEN_STOCKAGE: Lien = (PARAMETRES, "ms-settings:storagesense")
+LIEN_ALIMENTATION: Lien = (PARAMETRES, "ms-settings:powersleep")
+LIEN_OPTIONS_ALIMENTATION: Lien = ("Ouvrir les options d'alimentation", "powercfg.cpl")
+LIEN_GESTIONNAIRE: Lien = ("Ouvrir le Gestionnaire des tâches", "taskmgr.exe")
+LIEN_MISES_A_JOUR: Lien = ("Ouvrir Windows Update", "ms-settings:windowsupdate")
+
 
 def lineaire(valeur: float, ok: float, zero: float) -> float:
     """1 jusqu'au seuil `ok`, puis baisse régulière jusqu'à 0 au seuil `zero`."""
@@ -74,7 +85,7 @@ def sante_batterie(resultat: dict) -> float:
     return lineaire(usure, config.BATTERIE_USURE_OK, config.BATTERIE_USURE_ZERO)
 
 
-# --- Conseils : (points qu'ils peuvent faire regagner, texte) ---
+# --- Conseils : (points qu'ils peuvent faire regagner, texte, lien) ---
 
 def conseil_demarrage(nb_programmes: int) -> str:
     return (f"{nb_programmes} programmes se lancent en même temps que Windows : c'est beaucoup, "
@@ -90,14 +101,15 @@ def conseil_disque(disque: dict) -> str:
             "Vide la Corbeille et lance Paramètres > Système > Stockage > Recommandations de nettoyage.")
 
 
-def conseil_dossier(dossiers: list[dict]) -> str | None:
-    """Conseille de trier le plus gros dossier personnel, s'il dépasse le seuil."""
+def conseil_dossier(dossiers: list[dict]) -> tuple[str, Lien] | None:
+    """Conseille de trier le plus gros dossier personnel, s'il dépasse le seuil (avec un lien pour l'ouvrir)."""
     for dossier in dossiers:  # déjà triés du plus gros au plus petit
         nom = DOSSIERS_A_TRIER.get(Path(dossier["chemin"]).name.lower())
         if nom and dossier["taille"] >= config.GROS_DOSSIER_SEUIL:
             return (f"Ton dossier « {nom} » occupe {taille_lisible(dossier['taille'])}. "
                     "Trie-le : il contient souvent de vieux fichiers oubliés. "
-                    "Pense à sauvegarder ce que tu veux garder avant d'effacer quoi que ce soit.")
+                    "Pense à sauvegarder ce que tu veux garder avant d'effacer quoi que ce soit.",
+                    ("Ouvrir le dossier", dossier["chemin"]))
     return None
 
 
@@ -144,21 +156,22 @@ def conseil_fichiers(fichiers: dict) -> str:
                "peu à peu)." if caches else ""))
 
 
-def conseil_alimentation(resultat: dict) -> str | None:
-    """Conseil si Windows bride le PC pour économiser l'énergie, sinon None."""
+def conseil_alimentation(resultat: dict) -> tuple[str, Lien] | None:
+    """Conseil (et lien) si Windows bride le PC pour économiser l'énergie, sinon None."""
     if resultat["mode"] == alimentation.ECONOMISEUR:
         return ("L'économiseur d'énergie est activé : Windows ralentit le PC pour consommer moins. "
                 "C'est utile sur batterie, loin d'une prise. Quand tu as besoin de vitesse, coupe-le dans "
                 "Paramètres > Système > Alimentation et batterie (« Alimentation » sur un PC fixe) "
-                "> Économiseur d'énergie.")
+                "> Économiseur d'énergie.", LIEN_ALIMENTATION)
     if resultat["plan_economies"]:
         return ("Le PC utilise le mode de gestion « Économies d'énergie » : Windows bride le processeur "
                 "pour consommer moins. Pour retrouver de la vitesse, tape « mode de gestion de l'alimentation » "
-                "dans le menu Démarrer et choisis « Utilisation normale ».")
+                "dans le menu Démarrer et choisis « Utilisation normale ».", LIEN_OPTIONS_ALIMENTATION)
     if resultat["mode"] == alimentation.EFFICACITE:
         return ("Le mode d'alimentation est réglé sur « Meilleure efficacité énergétique » : Windows bride "
                 "le PC pour consommer moins. Pour plus de vitesse, choisis « Équilibré » dans Paramètres > "
-                "Système > Alimentation et batterie (« Alimentation » sur un PC fixe) > Mode d'alimentation.")
+                "Système > Alimentation et batterie (« Alimentation » sur un PC fixe) > Mode d'alimentation.",
+                LIEN_ALIMENTATION)
     return None
 
 
@@ -180,32 +193,35 @@ def conseil_batterie(sante: float) -> str:
             "un réparateur peut la remplacer.")
 
 
-def conseils_demarrage(resultat: dict, points: int) -> list[tuple[float, str]]:
-    return [(points * (1 - sante_demarrage(resultat)), conseil_demarrage(len(resultat["programmes"])))]
+def conseils_demarrage(resultat: dict, points: int) -> list[tuple[float, str, Lien]]:
+    return [(points * (1 - sante_demarrage(resultat)), conseil_demarrage(len(resultat["programmes"])),
+             LIEN_DEMARRAGE)]
 
 
-def conseils_disque(resultat: dict, points: int) -> list[tuple[float, str]]:
+def conseils_disque(resultat: dict, points: int) -> list[tuple[float, str, Lien]]:
     systeme = disque_systeme(resultat["disques"])
     if not systeme:
         return []
     impact = points * (1 - sante_disque(resultat))
-    conseils = [(impact, conseil_disque(systeme))]
+    conseils = [(impact, conseil_disque(systeme), LIEN_STOCKAGE)]
     if dossier := conseil_dossier(resultat["gros_dossiers"]):
-        conseils.append((impact, dossier))  # tri stable : reste après le conseil disque
+        conseils.append((impact, *dossier))  # tri stable : reste après le conseil disque
     return conseils
 
 
-def conseils_ressources(resultat: dict, points: int) -> list[tuple[float, str]]:
+def conseils_ressources(resultat: dict, points: int) -> list[tuple[float, str, Lien]]:
     # RAM et processeur comptent chacun pour la moitié des points du module.
-    return [(points / 2 * (1 - sante_ram(resultat)), conseil_ram(resultat)),
-            (points / 2 * (1 - sante_cpu(resultat)), conseil_cpu(resultat["cpu"]))]
+    return [(points / 2 * (1 - sante_ram(resultat)), conseil_ram(resultat), LIEN_GESTIONNAIRE),
+            (points / 2 * (1 - sante_cpu(resultat)), conseil_cpu(resultat["cpu"]), LIEN_GESTIONNAIRE)]
 
 
-def conseils_redemarrage(resultat: dict, points: int) -> list[tuple[float, str]]:
-    return [(points * (1 - sante_redemarrage(resultat)), conseil_redemarrage(resultat))]
+def conseils_redemarrage(resultat: dict, points: int) -> list[tuple[float, str, Lien]]:
+    # Redémarrer se fait depuis le menu Démarrer : un lien seulement si une mise à jour attend.
+    return [(points * (1 - sante_redemarrage(resultat)), conseil_redemarrage(resultat),
+             LIEN_MISES_A_JOUR if resultat["en_attente"] else None)]
 
 
-def conseils_fichiers(fichiers: dict, disque: dict, points: int) -> list[tuple[float, str]]:
+def conseils_fichiers(fichiers: dict, disque: dict, points: int) -> list[tuple[float, str, Lien]]:
     """Hors score : le conseil vaut les points que le disque regagnerait une fois cette place libérée."""
     systeme = disque_systeme(disque["disques"])
     if not systeme or not systeme["total"]:
@@ -213,11 +229,11 @@ def conseils_fichiers(fichiers: dict, disque: dict, points: int) -> list[tuple[f
     apres = systeme["pourcentage"] - fichiers["recuperable_systeme"] / systeme["total"] * 100
     gain = points * (lineaire(apres, config.DISQUE_SEUIL_OK, config.DISQUE_SEUIL_ZERO)
                      - lineaire(systeme["pourcentage"], config.DISQUE_SEUIL_OK, config.DISQUE_SEUIL_ZERO))
-    return [(gain, conseil_fichiers(fichiers))]
+    return [(gain, conseil_fichiers(fichiers), LIEN_STOCKAGE)]
 
 
-def conseils_batterie(resultat: dict, points: int) -> list[tuple[float, str]]:
-    return [(points * (1 - sante_batterie(resultat)), conseil_batterie(resultat["sante"]))]
+def conseils_batterie(resultat: dict, points: int) -> list[tuple[float, str, Lien]]:
+    return [(points * (1 - sante_batterie(resultat)), conseil_batterie(resultat["sante"]), None)]
 
 
 MODULES = {
@@ -257,19 +273,21 @@ def calculer(resultats: dict[str, dict | None]) -> dict:
     if resultats.get("fichiers") and resultats.get("disque") and "disque" in points:
         conseils += [c for c in conseils_fichiers(resultats["fichiers"], resultats["disque"], points["disque"])
                      if c[0] >= IMPACT_MIN]
-    if resultats.get("alimentation") and (texte := conseil_alimentation(resultats["alimentation"])):
-        conseils.append((config.ALIMENTATION_IMPACT, texte))  # hors score : poids fixe
+    if resultats.get("alimentation") and (conseil := conseil_alimentation(resultats["alimentation"])):
+        conseils.append((config.ALIMENTATION_IMPACT, *conseil))  # hors score : poids fixe
     if (resultats.get("disque") or {}).get("systeme_hdd"):
-        conseils.append((config.DISQUE_DUR_IMPACT, conseil_disque_dur()))
+        conseils.append((config.DISQUE_DUR_IMPACT, conseil_disque_dur(), None))
     installee = (resultats.get("ressources") or {}).get("installee")
     if installee and installee < config.RAM_INSTALLEE_MIN:
-        conseils.append((config.RAM_INSTALLEE_IMPACT, conseil_memoire_installee(installee)))
+        conseils.append((config.RAM_INSTALLEE_IMPACT, conseil_memoire_installee(installee), None))
     conseils.sort(key=lambda conseil: conseil[0], reverse=True)
+    retenus = conseils[:config.NB_CONSEILS_MAX]
 
     return {
         "score": sum(scores.values()) if len(scores) == len(points) else None,
         "scores": scores,
         "bareme": points,
-        "conseils": [texte for _, texte in conseils[:config.NB_CONSEILS_MAX]],
+        "conseils": [texte for _, texte, _ in retenus],
+        "liens": [lien for _, _, lien in retenus],  # même ordre que les conseils, None si pas de bouton
         "version": config.SCORE_VERSION,
     }
