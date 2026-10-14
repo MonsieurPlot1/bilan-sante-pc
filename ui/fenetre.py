@@ -1,6 +1,7 @@
 """Fenêtre principale de Bilan santé PC (PySide6)."""
 
 import html
+import importlib
 import logging
 import os
 import sys
@@ -67,12 +68,19 @@ class Fenetre(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Bilan santé PC")
-        self.setWindowIcon(theme.icone("logo", theme.ACCENT_CLAIR, 32))
         self.resize(980, 760)
         self.setMinimumSize(760, 560)
         self.resultat: dict | None = None
         self.analyse: Analyse | None = None
+        self.statusBar().showMessage("Prêt")
+        self.construire()
 
+    def construire(self) -> None:
+        """Crée le contenu de la fenêtre avec les couleurs du thème, et y remet la dernière analyse.
+
+        Appelée aussi au changement de mode clair/sombre : l'ancien contenu est remplacé.
+        """
+        self.setWindowIcon(theme.icone("logo", theme.ACCENT_CLAIR, 32))
         contenu = QWidget(objectName="contenu")
         disposition = QVBoxLayout(contenu)
         disposition.setContentsMargins(32, 26, 32, 26)
@@ -93,9 +101,11 @@ class Fenetre(QMainWindow):
 
         defilement = QScrollArea(widgetResizable=True, frameShape=QFrame.Shape.NoFrame)
         defilement.setWidget(contenu)
-        self.setCentralWidget(defilement)
-        self.statusBar().showMessage("Prêt")
-        self.afficher_historique_existant()
+        self.setCentralWidget(defilement)  # Qt supprime l'ancien contenu
+        if self.resultat:
+            self.afficher(self.resultat)
+        else:
+            self.afficher_historique_existant()
 
     # --- Construction des zones de la fenêtre ---
 
@@ -122,10 +132,17 @@ class Fenetre(QMainWindow):
         textes.setSpacing(2)
         textes.addLayout(ligne_titre)
         textes.addLayout(ligne_rassurante)
+        # Bouton clair/sombre : propose l'autre mode.
+        texte, icone = ("Mode sombre", "lune") if theme.CLAIR else ("Mode clair", "soleil")
+        self.mode = QPushButton(f" {texte}", objectName="discret", cursor=Qt.CursorShape.PointingHandCursor,
+                                icon=theme.icone(icone, theme.TEXTE_2, 14))
+        self.mode.clicked.connect(self.changer_mode)
+
         entete = QHBoxLayout()
         entete.setSpacing(14)
         entete.addWidget(PastilleIcone("logo", taille=46))
         entete.addLayout(textes, 1)
+        entete.addWidget(self.mode, alignment=Qt.AlignmentFlag.AlignTop)
         return entete
 
     def _heros(self) -> QFrame:
@@ -246,6 +263,7 @@ class Fenetre(QMainWindow):
         self.bouton.setEnabled(False)
         self.bouton.setText("  Analyse en cours…")
         self.phrase.setText("Analyse de ton PC en cours…")
+        self.mode.setEnabled(False)  # recréer la fenêtre pendant l'analyse perdrait l'affichage de la progression
         self.copier.setEnabled(False)
         self.enregistrer.setEnabled(False)
         self.vider.setEnabled(False)
@@ -309,6 +327,7 @@ class Fenetre(QMainWindow):
         self.progression.hide()
         self.bouton.setText("  Relancer l'analyse")
         self.bouton.setEnabled(True)
+        self.mode.setEnabled(True)
         self.copier.setEnabled(True)
         self.enregistrer.setEnabled(True)
         self.statusBar().showMessage(f"Terminé en {resultat['duree']:.0f} s")
@@ -365,6 +384,18 @@ class Fenetre(QMainWindow):
         self.vider.setEnabled(bool(module["corbeille"]))
         self.statusBar().showMessage(f"Corbeille vidée : {taille_lisible(libere)} libérés. "
                                      "Relance l'analyse pour mettre le score à jour.")
+
+    def changer_mode(self) -> None:
+        """Bouton clair/sombre : retient le choix, puis recrée le contenu avec les nouvelles couleurs."""
+        try:
+            theme.enregistrer_mode(not theme.CLAIR)
+        except OSError:
+            journal.exception("Impossible d'enregistrer le mode d'affichage")
+            self.statusBar().showMessage("Le mode d'affichage n'a pas pu être changé.", 6000)
+            return
+        importlib.reload(theme)  # les couleurs sont des constantes du module : on le relit pour les recalculer
+        preparer_application(QApplication.instance())
+        self.construire()
 
     def ouvrir(self, cible: str) -> None:
         """Bouton « Ouvrir » d'un conseil : la page des Paramètres, le dossier ou l'outil, sans rien modifier."""

@@ -2,14 +2,37 @@
 
 Tout l'aspect visuel est réglé ici. Polices et icônes sont celles de Windows 11
 (Segoe UI Variable, Segoe Fluent Icons) : rien à installer en plus.
-Les couleurs suivent le mode de Windows (clair ou sombre) au lancement de l'application.
+Couleurs claires ou sombres : celles choisies avec le bouton de la fenêtre, sinon celles de Windows.
 """
 
+import json
 import winreg
 from functools import cache
+from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
+
+from journal import dossier_par_defaut
+
+
+def fichier_reglages() -> Path:
+    return dossier_par_defaut() / "reglages.json"
+
+
+def mode_choisi() -> bool | None:
+    """Mode choisi avec le bouton clair/sombre (True = clair), ou None s'il n'a jamais servi."""
+    try:
+        reglages = json.loads(fichier_reglages().read_text(encoding="utf-8"))
+        return {"clair": True, "sombre": False}.get(reglages.get("theme"))
+    except (OSError, ValueError, AttributeError):  # absent ou abîmé : on suit Windows
+        return None
+
+
+def enregistrer_mode(clair: bool) -> None:
+    chemin = fichier_reglages()
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_text(json.dumps({"theme": "clair" if clair else "sombre"}), encoding="utf-8")
 
 
 def windows_en_clair() -> bool:
@@ -22,7 +45,8 @@ def windows_en_clair() -> bool:
         return False
 
 
-CLAIR = windows_en_clair()
+_choix = mode_choisi()
+CLAIR = windows_en_clair() if _choix is None else _choix
 
 
 def _selon_mode(sombre: str, clair: str) -> str:
@@ -71,7 +95,7 @@ ICONE = {
     "logo": "", "demarrage": "", "disque": "", "ressources": "",
     "fichiers": "", "redemarrage": "", "batterie": "", "alimentation": "",
     "bouclier": "", "conseil": "", "historique": "",
-    "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "",
+    "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "", "soleil": "", "lune": "",
     "deplier": "", "replier": "", "erreur": "",
 }
 

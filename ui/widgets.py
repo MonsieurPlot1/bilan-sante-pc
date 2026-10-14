@@ -116,10 +116,10 @@ class BarreScore(QWidget):
 class PastilleIcone(QWidget):
     """Icône dans un rond teinté, en tête des cartes."""
 
-    def __init__(self, nom: str, couleur: str = theme.ACCENT_CLAIR, taille: int = 36) -> None:
+    def __init__(self, nom: str, couleur: str | None = None, taille: int = 36) -> None:
         super().__init__()
         self.setFixedSize(taille, taille)
-        self.nom, self.couleur = nom, couleur
+        self.nom, self.couleur = nom, couleur or theme.ACCENT_CLAIR  # lue ici : elle change avec le mode
 
     def paintEvent(self, _evenement) -> None:
         peintre = QPainter(self)

@@ -38,6 +38,8 @@ Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` :
 - `historique.json` : les chiffres de chaque analyse (date, scores, espace disque utilisé), pour
   l'encadré « Depuis la dernière fois » (avec l'évolution du disque sur le dernier mois) et le graphique. Aucun nom de programme ni de fichier.
   Le bouton « Effacer l'historique » le supprime.
+- `reglages.json` : le mode clair ou sombre choisi avec le bouton en haut de la fenêtre (sans ce
+  fichier, l'application suit le mode de Windows).
 
 Le bouton « Enregistrer le rapport » crée une page HTML, uniquement à l'endroit que tu choisis.
 Ton dossier personnel y apparaît sous la forme `%USERPROFILE%`, sans ton nom d'utilisateur.

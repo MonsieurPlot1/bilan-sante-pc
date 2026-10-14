@@ -1,5 +1,6 @@
 """Tests de la fenêtre, sans l'afficher à l'écran. Lancer avec : python -m pytest"""
 
+import importlib
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # avant d'importer Qt : aucune fenêtre visible
@@ -195,3 +196,24 @@ def test_couleurs_du_theme():
     from ui import theme
     assert isinstance(theme.windows_en_clair(), bool)
     assert theme.rgba("#34d399", 31) == "rgba(52, 211, 153, 31)"  # même rendu qu'avant en thème sombre
+
+
+def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
+    from ui import theme
+    faux_modules(monkeypatch)
+    fenetre.afficher(analyse_faite(tmp_path))
+    depart = theme.CLAIR
+    try:
+        fenetre.mode.click()
+        assert theme.CLAIR is not depart
+        assert theme.mode_choisi() is theme.CLAIR  # choix retenu pour les prochains lancements
+        assert fenetre.mode.text().strip() == ("Mode sombre" if theme.CLAIR else "Mode clair")
+        assert fenetre.jauge.note == 100  # l'analyse est toujours affichée
+        fenetre.lancer()
+        assert not fenetre.mode.isEnabled()  # pas de changement pendant l'analyse
+        fenetre.analyse.wait()
+        app.processEvents()
+        assert fenetre.mode.isEnabled()  # de nouveau possible une fois l'analyse finie
+    finally:
+        theme.fichier_reglages().unlink(missing_ok=True)
+        importlib.reload(theme)  # les autres tests retrouvent le mode de Windows
