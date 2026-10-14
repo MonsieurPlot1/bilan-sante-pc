@@ -18,7 +18,7 @@ def afficher_demarrage(resultat: dict) -> None:
 
 
 def afficher_disque(resultat: dict) -> None:
-    print("\nPlus gros dossiers de votre profil :")
+    print("\nPlus gros dossiers de ton profil :")
     for dossier in resultat["gros_dossiers"]:
         print(f"  {disque.taille_lisible(dossier['taille']):>10}  {dossier['chemin']}")
 

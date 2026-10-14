@@ -78,15 +78,15 @@ def sante_batterie(resultat: dict) -> float:
 def conseil_demarrage(nb_programmes: int) -> str:
     return (f"{nb_programmes} programmes se lancent en même temps que Windows : c'est beaucoup, "
             "et ça ralentit l'allumage du PC. Dans Paramètres > Applications > Démarrage, "
-            "vous pouvez couper ceux dont vous n'avez pas besoin dès l'allumage. "
+            "tu peux couper ceux dont tu n'as pas besoin dès l'allumage. "
             "Attention : certains sont utiles (antivirus, pilotes de la carte graphique, du son, "
-            "de la souris ou du clavier). En cas de doute, laissez-les.")
+            "de la souris ou du clavier). En cas de doute, laisse-les.")
 
 
 def conseil_disque(disque: dict) -> str:
-    return (f"Votre disque {disque['disque'].rstrip(os.sep)} est plein à {disque['pourcentage']:.0f} % "
+    return (f"Ton disque {disque['disque'].rstrip(os.sep)} est plein à {disque['pourcentage']:.0f} % "
             f"(il reste {taille_lisible(disque['libre'])}). Un disque presque plein ralentit Windows. "
-            "Videz la Corbeille et lancez Paramètres > Système > Stockage > Recommandations de nettoyage.")
+            "Vide la Corbeille et lance Paramètres > Système > Stockage > Recommandations de nettoyage.")
 
 
 def conseil_dossier(dossiers: list[dict]) -> str | None:
@@ -94,9 +94,9 @@ def conseil_dossier(dossiers: list[dict]) -> str | None:
     for dossier in dossiers:  # déjà triés du plus gros au plus petit
         nom = DOSSIERS_A_TRIER.get(Path(dossier["chemin"]).name.lower())
         if nom and dossier["taille"] >= config.GROS_DOSSIER_SEUIL:
-            return (f"Votre dossier « {nom} » occupe {taille_lisible(dossier['taille'])}. "
-                    "Triez-le : il contient souvent de vieux fichiers oubliés. "
-                    "Pensez à sauvegarder ce que vous voulez garder avant d'effacer quoi que ce soit.")
+            return (f"Ton dossier « {nom} » occupe {taille_lisible(dossier['taille'])}. "
+                    "Trie-le : il contient souvent de vieux fichiers oubliés. "
+                    "Pense à sauvegarder ce que tu veux garder avant d'effacer quoi que ce soit.")
     return None
 
 
@@ -104,15 +104,15 @@ def conseil_ram(resultat: dict) -> str:
     noms = ", ".join(f"{Path(p['nom']).stem} ({taille_lisible(p['octets'])})" for p in resultat["processus"][:3])
     return (f"La mémoire vive est utilisée à {resultat['ram']['pourcentage']:.0f} % : quand elle est pleine, "
             "tout ralentit. " + (f"Ceux qui en prennent le plus en ce moment : {noms}. " if noms else "")
-            + "Fermer les programmes et les onglets dont vous ne vous servez pas libère de la mémoire. "
+            + "Fermer les programmes et les onglets dont tu ne te sers pas libère de la mémoire. "
             "Attention : certains doivent rester ouverts (antivirus, programmes de Windows). "
-            "En cas de doute, laissez-les. Si c'est toujours le cas, ajouter de la mémoire au PC peut aider.")
+            "En cas de doute, laisse-les. Si c'est toujours le cas, ajouter de la mémoire au PC peut aider.")
 
 
 def conseil_cpu(cpu: float) -> str:
     return (f"Le processeur était occupé à {cpu:.0f} % pendant la mesure : un programme travaille peut-être "
             "en arrière-plan. Le Gestionnaire des tâches (Ctrl + Maj + Échap) montre lequel. "
-            "Une mise à jour de Windows ou une analyse de l'antivirus, c'est normal : laissez-les finir.")
+            "Une mise à jour de Windows ou une analyse de l'antivirus, c'est normal : laisse-les finir.")
 
 
 def conseil_redemarrage(resultat: dict) -> str:
@@ -120,9 +120,9 @@ def conseil_redemarrage(resultat: dict) -> str:
     if resultat["en_attente"]:
         raisons.append("Une mise à jour de Windows attend un redémarrage pour s'installer.")
     if resultat["jours"] > config.REDEMARRAGE_JOURS_OK:
-        raisons.append(f"Votre PC n'a pas redémarré depuis {duree_lisible(resultat['jours'])} : "
+        raisons.append(f"Ton PC n'a pas redémarré depuis {duree_lisible(resultat['jours'])} : "
                        "avec le temps, Windows s'encombre et ralentit.")
-    return " ".join(raisons) + (" Enregistrez votre travail, puis choisissez Démarrer > Marche/Arrêt > Redémarrer. "
+    return " ".join(raisons) + (" Enregistre ton travail, puis choisis Démarrer > Marche/Arrêt > Redémarrer. "
                                 "« Arrêter » ne suffit pas : avec le démarrage rapide, Windows ne repart pas "
                                 "vraiment de zéro.")
 
@@ -132,14 +132,14 @@ def conseil_fichiers(fichiers: dict) -> str:
     morceaux.append(f"les fichiers temporaires occupent {taille_lisible(fichiers['temporaires'])}")
     debut = " et ".join(morceaux)
     return (f"{debut[0].upper()}{debut[1:]} : c'est de la place facile à récupérer sur un disque presque plein. "
-            "Ouvrez la Corbeille pour vérifier qu'elle ne contient rien d'important, puis faites un clic droit "
+            "Ouvre la Corbeille pour vérifier qu'elle ne contient rien d'important, puis fais un clic droit "
             "dessus > Vider la Corbeille (c'est définitif). Pour les fichiers temporaires : "
             "Paramètres > Système > Stockage > Fichiers temporaires.")
 
 
 def conseil_batterie(sante: float) -> str:
     return (f"La batterie ne garde plus que {sante * 100:.0f} % de sa capacité d'origine : c'est l'usure "
-            "normale avec le temps, et c'est pour ça que l'autonomie baisse. Si cela vous gêne, "
+            "normale avec le temps, et c'est pour ça que l'autonomie baisse. Si ça te gêne, "
             "un réparateur peut la remplacer.")
 
 
