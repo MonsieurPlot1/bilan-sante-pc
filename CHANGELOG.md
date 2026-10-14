@@ -1,5 +1,20 @@
 # Journal des versions
 
+## v0.2.5 - 2026-10-14
+
+- Démarrage : les programmes désactivés dans Paramètres > Applications > Démarrage ne comptent plus.
+  Calcul du score v4 : les scores d'avant ne se comparent pas.
+- Nouvelles vérifications (hors score) : Windows sur un SSD ou un disque dur classique, mémoire vive
+  installée (conseil sous 8 Go) et cache des navigateurs (Chrome, Edge, Firefox) dans Fichiers inutiles.
+- « Depuis la dernière fois » montre l'évolution du disque sur le dernier mois.
+- Conseils juste sous le score, avec un bouton « Ouvrir » vers la bonne page des Paramètres, le dossier
+  ou le Gestionnaire des tâches (ça ouvre seulement, rien n'est modifié).
+- Thème clair : l'application suit Windows, et un bouton permet de choisir le mode clair ou sombre
+  (choix retenu). Passage de l'un à l'autre en fondu, barre de titre comprise.
+- Animations : jauge et barres qui se remplissent, progression qui glisse, conseils en fondu, détail
+  qui se déplie, courbe qui se dessine, défilement doux. « Copier le rapport » confirme d'une coche.
+- Tableaux du détail plus lisibles : longs chemins coupés au milieu, texte complet au survol.
+
 ## v0.2.0 - 2026-10-14
 
 - Nouveau module Alimentation (hors score) : signale quand Windows bride le PC pour économiser
