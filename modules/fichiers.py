@@ -42,11 +42,16 @@ def vider_corbeille(fenetre: int = 0) -> None:
     shell32.SHEmptyRecycleBinW(fenetre, None, 0)
 
 
-def scan() -> dict:
-    """Point d'entrée du module (hors score) : renvoie les tailles et les constats."""
+def scan(taille_temporaires: int | None = None) -> dict:
+    """Point d'entrée du module (hors score) : renvoie les tailles et les constats.
+
+    `taille_temporaires` : taille déjà mesurée, pour ne remesurer que la Corbeille (après l'avoir vidée) :
+    parcourir les fichiers temporaires peut prendre plusieurs secondes.
+    """
     lecteur = os.environ.get("SystemDrive", "C:")
     temporaires = tempfile.gettempdir()
-    taille_temporaires = taille_dossier(temporaires)
+    if taille_temporaires is None:
+        taille_temporaires = taille_dossier(temporaires)
     taille_corbeille = corbeille()
     # Ce qui libérerait de la place sur le disque de Windows, le seul qui compte dans le score.
     sur_systeme = corbeille(lecteur + os.sep)

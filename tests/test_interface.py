@@ -103,21 +103,29 @@ def test_famille_de_police(monkeypatch):
 
 
 def corbeille_simulee(monkeypatch, avant: float, apres: float) -> list:
-    """Corbeille de `avant` Go, qui en contient `apres` une fois la confirmation de Windows passée."""
+    """Corbeille de `avant` Go, qui en contient `apres` une fois la confirmation de Windows passée.
+
+    Renvoie les appels : ("vider", fenêtre) puis ("scan", taille des temporaires transmise).
+    """
     appels = []
     monkeypatch.setattr(module_fichiers, "corbeille", lambda *_: avant * GO)
-    monkeypatch.setattr(module_fichiers, "vider_corbeille", appels.append)
-    monkeypatch.setattr(module_fichiers, "scan", lambda: {"constats": ["apres"], **fichiers(apres)})
+    monkeypatch.setattr(module_fichiers, "vider_corbeille", lambda fenetre: appels.append(("vider", fenetre)))
+
+    def scan(taille_temporaires=None):
+        appels.append(("scan", taille_temporaires))
+        return {"constats": ["apres"], **fichiers(apres)}
+    monkeypatch.setattr(module_fichiers, "scan", scan)
     return appels
 
 
 def test_vider_la_corbeille(fenetre, tmp_path, monkeypatch):
-    faux_modules(monkeypatch, fichiers=lambda: {"constats": ["c"], **fichiers(2)})
+    faux_modules(monkeypatch, fichiers=lambda: {"constats": ["c"], **fichiers(2, temporaires=1)})
     fenetre.afficher(analyse_faite(tmp_path))
     assert fenetre.vider.isEnabled()
     appels = corbeille_simulee(monkeypatch, avant=2, apres=0)
     fenetre.vider.click()
-    assert appels == [int(fenetre.winId())]  # confirmation de Windows rattachée à notre fenêtre
+    # Confirmation de Windows rattachée à notre fenêtre, puis temporaires repris sans les remesurer.
+    assert appels == [("vider", int(fenetre.winId())), ("scan", 1 * GO)]
     assert "2,0 Go libérés" in fenetre.statusBar().currentMessage()
     assert fenetre.cartes["fichiers"].resume.text() == "apres"
     assert not fenetre.vider.isEnabled()  # Corbeille vide

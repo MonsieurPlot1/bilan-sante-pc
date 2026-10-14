@@ -335,7 +335,8 @@ class Fenetre(QMainWindow):
         try:
             avant = fichiers.corbeille()
             fichiers.vider_corbeille(int(self.winId()))
-            module = fichiers.scan()
+            # Fichiers temporaires inchangés : les remesurer figerait la fenêtre.
+            module = fichiers.scan(self.resultat["modules"]["fichiers"]["temporaires"])
         except Exception:
             journal.exception("Impossible de vider la Corbeille")
             self.statusBar().showMessage("La Corbeille n'a pas pu être vidée.", 6000)

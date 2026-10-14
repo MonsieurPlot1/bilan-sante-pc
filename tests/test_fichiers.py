@@ -17,3 +17,12 @@ def test_scan_reel():
     assert resultat["corbeille"] >= 0 and resultat["temporaires"] >= 0
     assert 0 <= resultat["recuperable_systeme"] <= resultat["corbeille"] + resultat["temporaires"]
     assert len(resultat["constats"]) == 2
+
+
+def test_scan_sans_remesurer_les_temporaires(monkeypatch):
+    def interdit(_):
+        raise AssertionError("les fichiers temporaires ont été remesurés")
+    monkeypatch.setattr(fichiers, "taille_dossier", interdit)
+    resultat = fichiers.scan(1234)
+    assert resultat["temporaires"] == 1234
+    assert resultat["constats"][1] == "Fichiers temporaires : 1,2 Ko."
