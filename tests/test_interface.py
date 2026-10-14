@@ -144,3 +144,19 @@ def test_bouton_grise_si_corbeille_vide(fenetre, tmp_path, monkeypatch):
     faux_modules(monkeypatch)  # Corbeille vide par défaut
     fenetre.afficher(analyse_faite(tmp_path))
     assert not fenetre.vider.isEnabled()
+
+
+def test_progression_affichee(fenetre):
+    fenetre.avancer(2, 6, "Disque")
+    assert fenetre.progression.maximum() == 6 and fenetre.progression.value() == 1  # une partie finie
+    assert fenetre.info.text() == "Analyse en cours : Disque (2 sur 6)…"
+
+
+def test_analyse_en_arriere_plan(fenetre, app, monkeypatch):
+    """Le vrai thread d'analyse : étapes puis résultat arrivent jusqu'à la fenêtre."""
+    faux_modules(monkeypatch)
+    fenetre.lancer()
+    fenetre.analyse.wait()
+    app.processEvents()  # livre les signaux envoyés depuis le thread
+    assert fenetre.progression.value() == len(analyse.MODULES) - 1  # dernière étape reçue
+    assert fenetre.jauge.note == 100 and fenetre.bouton.isEnabled()

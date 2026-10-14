@@ -110,3 +110,10 @@ def test_arriere_plan_baisse_puis_retablit_la_priorite():
     with analyse.arriere_plan():
         assert priorite() < avant
     assert priorite() == avant
+
+
+def test_progression(monkeypatch):
+    faux_modules(monkeypatch, demarrage=plante)  # un module qui plante n'arrête pas la progression
+    etapes = []
+    analyse.analyser(lambda *etape: etapes.append(etape))
+    assert etapes == [(numero, len(analyse.MODULES), nom) for numero, nom in enumerate(analyse.NOMS.values(), start=1)]

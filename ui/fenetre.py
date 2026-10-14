@@ -30,10 +30,11 @@ ETATS = {"vert": "Bon état", "orange": "À surveiller", "rouge": "À améliorer
 class Analyse(QThread):
     """Lance l'analyse hors du thread de l'interface pour que la fenêtre ne gèle pas."""
 
+    etape = Signal(int, int, str)  # numéro, total, nom de la partie en cours
     termine = Signal(object)
 
     def run(self) -> None:
-        resultat = analyse.analyser()
+        resultat = analyse.analyser(self.etape.emit)
         try:  # l'historique est un plus : s'il échoue, l'analyse s'affiche quand même
             resultat["historique"] = historique.enregistrer(resultat)
             resultat["comparaison"] = historique.comparer(resultat["historique"], analyse.NOMS)
@@ -135,7 +136,7 @@ class Fenetre(QMainWindow):
                                   cursor=Qt.CursorShape.PointingHandCursor,
                                   icon=theme.icone("analyser", "white", 16), font=theme.police(11.5, QFont.Weight.DemiBold))
         self.bouton.clicked.connect(self.lancer)
-        self.progression = QProgressBar(textVisible=False, maximum=0)  # maximum=0 : indéterminée
+        self.progression = QProgressBar(textVisible=False, maximum=len(analyse.MODULES))
         self.progression.hide()
 
         droite = QVBoxLayout()
@@ -243,11 +244,19 @@ class Fenetre(QMainWindow):
         self.copier.setEnabled(False)
         self.enregistrer.setEnabled(False)
         self.vider.setEnabled(False)
+        self.progression.setValue(0)
         self.progression.show()
         self.statusBar().showMessage("Analyse en cours... (la mesure des dossiers peut prendre une minute)")
         self.analyse = Analyse()
+        self.analyse.etape.connect(self.avancer)
         self.analyse.termine.connect(self.afficher)
         self.analyse.start()
+
+    def avancer(self, numero: int, total: int, nom: str) -> None:
+        """Pendant l'analyse : la partie en cours et les parties déjà faites."""
+        self.progression.setMaximum(total)
+        self.progression.setValue(numero - 1)
+        self.info.setText(f"Analyse en cours : {nom} ({numero} sur {total})…")
 
     def afficher(self, resultat: dict) -> None:
         self.resultat = resultat

@@ -52,16 +52,18 @@ def arriere_plan():
             kernel32.SetThreadPriority(kernel32.GetCurrentThread(), THREAD_MODE_BACKGROUND_END)
 
 
-def analyser() -> dict:
+def analyser(progression: Callable[[int, int, str], None] = lambda *_: None) -> dict:
     """Lance chaque module ; un module qui plante n'empêche pas les autres.
 
     Dans "modules" : le résultat de chaque module, None s'il a planté ;
     un module « non applicable » (batterie d'un PC fixe) n'y figure pas.
+    `progression(numéro, total, nom)` est appelée avant chaque module.
     """
     debut = time.perf_counter()
     modules, erreurs = {}, {}
     with arriere_plan():
-        for cle, nom, scan in MODULES:
+        for numero, (cle, nom, scan) in enumerate(MODULES, start=1):
+            progression(numero, len(MODULES), nom)
             try:
                 resultat = scan()
             except Exception:  # on veut isoler n'importe quelle panne du module
