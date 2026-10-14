@@ -3,7 +3,7 @@
 VERSION = "0.2.0"
 
 # Version du calcul du score : les scores de versions différentes ne se comparent pas.
-SCORE_VERSION = 3
+SCORE_VERSION = 4
 
 # Points de chaque module (total 100). Sans batterie, ou si son usure n'est pas mesurable,
 # ses points sont répartis sur les autres modules.

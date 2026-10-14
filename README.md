@@ -5,7 +5,8 @@ un score sur 100 et 3 conseils au maximum.
 
 ## Ce qu'elle lit
 
-- **Démarrage** : les programmes lancés avec Windows (registre `Run` et dossiers Démarrage).
+- **Démarrage** : les programmes lancés avec Windows (registre `Run` et dossiers Démarrage), sans
+  compter ceux désactivés dans Paramètres > Applications > Démarrage.
 - **Disque** : l'espace libre de chaque disque et les plus gros dossiers de ton profil utilisateur.
 - **Fichiers inutiles** (hors score) : la taille de la Corbeille et des fichiers temporaires. Un conseil
   n'apparaît que si les vider ferait vraiment de la place sur un disque presque plein. Un bouton
@@ -41,8 +42,8 @@ Ton dossier personnel y apparaît sous la forme `%USERPROFILE%`, sans ton nom d'
 Le score sur 100 additionne les points de chaque partie : Démarrage 25, Disque 25,
 Mémoire et processeur 20, Redémarrage 15, Batterie 15. Sans batterie, ou si son usure n'est pas
 mesurable, ses points vont aux autres parties (30, 30, 25 et 15). Tous les seuils sont dans `config.py`.
-Les scores d'une version du calcul ne se comparent pas avec ceux d'une autre (calcul v3 depuis
-l'ajout du module Redémarrage).
+Les scores d'une version du calcul ne se comparent pas avec ceux d'une autre (calcul v4 depuis
+que les programmes désactivés au démarrage ne comptent plus).
 
 ## Lancer en mode développement
 

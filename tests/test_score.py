@@ -1,4 +1,4 @@
-"""Tests du calcul du score (v3). Lancer avec : python -m pytest"""
+"""Tests du calcul du score (v4). Lancer avec : python -m pytest"""
 
 import os
 import unittest

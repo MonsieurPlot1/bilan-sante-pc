@@ -3,6 +3,7 @@
 import os
 import struct
 import unittest
+import unittest.mock
 
 from modules import demarrage
 
@@ -63,7 +64,28 @@ class TestScan(unittest.TestCase):
         self.assertIn("score", resultat)
         self.assertEqual(len(resultat["constats"]), 1)
         for programme in resultat["programmes"]:
-            self.assertEqual(set(programme), {"nom", "chemin", "editeur", "source"})
+            self.assertEqual(set(programme), {"nom", "chemin", "editeur", "source", "actif"})
+            self.assertTrue(programme["actif"])  # seuls les programmes actifs sont gardés
+
+    def test_desactives_ignores(self):
+        programmes = [{"nom": "Steam", "actif": True}, {"nom": "Epic", "actif": False},
+                      {"nom": "Riot", "actif": False}]
+        with unittest.mock.patch.object(demarrage, "lister_programmes", return_value=programmes):
+            resultat = demarrage.scan()
+        self.assertEqual([p["nom"] for p in resultat["programmes"]], ["Steam"])
+        self.assertEqual(resultat["nb_desactives"], 2)
+        self.assertEqual(resultat["constats"],
+                         ["1 programme se lance au démarrage de Windows (2 autres désactivés dans les Paramètres)."])
+
+
+class TestDesactive(unittest.TestCase):
+    def test_valeurs_startup_approved(self):
+        self.assertFalse(demarrage.est_desactive(bytes([0x02]) + bytes(11)))  # activé
+        self.assertFalse(demarrage.est_desactive(bytes([0x06]) + bytes(11)))
+        self.assertTrue(demarrage.est_desactive(bytes([0x03]) + bytes(11)))  # désactivé par l'utilisateur
+        self.assertTrue(demarrage.est_desactive(bytes([0x01]) + bytes(11)))
+        self.assertFalse(demarrage.est_desactive(b""))  # valeur vide ou d'un autre type : on ne sait pas, actif
+        self.assertFalse(demarrage.est_desactive(1))
 
 
 if __name__ == "__main__":

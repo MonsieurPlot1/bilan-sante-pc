@@ -1,4 +1,4 @@
-"""Calcul du score /100 et des conseils à partir des résultats des modules (calcul v3).
+"""Calcul du score /100 et des conseils à partir des résultats des modules (calcul v4).
 
 Lecture seule : on ne fait que lire les résultats déjà collectés.
 """

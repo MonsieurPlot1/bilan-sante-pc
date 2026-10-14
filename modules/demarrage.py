@@ -12,17 +12,22 @@ import winreg
 from pathlib import Path
 
 CLE_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
+# Où Windows note les programmes désactivés dans Paramètres > Applications > Démarrage.
+CLE_APPROUVES = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved"
 
 # HKLM existe en deux vues sur Windows 64 bits (programmes 64 et 32 bits).
+# Dernier élément : la sous-clé de CLE_APPROUVES qui correspond à la source.
 SOURCES_REGISTRE = [
-    (winreg.HKEY_CURRENT_USER, 0, "Registre (utilisateur)"),
-    (winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_64KEY, "Registre (tous les utilisateurs)"),
-    (winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_32KEY, "Registre (tous les utilisateurs, 32 bits)"),
+    (winreg.HKEY_CURRENT_USER, 0, "Registre (utilisateur)", "Run"),
+    (winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_64KEY, "Registre (tous les utilisateurs)", "Run"),
+    (winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_32KEY, "Registre (tous les utilisateurs, 32 bits)", "Run32"),
 ]
 
 DOSSIERS_DEMARRAGE = [
-    (r"%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup", "Dossier Démarrage (utilisateur)"),
-    (r"%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs\Startup", "Dossier Démarrage (tous les utilisateurs)"),
+    (r"%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup", "Dossier Démarrage (utilisateur)",
+     winreg.HKEY_CURRENT_USER),
+    (r"%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs\Startup", "Dossier Démarrage (tous les utilisateurs)",
+     winreg.HKEY_LOCAL_MACHINE),
 ]
 
 
@@ -106,35 +111,65 @@ def _lire_run(racine: int, vue: int) -> list[tuple[str, str]]:
     return [(nom, commande) for nom, commande, _ in valeurs if isinstance(commande, str) and commande.strip()]
 
 
+def est_desactive(donnees: object) -> bool:
+    """Valeur StartupApproved : premier octet impair = désactivé (02 ou 06 = activé, 03 ou 07 = désactivé).
+
+    Format non documenté par Microsoft, mais stable depuis Windows 8 et repris par les outils de diagnostic.
+    """
+    return isinstance(donnees, bytes) and bool(donnees) and bool(donnees[0] & 1)
+
+
+def desactives(racine: int, sous_cle: str) -> set[str]:
+    """Noms (en minuscules) des programmes désactivés dans les Paramètres, pour une source."""
+    try:
+        with winreg.OpenKey(racine, rf"{CLE_APPROUVES}\{sous_cle}", 0,
+                            winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as cle:
+            valeurs = [winreg.EnumValue(cle, i) for i in range(winreg.QueryInfoKey(cle)[1])]
+    except OSError:  # clé absente : rien n'a été désactivé
+        return set()
+    return {nom.lower() for nom, donnees, _ in valeurs if est_desactive(donnees)}
+
+
 def lister_programmes() -> list[dict]:
-    """Liste les programmes au démarrage : nom, chemin, éditeur et source."""
+    """Liste les programmes au démarrage : nom, chemin, éditeur, source et s'il est actif."""
     programmes = []
-    for racine, vue, source in SOURCES_REGISTRE:
+    for racine, vue, source, sous_cle in SOURCES_REGISTRE:
+        coupes = desactives(racine, sous_cle)
         for nom, commande in _lire_run(racine, vue):
             chemin = extraire_chemin(commande)
-            programmes.append({"nom": nom, "chemin": chemin, "editeur": editeur(chemin), "source": source})
+            programmes.append({"nom": nom, "chemin": chemin, "editeur": editeur(chemin), "source": source,
+                               "actif": nom.lower() not in coupes})
 
-    for dossier, source in DOSSIERS_DEMARRAGE:
+    for dossier, source, racine in DOSSIERS_DEMARRAGE:
         dossier = Path(os.path.expandvars(dossier))
         if not dossier.is_dir():
             continue
+        coupes = desactives(racine, "StartupFolder")  # noms de fichiers, extension comprise
         for fichier in sorted(dossier.iterdir()):
             if not fichier.is_file() or fichier.name.lower() == "desktop.ini":
                 continue
             chemin = str(fichier)
             if fichier.suffix.lower() == ".lnk":
                 chemin = cible_raccourci(fichier.read_bytes()) or chemin
-            programmes.append({"nom": fichier.stem, "chemin": chemin, "editeur": editeur(chemin), "source": source})
+            programmes.append({"nom": fichier.stem, "chemin": chemin, "editeur": editeur(chemin), "source": source,
+                               "actif": fichier.name.lower() not in coupes})
     return programmes
 
 
 def scan() -> dict:
-    """Point d'entrée du module : renvoie le score partiel et les constats."""
-    programmes = lister_programmes()
-    nb = len(programmes)
+    """Point d'entrée du module : renvoie les programmes actifs et les constats.
+
+    Les programmes désactivés dans les Paramètres ne se lancent pas : ils ne comptent pas.
+    """
+    tous = lister_programmes()
+    programmes = [p for p in tous if p["actif"]]
+    nb, nb_desactives = len(programmes), len(tous) - len(programmes)
     phrase = f"{nb} programme se lance" if nb <= 1 else f"{nb} programmes se lancent"
+    s = "s" if nb_desactives > 1 else ""
+    precision = f" ({nb_desactives} autre{s} désactivé{s} dans les Paramètres)" if nb_desactives else ""
     return {
         "score": None,  # calculé ensuite par modules/score.calculer()
-        "constats": [f"{phrase} au démarrage de Windows."],
+        "constats": [f"{phrase} au démarrage de Windows{precision}."],
         "programmes": programmes,
+        "nb_desactives": nb_desactives,
     }
