@@ -7,7 +7,8 @@ un score sur 100 et 3 conseils au maximum.
 
 - **Démarrage** : les programmes lancés avec Windows (registre `Run` et dossiers Démarrage), sans
   compter ceux désactivés dans Paramètres > Applications > Démarrage.
-- **Disque** : l'espace libre de chaque disque et les plus gros dossiers de ton profil utilisateur.
+- **Disque** : l'espace libre de chaque disque et les plus gros dossiers de ton profil utilisateur,
+  et si Windows est sur un SSD ou sur un disque dur classique (HDD, conseil hors score).
 - **Fichiers inutiles** (hors score) : la taille de la Corbeille et des fichiers temporaires. Un conseil
   n'apparaît que si les vider ferait vraiment de la place sur un disque presque plein. Un bouton
   permet de vider la Corbeille, après confirmation.

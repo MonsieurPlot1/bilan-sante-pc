@@ -156,6 +156,12 @@ def conseil_alimentation(resultat: dict) -> str | None:
     return None
 
 
+def conseil_disque_dur() -> str:
+    return ("Windows est installé sur un disque dur classique (HDD) : c'est souvent la première cause d'un PC lent "
+            "(allumage, ouverture des programmes). Le remplacer par un SSD est l'amélioration la plus efficace, "
+            "même sur un vieux PC. Un réparateur peut s'en charger en recopiant tout à l'identique.")
+
+
 def conseil_memoire_installee(octets: int) -> str:
     return (f"Ce PC n'a que {octets / 1024**3:.0f} Go de mémoire vive : c'est peu pour Windows 11 aujourd'hui, "
             "surtout avec un navigateur et plusieurs programmes ouverts (8 Go est un minimum confortable). "
@@ -247,6 +253,8 @@ def calculer(resultats: dict[str, dict | None]) -> dict:
                      if c[0] >= IMPACT_MIN]
     if resultats.get("alimentation") and (texte := conseil_alimentation(resultats["alimentation"])):
         conseils.append((config.ALIMENTATION_IMPACT, texte))  # hors score : poids fixe
+    if (resultats.get("disque") or {}).get("systeme_hdd"):
+        conseils.append((config.DISQUE_DUR_IMPACT, conseil_disque_dur()))
     installee = (resultats.get("ressources") or {}).get("installee")
     if installee and installee < config.RAM_INSTALLEE_MIN:
         conseils.append((config.RAM_INSTALLEE_IMPACT, conseil_memoire_installee(installee)))

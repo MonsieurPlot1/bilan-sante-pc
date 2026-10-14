@@ -41,6 +41,10 @@ BATTERIE_USURE_ZERO = 60
 # Un PC bridé est plus lent en tout, et se règle en quelques clics.
 ALIMENTATION_IMPACT = 10
 
+# Windows sur un disque dur classique (HDD, hors score) : poids de son conseil, le plus fort des conseils
+# hors score, car c'est souvent la première cause de lenteur.
+DISQUE_DUR_IMPACT = 15
+
 # Mémoire vive installée (hors score) : conseil en dessous de ce minimum, avec ce poids parmi les conseils
 # (moins que l'alimentation : en ajouter coûte de l'argent).
 RAM_INSTALLEE_MIN = 8 * 1024**3

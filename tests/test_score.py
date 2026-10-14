@@ -181,6 +181,19 @@ class TestAlimentation(unittest.TestCase):
         self.assertIn("efficacité énergétique", conseils[1])
 
 
+class TestDisqueDur(unittest.TestCase):
+    def test_hdd(self):
+        resultat = score.calculer(pc(disque={**disque(40), "systeme_hdd": True},
+                                     alimentation=alimentation(1)))
+        self.assertEqual(resultat["score"], 100)  # hors score
+        self.assertIn("disque dur classique (HDD)", resultat["conseils"][0])  # avant l'alimentation (10)
+        self.assertIn("efficacité énergétique", resultat["conseils"][1])
+
+    def test_ssd_ou_inconnu(self):
+        for valeur in (False, None):
+            self.assertEqual(score.calculer(pc(disque={**disque(40), "systeme_hdd": valeur}))["conseils"], [])
+
+
 class TestMemoireInstallee(unittest.TestCase):
     def test_peu_de_memoire(self):
         resultat = score.calculer(pc(ressources={**ressources(), "installee": 4 * GO}))

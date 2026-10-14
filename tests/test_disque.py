@@ -1,5 +1,6 @@
 """Tests du module disque. Lancer avec : python -m unittest"""
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -51,6 +52,12 @@ class TestDisques(unittest.TestCase):
         self.assertTrue(any(d["disque"].upper().startswith("C:") for d in disques))
         for d in disques:
             self.assertEqual(d["total"], d["utilise"] + d["libre"])
+
+    def test_type_du_disque_systeme(self):
+        self.assertIn(disque.disque_dur(os.environ.get("SystemDrive", "C:")), (True, False))
+
+    def test_type_inconnu(self):
+        self.assertIsNone(disque.disque_dur("Z:\\pas-un-lecteur"))
 
 
 if __name__ == "__main__":
