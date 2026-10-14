@@ -29,7 +29,7 @@ COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élém
             "fichiers": [], "ressources": ["Programme", "Mémoire"], "redemarrage": [], "alimentation": [],
             "batterie": []}
 
-DUREE_FONDU = 650  # millisecondes : passage en douceur entre le mode clair et le mode sombre
+DUREE_FONDU = 300  # millisecondes : passage en douceur entre le mode clair et le mode sombre
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # boutons de la barre de titre sombres
 DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 35, 36  # Windows 11 : fond et texte de la barre de titre
 
