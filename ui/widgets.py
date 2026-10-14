@@ -46,14 +46,14 @@ class Jauge(QWidget):
         self.animation.valueChanged.connect(self._avancer)
         self.setAccessibleName("Score : pas encore analysé")
 
-    def definir(self, note: int | None, couleur: str) -> None:
+    def definir(self, note: int | None, couleur: str, animer: bool = True) -> None:
+        """`animer` faux : la jauge est remplie d'un coup (changement de couleurs, pas nouvelle note)."""
         self.note, self.couleur = note, couleur
         self.texte_vide = "?"
         self.setAccessibleName(f"Score : {note} sur 100" if note is not None else "Score : analyse incomplète")
         self.animation.stop()
-        if note is None:
-            self.valeur = 0.0
-            self.update()
+        if note is None or not animer:
+            self._avancer(0.0 if note is None else float(note))
             return
         self.animation.setStartValue(0.0)
         self.animation.setEndValue(float(note))

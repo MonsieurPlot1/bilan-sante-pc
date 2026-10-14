@@ -6,10 +6,11 @@ import logging
 import os
 import sys
 
-from PySide6.QtCore import QStandardPaths, QThread, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
-from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
-                               QMessageBox, QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget)
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QStandardPaths, QThread, QTimer, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette, QPixmap
+from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
+                               QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea, QVBoxLayout,
+                               QWidget)
 
 import config
 import historique
@@ -25,6 +26,8 @@ journal = logging.getLogger(__name__)
 COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élément", "Taille", "Détail"],
             "fichiers": [], "ressources": ["Programme", "Mémoire"], "redemarrage": [], "alimentation": [],
             "batterie": []}
+
+DUREE_FONDU = 400  # millisecondes : passage en douceur entre le mode clair et le mode sombre
 
 # Mot court affiché au-dessus de la phrase d'interprétation (la couleur n'est jamais seule).
 ETATS = {"vert": "Bon état", "orange": "À surveiller", "rouge": "À améliorer", "gris": "Analyse incomplète"}
@@ -103,7 +106,7 @@ class Fenetre(QMainWindow):
         defilement.setWidget(contenu)
         self.setCentralWidget(defilement)  # Qt supprime l'ancien contenu
         if self.resultat:
-            self.afficher(self.resultat)
+            self.afficher(self.resultat, animer=False)  # même analyse : la jauge ne se re-remplit pas
         else:
             self.afficher_historique_existant()
 
@@ -281,11 +284,11 @@ class Fenetre(QMainWindow):
         self.progression.setValue(numero - 1)
         self.info.setText(f"Analyse en cours : {nom} ({numero} sur {total})…")
 
-    def afficher(self, resultat: dict) -> None:
+    def afficher(self, resultat: dict, animer: bool = True) -> None:
         self.resultat = resultat
         note = analyse.score_global(resultat)
         niveau, phrase = analyse.interpretation(note)
-        self.jauge.definir(note, theme.NIVEAUX[niveau])
+        self.jauge.definir(note, theme.NIVEAUX[niveau], animer)
         self.etat.setText(ETATS[niveau])
         self.etat.setProperty("niveau", niveau)
         repolir(self.etat)
@@ -393,9 +396,30 @@ class Fenetre(QMainWindow):
             journal.exception("Impossible d'enregistrer le mode d'affichage")
             self.statusBar().showMessage("Le mode d'affichage n'a pas pu être changé.", 6000)
             return
+        ancien = self.grab()  # image de l'affichage actuel, pour le fondu
+        position = self.centralWidget().verticalScrollBar().value()
         importlib.reload(theme)  # les couleurs sont des constantes du module : on le relit pour les recalculer
         preparer_application(QApplication.instance())
         self.construire()
+        # Les tailles du nouveau contenu ne sont connues qu'au prochain tour de Qt (caché sous le fondu).
+        barre = self.centralWidget().verticalScrollBar()
+        QTimer.singleShot(0, lambda: barre.setValue(position))
+        self._fondu(ancien)
+
+    def _fondu(self, image: QPixmap) -> None:
+        """Pose l'image de l'ancien affichage par-dessus la fenêtre, puis l'efface en douceur."""
+        voile = QLabel(self, objectName="voile")
+        voile.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)  # les clics passent au travers
+        voile.setPixmap(image)
+        voile.setGeometry(self.rect())
+        effet = QGraphicsOpacityEffect(voile)
+        voile.setGraphicsEffect(effet)
+        voile.show()
+        voile.raise_()
+        animation = QPropertyAnimation(effet, b"opacity", voile, duration=DUREE_FONDU, startValue=1.0, endValue=0.0,
+                                       easingCurve=QEasingCurve.Type.InOutCubic)
+        animation.finished.connect(voile.deleteLater)
+        animation.start()
 
     def ouvrir(self, cible: str) -> None:
         """Bouton « Ouvrir » d'un conseil : la page des Paramètres, le dossier ou l'outil, sans rien modifier."""
