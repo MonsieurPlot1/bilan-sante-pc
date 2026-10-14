@@ -1,5 +1,14 @@
 # Journal des versions
 
+## v0.2.0 - 2026-10-14
+
+- Nouveau module Alimentation (hors score) : signale quand Windows bride le PC pour économiser
+  l'énergie (économiseur d'énergie, mode « Meilleure efficacité énergétique » ou « Économies
+  d'énergie ») et indique où le changer. Le score reste en calcul v3 : l'historique reste comparable.
+- Pendant l'analyse, la fenêtre affiche la partie en cours (« Disque (2 sur 7) ») et une barre qui
+  avance, au lieu d'une barre qui tourne sans fin.
+- Les conseils tutoient, comme le reste de l'application.
+
 ## v0.1.10 - 2026-10-14
 
 - Après « Vider la Corbeille », la fenêtre ne se fige plus : seule la Corbeille est remesurée,
