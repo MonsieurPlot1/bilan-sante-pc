@@ -14,6 +14,8 @@ un score sur 100 et 3 conseils au maximum.
   3 secondes et les 5 programmes qui prennent le plus de mémoire.
 - **Redémarrage** : depuis combien de jours Windows n'a pas vraiment redémarré (« Arrêter » ne
   suffit pas, à cause du démarrage rapide), et si une mise à jour attend un redémarrage.
+- **Alimentation** (hors score) : si Windows bride le PC pour économiser l'énergie (économiseur
+  d'énergie, mode « Meilleure efficacité énergétique » ou « Économies d'énergie »), avec où le changer.
 - **Batterie** (PC portables seulement) : le niveau de charge, le branchement et l'usure, lue auprès
   du pilote de batterie de Windows. Si le PC ne donne pas cette information, l'application l'écrit
   au lieu d'inventer un chiffre.

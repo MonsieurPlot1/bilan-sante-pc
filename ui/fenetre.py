@@ -21,7 +21,8 @@ journal = logging.getLogger(__name__)
 
 # Colonnes du détail dépliable de chaque carte (les cartes sans colonnes n'ont pas de détail).
 COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élément", "Taille", "Détail"],
-            "fichiers": [], "ressources": ["Programme", "Mémoire"], "redemarrage": [], "batterie": []}
+            "fichiers": [], "ressources": ["Programme", "Mémoire"], "redemarrage": [], "alimentation": [],
+            "batterie": []}
 
 # Mot court affiché au-dessus de la phrase d'interprétation (la couleur n'est jamais seule).
 ETATS = {"vert": "Bon état", "orange": "À surveiller", "rouge": "À améliorer", "gris": "Analyse incomplète"}

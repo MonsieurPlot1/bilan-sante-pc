@@ -38,6 +38,11 @@ def redemarrage(jours: float = 1, en_attente: bool = False) -> dict:
     return {"jours": jours, "en_attente": en_attente}
 
 
+def alimentation(mode: int | None = 2, plan_economies: bool = False) -> dict:
+    """Mode 2 : équilibré."""
+    return {"mode": mode, "plan_economies": plan_economies}
+
+
 def batterie(sante: float | None = 0.9) -> dict:
     return {"applicable": True, "niveau": 80, "branche": True, "sante": sante}
 
@@ -138,6 +143,42 @@ class TestFichiers(unittest.TestCase):
         # 100 Mo sur 100 Go : moins d'un point à regagner.
         resultat = score.calculer(pc(disque=disque(90), fichiers=fichiers(0, 0.1)))
         self.assertEqual(len(resultat["conseils"]), 1)
+
+
+class TestAlimentation(unittest.TestCase):
+    def test_hors_score_et_sans_conseil_si_equilibre(self):
+        resultat = score.calculer(pc(alimentation=alimentation(2)))
+        self.assertEqual(resultat["score"], 100)
+        self.assertNotIn("alimentation", resultat["scores"])
+        self.assertEqual(resultat["conseils"], [])
+
+    def test_mode_illisible(self):
+        self.assertEqual(score.calculer(pc(alimentation=alimentation(None)))["conseils"], [])
+
+    def test_economiseur(self):
+        resultat = score.calculer(pc(alimentation=alimentation(0)))
+        self.assertEqual(resultat["score"], 100)  # hors score : le conseil n'enlève aucun point
+        self.assertIn("L'économiseur d'énergie est activé", resultat["conseils"][0])
+        self.assertIn("utile sur batterie", resultat["conseils"][0])  # pas un réglage à couper à tout prix
+
+    def test_plan_economies(self):
+        conseil = score.calculer(pc(alimentation=alimentation(2, plan_economies=True)))["conseils"][0]
+        self.assertIn("« Utilisation normale »", conseil)
+
+    def test_efficacite(self):
+        conseil = score.calculer(pc(alimentation=alimentation(1)))["conseils"][0]
+        self.assertIn("choisis « Équilibré »", conseil)
+
+    def test_economiseur_avant_le_plan(self):
+        conseils = score.calculer(pc(alimentation=alimentation(0, plan_economies=True)))["conseils"]
+        self.assertEqual(len(conseils), 1)
+        self.assertIn("économiseur", conseils[0])
+
+    def test_place_parmi_les_conseils(self):
+        # Disque à 90 % : 24 points à regagner, avant l'alimentation (10).
+        conseils = score.calculer(pc(disque=disque(90), alimentation=alimentation(1)))["conseils"]
+        self.assertIn("Ton disque", conseils[0])
+        self.assertIn("efficacité énergétique", conseils[1])
 
 
 class TestCasExtremes(unittest.TestCase):

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import config
+from modules import alimentation
 from modules.disque import taille_lisible
 from modules.redemarrage import duree_lisible
 
@@ -137,6 +138,24 @@ def conseil_fichiers(fichiers: dict) -> str:
             "Paramètres > Système > Stockage > Fichiers temporaires.")
 
 
+def conseil_alimentation(resultat: dict) -> str | None:
+    """Conseil si Windows bride le PC pour économiser l'énergie, sinon None."""
+    if resultat["mode"] == alimentation.ECONOMISEUR:
+        return ("L'économiseur d'énergie est activé : Windows ralentit le PC pour consommer moins. "
+                "C'est utile sur batterie, loin d'une prise. Quand tu as besoin de vitesse, coupe-le dans "
+                "Paramètres > Système > Alimentation et batterie (« Alimentation » sur un PC fixe) "
+                "> Économiseur d'énergie.")
+    if resultat["plan_economies"]:
+        return ("Le PC utilise le mode de gestion « Économies d'énergie » : Windows bride le processeur "
+                "pour consommer moins. Pour retrouver de la vitesse, tape « mode de gestion de l'alimentation » "
+                "dans le menu Démarrer et choisis « Utilisation normale ».")
+    if resultat["mode"] == alimentation.EFFICACITE:
+        return ("Le mode d'alimentation est réglé sur « Meilleure efficacité énergétique » : Windows bride "
+                "le PC pour consommer moins. Pour plus de vitesse, choisis « Équilibré » dans Paramètres > "
+                "Système > Alimentation et batterie (« Alimentation » sur un PC fixe) > Mode d'alimentation.")
+    return None
+
+
 def conseil_batterie(sante: float) -> str:
     return (f"La batterie ne garde plus que {sante * 100:.0f} % de sa capacité d'origine : c'est l'usure "
             "normale avec le temps, et c'est pour ça que l'autonomie baisse. Si ça te gêne, "
@@ -220,6 +239,8 @@ def calculer(resultats: dict[str, dict | None]) -> dict:
     if resultats.get("fichiers") and resultats.get("disque") and "disque" in points:
         conseils += [c for c in conseils_fichiers(resultats["fichiers"], resultats["disque"], points["disque"])
                      if c[0] >= IMPACT_MIN]
+    if resultats.get("alimentation") and (texte := conseil_alimentation(resultats["alimentation"])):
+        conseils.append((config.ALIMENTATION_IMPACT, texte))  # hors score : poids fixe
     conseils.sort(key=lambda conseil: conseil[0], reverse=True)
 
     return {

@@ -37,6 +37,10 @@ REDEMARRAGE_EN_ATTENTE_MAX = 0.5
 BATTERIE_USURE_OK = 20
 BATTERIE_USURE_ZERO = 60
 
+# Mode d'alimentation (hors score) : place de son conseil parmi les autres, en points « regagnés ».
+# Un PC bridé est plus lent en tout, et se règle en quelques clics.
+ALIMENTATION_IMPACT = 10
+
 # Conseils.
 NB_CONSEILS_MAX = 3
 GROS_DOSSIER_SEUIL = 5 * 1024**3  # un dossier personnel est signalé à partir de 5 Go

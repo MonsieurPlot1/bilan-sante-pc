@@ -74,7 +74,7 @@ def test_analyse_complete(fenetre, tmp_path, monkeypatch):
 
 def test_tous_les_modules_en_erreur(fenetre, tmp_path, monkeypatch):
     faux_modules(monkeypatch, demarrage=plante, disque=plante, fichiers=plante, ressources=plante, redemarrage=plante,
-                 batterie=plante)
+                 alimentation=plante, batterie=plante)
     fenetre.afficher(analyse_faite(tmp_path))
     assert fenetre.jauge.note is None and fenetre.jauge.texte_vide == "?"
     assert fenetre.etat.text() == "Analyse incomplète"
