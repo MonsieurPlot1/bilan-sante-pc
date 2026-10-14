@@ -95,7 +95,7 @@ ICONE = {
     "logo": "", "demarrage": "", "disque": "", "ressources": "",
     "fichiers": "", "redemarrage": "", "batterie": "", "alimentation": "",
     "bouclier": "", "conseil": "", "historique": "",
-    "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "", "soleil": "", "lune": "",
+    "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "", "valide": "", "soleil": "", "lune": "",
     "deplier": "", "replier": "", "erreur": "",
 }
 
@@ -161,6 +161,7 @@ QFrame#carte {{ background: {SURFACE}; border: 1px solid {BORDURE}; border-radiu
 QFrame#heros {{ border: 1px solid {BORDURE}; border-radius: 18px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {HEROS}, stop:1 {SURFACE}); }}
 QFrame#conseil {{ background: {SURFACE}; border: 1px solid {BORDURE}; border-radius: 12px; }}
+QFrame#carte:hover, QFrame#conseil:hover {{ border-color: {SURVOL_BORDURE}; }}
 
 QLabel#pastille {{ border-radius: 10px; padding: 2px 10px; font-weight: 600; }}
 QLabel#pastille[niveau="vert"] {{ color: {NIVEAUX["vert"]}; background: {rgba(NIVEAUX["vert"], 31)}; }}

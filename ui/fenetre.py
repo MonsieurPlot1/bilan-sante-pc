@@ -9,18 +9,18 @@ import sys
 from ctypes import wintypes
 from functools import cache
 
-from PySide6.QtCore import QStandardPaths, QThread, QTimer, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QStandardPaths, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
 from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
-                               QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget)
+                               QProgressBar, QPushButton, QVBoxLayout, QWidget)
 
 import config
 import historique
 from modules import fichiers
 from modules.disque import taille_lisible
 from ui import analyse, theme
-from ui.widgets import (Carte, CarteConseil, Fondu, Graphique, Jauge, PastilleIcone, pastille, repolir,
-                        titre_section)
+from ui.widgets import (Carte, CarteConseil, DefilementDoux, Fondu, Graphique, Jauge, PastilleIcone, apparaitre,
+                        pastille, repolir, titre_section)
 
 journal = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ class Analyse(QThread):
 
 def carte_vide(marges: tuple[int, int, int, int] = (22, 18, 22, 18)) -> tuple[QFrame, QVBoxLayout]:
     cadre = QFrame(objectName="carte")
+    cadre.setAttribute(Qt.WidgetAttribute.WA_Hover)  # bordure éclairée au survol
     disposition = QVBoxLayout(cadre)
     disposition.setContentsMargins(*marges)
     disposition.setSpacing(12)
@@ -107,7 +108,7 @@ class Fenetre(QMainWindow):
         disposition.addLayout(self._actions())
         disposition.addStretch()
 
-        defilement = QScrollArea(widgetResizable=True, frameShape=QFrame.Shape.NoFrame)
+        defilement = DefilementDoux(widgetResizable=True, frameShape=QFrame.Shape.NoFrame)
         defilement.setWidget(contenu)
         self.setCentralWidget(defilement)  # Qt supprime l'ancien contenu
         if self.resultat:
@@ -165,8 +166,11 @@ class Fenetre(QMainWindow):
                                   cursor=Qt.CursorShape.PointingHandCursor,
                                   icon=theme.icone("analyser", "white", 16), font=theme.police(11.5, QFont.Weight.DemiBold))
         self.bouton.clicked.connect(self.lancer)
-        self.progression = QProgressBar(textVisible=False, maximum=len(analyse.MODULES))
+        # Graduée en centièmes de partie : la barre glisse d'une partie à l'autre au lieu de sauter.
+        self.progression = QProgressBar(textVisible=False, maximum=len(analyse.MODULES) * 100)
         self.progression.hide()
+        self.glissement = QPropertyAnimation(self.progression, b"value", self.progression,
+                                             duration=450, easingCurve=QEasingCurve.Type.OutCubic)
 
         droite = QVBoxLayout()
         droite.setSpacing(10)
@@ -245,7 +249,9 @@ class Fenetre(QMainWindow):
 
     # --- Affichage ---
 
-    def _remplacer_conseils(self, conseils: list[str], message: str = "", liens: list | None = None) -> None:
+    def _remplacer_conseils(self, conseils: list[str], message: str = "", liens: list | None = None,
+                            animer: bool = False) -> None:
+        """`animer` : les nouvelles cartes apparaissent en fondu, l'une après l'autre."""
         while self.liste_conseils.count():
             ancien = self.liste_conseils.takeAt(0).widget()
             ancien.hide()  # caché tout de suite : la suppression n'a lieu qu'au prochain tour de Qt
@@ -256,6 +262,9 @@ class Fenetre(QMainWindow):
             cadre, disposition = carte_vide((20, 16, 20, 16))
             disposition.addWidget(QLabel(message, objectName="secondaire", wordWrap=True))
             self.liste_conseils.addWidget(cadre)
+        if animer:
+            for position in range(self.liste_conseils.count()):
+                apparaitre(self.liste_conseils.itemAt(position).widget(), delai=position * 90)
 
     def _texte_comparaison(self, lignes: list[str]) -> None:
         """Une vraie comparaison : le score mis en avant, le reste plus discret. Un message seul : texte simple."""
@@ -275,6 +284,7 @@ class Fenetre(QMainWindow):
         self.copier.setEnabled(False)
         self.enregistrer.setEnabled(False)
         self.vider.setEnabled(False)
+        self.glissement.stop()
         self.progression.setValue(0)
         self.progression.show()
         self.statusBar().showMessage("Analyse en cours... (la mesure des dossiers peut prendre une minute)")
@@ -285,8 +295,10 @@ class Fenetre(QMainWindow):
 
     def avancer(self, numero: int, total: int, nom: str) -> None:
         """Pendant l'analyse : la partie en cours et les parties déjà faites."""
-        self.progression.setMaximum(total)
-        self.progression.setValue(numero - 1)
+        self.progression.setMaximum(total * 100)
+        self.glissement.stop()
+        self.glissement.setEndValue((numero - 1) * 100)  # depuis la position du moment
+        self.glissement.start()
         self.info.setText(f"Analyse en cours : {nom} ({numero} sur {total})…")
 
     def afficher(self, resultat: dict, animer: bool = True) -> None:
@@ -308,29 +320,30 @@ class Fenetre(QMainWindow):
             module = resultat["modules"][cle]
             ratio = bilan["scores"][cle] / bilan["bareme"][cle] if bilan and cle in bilan["scores"] else None
             carte.remplir(analyse.points_module(resultat, cle), ratio, module["constats"] if module else [],
-                          lignes_detail(cle, module) if module else [], resultat["erreurs"].get(cle))
+                          lignes_detail(cle, module) if module else [], resultat["erreurs"].get(cle), animer)
 
         module_fichiers = resultat["modules"].get("fichiers")
         self.vider.setEnabled(bool(module_fichiers and module_fichiers["corbeille"]))
 
         conseils = analyse.conseils(resultat)
         if bilan is None:
-            self._remplacer_conseils([], resultat["erreurs"]["score"])
+            self._remplacer_conseils([], resultat["erreurs"]["score"], animer=animer)
         elif conseils:
-            self._remplacer_conseils(conseils, liens=bilan["liens"])
+            self._remplacer_conseils(conseils, liens=bilan["liens"], animer=animer)
         elif note is None:  # pas de conseil, mais une partie n'a pas pu être vérifiée
-            self._remplacer_conseils([], "Aucun conseil pour les parties vérifiées, mais l'analyse est incomplète.")
+            self._remplacer_conseils([], "Aucun conseil pour les parties vérifiées, mais l'analyse est incomplète.",
+                                     animer=animer)
         else:
-            self._remplacer_conseils([], "Rien à signaler : ton PC est en bonne forme.")
+            self._remplacer_conseils([], "Rien à signaler : ton PC est en bonne forme.", animer=animer)
 
         if resultat["historique"] is None:
             self._texte_comparaison([f"L'historique n'a pas pu être lu ou enregistré. {analyse.AIDE}"])
         elif note is None:
             self._texte_comparaison(["Analyse incomplète : elle n'est pas enregistrée dans l'historique."])
-            self.graphique.afficher(historique.serie(resultat["historique"]))
+            self.graphique.afficher(historique.serie(resultat["historique"]), animer)
         else:
             self._texte_comparaison(resultat["comparaison"])
-            self.graphique.afficher(historique.serie(resultat["historique"]))
+            self.graphique.afficher(historique.serie(resultat["historique"]), animer)
 
         self.progression.hide()
         self.bouton.setText("  Relancer l'analyse")
@@ -448,9 +461,17 @@ class Fenetre(QMainWindow):
             self.statusBar().showMessage("Cette page n'a pas pu s'ouvrir sur ce PC.", 6000)
 
     def copier_rapport(self) -> None:
-        if self.resultat:
-            QGuiApplication.clipboard().setText(analyse.rapport_texte(self.resultat))
-            self.statusBar().showMessage("Rapport copié dans le presse-papiers.", 4000)
+        if not self.resultat:
+            return
+        QGuiApplication.clipboard().setText(analyse.rapport_texte(self.resultat))
+        self.statusBar().showMessage("Rapport copié dans le presse-papiers.", 4000)
+        # Confirmation sur le bouton lui-même, le temps d'un coup d'œil (même largeur : rien ne bouge autour).
+        bouton = self.copier
+        bouton.setMinimumWidth(bouton.width())
+        bouton.setText(" Rapport copié")
+        bouton.setIcon(theme.icone("valide", theme.NIVEAUX["vert"]))
+        QTimer.singleShot(1600, bouton, lambda: (bouton.setText(" Copier le rapport"),
+                                                 bouton.setIcon(theme.icone("copier"))))
 
     def enregistrer_rapport(self) -> None:
         """Écrit le rapport HTML uniquement à l'endroit choisi dans la boîte de dialogue."""

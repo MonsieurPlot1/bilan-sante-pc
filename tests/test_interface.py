@@ -7,6 +7,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # avant d'importer Qt : a
 
 import pytest
 from PySide6.QtTest import QTest
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QApplication
 
 import historique
@@ -15,7 +17,7 @@ from tests.test_analyse import faux_modules, plante
 from tests.test_score import GO, batterie, demarrage, disque, fichiers
 from ui import analyse
 from ui.fenetre import Fenetre, preparer_application
-from ui.widgets import Fondu
+from ui.widgets import Carte, Fondu, Graphique
 from ui import fenetre as fenetre_module
 
 
@@ -161,7 +163,9 @@ def test_bouton_grise_si_corbeille_vide(fenetre, tmp_path, monkeypatch):
 
 def test_progression_affichee(fenetre):
     fenetre.avancer(2, 6, "Disque")
-    assert fenetre.progression.maximum() == 6 and fenetre.progression.value() == 1  # une partie finie
+    assert fenetre.progression.maximum() == 600  # en centièmes de partie : la barre glisse
+    QTest.qWait(600)
+    assert fenetre.progression.value() == 100  # une partie finie
     assert fenetre.info.text() == "Analyse en cours : Disque (2 sur 6)…"
 
 
@@ -172,7 +176,7 @@ def test_analyse_en_arriere_plan(fenetre, app, monkeypatch):
     assert fenetre.phrase.text() == "Analyse de ton PC en cours…" and not fenetre.bouton.isEnabled()
     fenetre.analyse.wait()
     app.processEvents()  # livre les signaux envoyés depuis le thread
-    assert fenetre.progression.value() == len(analyse.MODULES) - 1  # dernière étape reçue
+    assert fenetre.glissement.endValue() == (len(analyse.MODULES) - 1) * 100  # dernière étape reçue
     assert fenetre.jauge.note == 100 and fenetre.bouton.isEnabled()
 
 
@@ -236,3 +240,65 @@ def test_melange_des_couleurs_de_la_barre_de_titre():
     assert fenetre_module.melange(noir, blanc, 1.0) == noir  # début du fondu : l'ancienne couleur
     assert fenetre_module.melange(noir, blanc, 0.0) == blanc  # fin : la nouvelle
     assert fenetre_module.melange(noir, blanc, 0.5).red() == 128
+
+
+def test_detail_qui_se_deplie_et_se_replie(fenetre, tmp_path, monkeypatch):
+    faux_modules(monkeypatch, demarrage=lambda: {"constats": ["c"], **demarrage(3)})
+    fenetre.afficher(analyse_faite(tmp_path))
+    carte = fenetre.cartes["demarrage"]
+    carte.bouton.click()
+    assert carte.ouvert and not carte.detail.isHidden() and carte.bouton.text() == "Masquer le détail"
+    QTest.qWait(400)
+    assert carte.detail.height() == carte.hauteur_detail()  # ajusté à ses 3 lignes, sans place vide
+    assert Carte.HAUTEUR_DETAIL_MIN <= carte.detail.height() < Carte.HAUTEUR_DETAIL_MAX
+    assert carte.detail.topLevelItem(0).toolTip(2) == r"C:\p0.exe"  # texte complet au survol
+    carte.bouton.click()
+    QTest.qWait(400)
+    assert not carte.ouvert and carte.detail.isHidden()
+
+
+def test_conseils_qui_apparaissent_en_fondu(fenetre, tmp_path, monkeypatch):
+    faux_modules(monkeypatch, demarrage=lambda: {"constats": ["c"], **demarrage(40)})
+    fenetre.afficher(analyse_faite(tmp_path))
+    premiere = fenetre.liste_conseils.itemAt(0).widget()
+    assert premiere.graphicsEffect() is not None  # fondu en cours
+    QTest.qWait(800)
+    assert premiere.graphicsEffect() is None  # effet retiré une fois apparu : texte net
+
+
+def test_courbe_qui_se_dessine(app):
+    graphique = Graphique()
+    entrees = [{"date": "2026-10-01T09:00:00", "score": 60}, {"date": "2026-10-02T09:00:00", "score": 70}]
+    graphique.afficher(entrees)
+    assert graphique.progres < 1
+    QTest.qWait(900)
+    assert graphique.progres == 1
+    graphique.afficher(entrees)  # même historique : pas de nouveau tracé
+    assert graphique.progres == 1
+
+
+def test_bouton_copier_confirme(fenetre, tmp_path, monkeypatch):
+    faux_modules(monkeypatch)
+    fenetre.afficher(analyse_faite(tmp_path))
+    fenetre.copier.click()
+    assert fenetre.copier.text().strip() == "Rapport copié"
+    QTest.qWait(1800)
+    assert fenetre.copier.text().strip() == "Copier le rapport"
+
+
+def test_molette_qui_glisse(fenetre, tmp_path, monkeypatch):
+    faux_modules(monkeypatch)
+    fenetre.afficher(analyse_faite(tmp_path))
+    fenetre.show()
+    QTest.qWait(10)
+    zone = fenetre.centralWidget()
+    barre = zone.verticalScrollBar()
+    cran = QWheelEvent(QPointF(10, 10), QPointF(10, 10), QPoint(0, 0), QPoint(0, -120), Qt.MouseButton.NoButton,
+                       Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
+    zone.wheelEvent(cran)
+    zone.wheelEvent(cran)  # deux crans rapides s'additionnent
+    attendu = min(barre.maximum(), 2 * barre.singleStep() * QApplication.wheelScrollLines())
+    assert zone.glissement.endValue() == attendu
+    QTest.qWait(400)
+    assert barre.value() == attendu
+
