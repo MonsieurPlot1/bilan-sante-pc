@@ -7,19 +7,19 @@ import logging
 import os
 import sys
 from ctypes import wintypes
+from functools import cache
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QStandardPaths, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette, QPixmap
-from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
-                               QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea, QVBoxLayout,
-                               QWidget)
+from PySide6.QtCore import QStandardPaths, QThread, QTimer, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
+from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
+                               QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 import config
 import historique
 from modules import fichiers
 from modules.disque import taille_lisible
 from ui import analyse, theme
-from ui.widgets import (Carte, CarteConseil, Graphique, Jauge, PastilleIcone, pastille, repolir,
+from ui.widgets import (Carte, CarteConseil, Fondu, Graphique, Jauge, PastilleIcone, pastille, repolir,
                         titre_section)
 
 journal = logging.getLogger(__name__)
@@ -29,7 +29,8 @@ COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élém
             "fichiers": [], "ressources": ["Programme", "Mémoire"], "redemarrage": [], "alimentation": [],
             "batterie": []}
 
-DUREE_FONDU = 400  # millisecondes : passage en douceur entre le mode clair et le mode sombre
+DUREE_FONDU = 650  # millisecondes : passage en douceur entre le mode clair et le mode sombre
+DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # boutons de la barre de titre sombres
 DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 35, 36  # Windows 11 : fond et texte de la barre de titre
 
 # Mot court affiché au-dessus de la phrase d'interprétation (la couleur n'est jamais seule).
@@ -400,39 +401,43 @@ class Fenetre(QMainWindow):
             journal.exception("Impossible d'enregistrer le mode d'affichage")
             self.statusBar().showMessage("Le mode d'affichage n'a pas pu être changé.", 6000)
             return
-        ancien = self.grab()  # image de l'affichage actuel, pour le fondu
+        # L'image de l'affichage actuel couvre la fenêtre : la suite se prépare dessous, sans rien montrer.
+        fondu = Fondu(self, self.grab(), DUREE_FONDU)
+        # Hors du clic : le bouton qui vient d'être cliqué fait partie du contenu remplacé.
+        QTimer.singleShot(0, lambda: self._preparer_fondu(fondu))
+
+    def _preparer_fondu(self, fondu: Fondu) -> None:
+        """Recrée le contenu avec les nouvelles couleurs, sous l'image de l'ancien."""
         ancien_fond, ancien_texte = QColor(theme.FOND), QColor(theme.TEXTE)
         position = self.centralWidget().verticalScrollBar().value()
+        # Ancien contenu supprimé tout de suite : la nouvelle feuille de style n'a pas à le restyler.
+        self.takeCentralWidget()
         importlib.reload(theme)  # les couleurs sont des constantes du module : on le relit pour les recalculer
-        preparer_application(QApplication.instance())
+        appliquer_couleurs(QApplication.instance())
         self.construire()
-        # Les tailles du nouveau contenu ne sont connues qu'au prochain tour de Qt (caché sous le fondu).
-        barre = self.centralWidget().verticalScrollBar()
-        QTimer.singleShot(0, lambda: barre.setValue(position))
-        self._fondu(ancien, ancien_fond, ancien_texte)
+        fondu.raise_()
+        # Au tour suivant de Qt (tailles calculées) : même position, image du nouvel affichage, fondu.
+        QTimer.singleShot(0, lambda: self._fondre(fondu, position, ancien_fond, ancien_texte))
 
-    def _fondu(self, image: QPixmap, ancien_fond: QColor, ancien_texte: QColor) -> None:
-        """Pose l'image de l'ancien affichage par-dessus la fenêtre, puis l'efface en douceur.
-
-        La barre de titre suit le même mélange de couleurs, image par image, pour rester synchronisée.
-        """
+    def _fondre(self, fondu: Fondu, position: int, ancien_fond: QColor, ancien_texte: QColor) -> None:
+        """Lance le fondu ; la barre de titre suit le même mélange de couleurs, étape par étape."""
+        self.centralWidget().verticalScrollBar().setValue(position)
+        fondu.hide()
+        nouvelle = self.grab()
+        fondu.show()
         nouveau_fond, nouveau_texte = QColor(theme.FOND), QColor(theme.TEXTE)
-        voile = QLabel(self, objectName="voile")
-        voile.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)  # les clics passent au travers
-        voile.setPixmap(image)
-        voile.setGeometry(self.rect())
-        effet = QGraphicsOpacityEffect(voile)
-        voile.setGraphicsEffect(effet)
-        voile.show()
-        voile.raise_()
-        animation = QPropertyAnimation(effet, b"opacity", voile, duration=DUREE_FONDU, startValue=1.0, endValue=0.0,
-                                       easingCurve=QEasingCurve.Type.InOutCubic)
-        animation.valueChanged.connect(lambda opacite: colorer_barre_titre(
-            self, melange(ancien_fond, nouveau_fond, opacite), melange(ancien_texte, nouveau_texte, opacite)))
-        animation.finished.connect(voile.deleteLater)
-        animation.start()
-        # Les boutons réduire/fermer ne savent que basculer : à mi-chemin, quand les deux thèmes se valent.
-        QTimer.singleShot(DUREE_FONDU // 2, lambda: mode_barre_titre(QApplication.instance()))
+        bascule = [False]
+
+        def avancer(progres: float) -> None:
+            colorer_barre_titre(self, melange(nouveau_fond, ancien_fond, progres),
+                                melange(nouveau_texte, ancien_texte, progres))
+            if progres >= 0.5 and not bascule[0]:  # boutons réduire/fermer : ils ne savent que basculer
+                bascule[0] = True
+                boutons_barre_titre(self, sombres=not theme.CLAIR)
+
+        fondu.animation.valueChanged.connect(avancer)
+        fondu.animation.finished.connect(lambda: mode_barre_titre(QApplication.instance()))  # Qt au même mode
+        fondu.demarrer(nouvelle)
 
     def ouvrir(self, cible: str) -> None:
         """Bouton « Ouvrir » d'un conseil : la page des Paramètres, le dossier ou l'outil, sans rien modifier."""
@@ -496,14 +501,28 @@ def melange(a: QColor, b: QColor, part_de_a: float) -> QColor:
                     for x, y in ((a.red(), b.red()), (a.green(), b.green()), (a.blue(), b.blue()))))
 
 
+@cache  # chargée une fois : appelée à chaque étape du fondu
+def _dwm_attribut():
+    fonction = ctypes.WinDLL("dwmapi").DwmSetWindowAttribute
+    fonction.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    return fonction
+
+
 def colorer_barre_titre(fenetre: QWidget, fond: QColor, texte: QColor) -> None:
     """Couleurs de la barre de titre dessinée par Windows 11 (sans effet sur Windows 10)."""
-    dwmapi = ctypes.WinDLL("dwmapi")
-    dwmapi.DwmSetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
     for attribut, couleur in ((DWMWA_CAPTION_COLOR, fond), (DWMWA_TEXT_COLOR, texte)):
         colorref = wintypes.DWORD(couleur.red() | couleur.green() << 8 | couleur.blue() << 16)  # 0x00BBGGRR
-        dwmapi.DwmSetWindowAttribute(int(fenetre.winId()), attribut, ctypes.byref(colorref),
-                                     ctypes.sizeof(colorref))
+        _dwm_attribut()(int(fenetre.winId()), attribut, ctypes.byref(colorref), ctypes.sizeof(colorref))
+
+
+def boutons_barre_titre(fenetre: QWidget, sombres: bool) -> None:
+    """Boutons réduire/fermer en version sombre ou claire, directement auprès de Windows.
+
+    Passer par Qt (mode_barre_titre) réappliquerait le style à toute la fenêtre : un à-coup en plein fondu.
+    """
+    valeur = wintypes.BOOL(sombres)
+    _dwm_attribut()(int(fenetre.winId()), DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(valeur),
+                    ctypes.sizeof(valeur))
 
 
 def mode_barre_titre(app: QApplication) -> None:
@@ -512,8 +531,14 @@ def mode_barre_titre(app: QApplication) -> None:
 
 
 def preparer_application(app: QApplication) -> None:
-    """Thème clair ou sombre : style Fusion, palette, police et feuille de style."""
+    """Thème clair ou sombre : style Fusion, police, palette et feuille de style."""
     app.setStyle("Fusion")
+    app.setFont(theme.police(10))
+    appliquer_couleurs(app)
+
+
+def appliquer_couleurs(app: QApplication) -> None:
+    """Palette et feuille de style du mode actuel (seules à changer entre clair et sombre)."""
     palette = QPalette()
     for role, couleur in ((QPalette.ColorRole.Window, theme.SURFACE), (QPalette.ColorRole.WindowText, theme.TEXTE),
                           (QPalette.ColorRole.Base, theme.SURFACE_2), (QPalette.ColorRole.Text, theme.TEXTE),
@@ -522,7 +547,6 @@ def preparer_application(app: QApplication) -> None:
                           (QPalette.ColorRole.Highlight, theme.ACCENT), (QPalette.ColorRole.HighlightedText, "white")):
         palette.setColor(role, QColor(couleur))
     app.setPalette(palette)
-    app.setFont(theme.police(10))
     app.setStyleSheet(theme.STYLE)
 
 

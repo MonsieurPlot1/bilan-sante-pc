@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # avant d'importer Qt : a
 
 import pytest
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication
 
 import historique
 from modules import fichiers as module_fichiers
@@ -15,6 +15,7 @@ from tests.test_analyse import faux_modules, plante
 from tests.test_score import GO, batterie, demarrage, disque, fichiers
 from ui import analyse
 from ui.fenetre import Fenetre, preparer_application
+from ui.widgets import Fondu
 from ui import fenetre as fenetre_module
 
 
@@ -210,13 +211,14 @@ def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
     fenetre.centralWidget().verticalScrollBar().setValue(300)
     try:
         fenetre.mode.click()
+        QTest.qWait(50)  # le changement se fait juste après le clic, sous le fondu
         assert theme.CLAIR is not depart
         assert theme.mode_choisi() is theme.CLAIR  # choix retenu pour les prochains lancements
         assert fenetre.mode.text().strip() == ("Mode sombre" if theme.CLAIR else "Mode clair")
         assert fenetre.jauge.note == 100 and fenetre.jauge.valeur == 100  # affichée, sans se re-remplir
-        assert fenetre.findChild(QLabel, "voile").isVisible()  # fondu en cours
+        assert fenetre.findChild(Fondu, "fondu").isVisible()  # fondu en cours
         QTest.qWait(fenetre_module.DUREE_FONDU + 200)
-        assert fenetre.findChild(QLabel, "voile") is None  # fondu terminé et retiré
+        assert fenetre.findChild(Fondu, "fondu") is None  # fondu terminé et retiré
         assert fenetre.centralWidget().verticalScrollBar().value() == 300  # on reste au même endroit
         fenetre.lancer()
         assert not fenetre.mode.isEnabled()  # pas de changement pendant l'analyse

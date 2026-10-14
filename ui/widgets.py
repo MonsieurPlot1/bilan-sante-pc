@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Callable
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QHeaderView, QLabel, QPushButton, QToolTip, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
@@ -232,6 +232,42 @@ class CarteConseil(QFrame):
         disposition.setSpacing(14)
         disposition.addWidget(rond, alignment=Qt.AlignmentFlag.AlignTop)
         disposition.addLayout(droite, 1)
+
+
+class Fondu(QWidget):
+    """Passage en douceur d'un affichage à l'autre : l'ancienne image s'efface sur la nouvelle.
+
+    Seules deux images figées sont mélangées à chaque étape : rien d'autre n'est redessiné
+    pendant le fondu, qui reste fluide même sur un PC lent.
+    """
+
+    def __init__(self, parent: QWidget, ancienne: QPixmap, duree: int) -> None:
+        super().__init__(parent, objectName="fondu")
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)  # couvre tout : rien n'est redessiné dessous
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)  # les clics passent au travers
+        self.ancienne, self.nouvelle, self.progres = ancienne, None, 0.0
+        self.animation = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=duree,
+                                           easingCurve=QEasingCurve.Type.InOutSine)
+        self.animation.valueChanged.connect(self._avancer)
+        self.animation.finished.connect(self.deleteLater)
+        self.setGeometry(parent.rect())
+        self.show()
+        self.raise_()
+
+    def demarrer(self, nouvelle: QPixmap) -> None:
+        self.nouvelle = nouvelle
+        self.animation.start()
+
+    def _avancer(self, progres: float) -> None:
+        self.progres = progres
+        self.update()
+
+    def paintEvent(self, _evenement) -> None:
+        peintre = QPainter(self)
+        if self.nouvelle is not None:
+            peintre.drawPixmap(0, 0, self.nouvelle)
+        peintre.setOpacity(1 - self.progres)
+        peintre.drawPixmap(0, 0, self.ancienne)
 
 
 class Graphique(QWidget):
