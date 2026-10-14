@@ -1,5 +1,10 @@
 # Journal des versions
 
+## v0.1.10 - 2026-10-14
+
+- Après « Vider la Corbeille », la fenêtre ne se fige plus : seule la Corbeille est remesurée,
+  la taille des fichiers temporaires est reprise de l'analyse.
+
 ## v0.1.9 - 2026-10-13
 
 - Bouton « Vider la Corbeille » dans la carte Fichiers inutiles : seule action de l'application qui
