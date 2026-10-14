@@ -157,6 +157,7 @@ def test_analyse_en_arriere_plan(fenetre, app, monkeypatch):
     """Le vrai thread d'analyse : étapes puis résultat arrivent jusqu'à la fenêtre."""
     faux_modules(monkeypatch)
     fenetre.lancer()
+    assert fenetre.phrase.text() == "Analyse de ton PC en cours…" and not fenetre.bouton.isEnabled()
     fenetre.analyse.wait()
     app.processEvents()  # livre les signaux envoyés depuis le thread
     assert fenetre.progression.value() == len(analyse.MODULES) - 1  # dernière étape reçue

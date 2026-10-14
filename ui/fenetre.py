@@ -78,13 +78,15 @@ class Fenetre(QMainWindow):
         disposition.setSpacing(16)
         disposition.addLayout(self._entete())
         disposition.addWidget(self._heros())
+        # Les conseils juste sous le score : ce qu'il y a à faire se voit sans faire défiler.
+        disposition.addSpacing(6)
+        disposition.addWidget(titre_section("Conseils"))
+        disposition.addLayout(self._conseils())
+        disposition.addSpacing(6)
         disposition.addWidget(self._historique())
         disposition.addSpacing(6)
         disposition.addWidget(titre_section("Détail par partie"))
         disposition.addLayout(self._cartes())
-        disposition.addSpacing(6)
-        disposition.addWidget(titre_section("Conseils"))
-        disposition.addLayout(self._conseils())
         disposition.addLayout(self._actions())
         disposition.addStretch()
 
@@ -242,6 +244,7 @@ class Fenetre(QMainWindow):
     def lancer(self) -> None:
         self.bouton.setEnabled(False)
         self.bouton.setText("  Analyse en cours…")
+        self.phrase.setText("Analyse de ton PC en cours…")
         self.copier.setEnabled(False)
         self.enregistrer.setEnabled(False)
         self.vider.setEnabled(False)
