@@ -7,15 +7,17 @@ App Windows grand public : scanne le PC et explique en français clair pourquoi 
   Seule exception : le bouton « Vider la Corbeille » (module fichiers), uniquement sur clic,
   avec la confirmation de Windows. Aucune autre action ne s'ajoute sans mon accord explicite.
 - 100 % local : aucune donnée n'est envoyée ailleurs, aucun réseau.
-- Un module = un fichier dans `modules/`, avec une fonction `scan()` qui renvoie un dict (score partiel + constats).
+- Un module = un fichier dans `modules/`, avec une fonction `scan()` qui renvoie un dict (mesures + constats ; le score est calculé dans `modules/score.py`).
 - La logique (modules/) est séparée de l'interface (ui/) : les modules doivent tourner sans PySide6.
 - Textes affichés en français simple, sans jargon. Jamais "désactive X" sans préciser que certains programmes sont légitimes.
 
 ## Stack
 Python 3.15, PySide6, psutil, winreg, PyInstaller. Windows 11, VS Code.
 
-## v0.1
-Modules démarrage et disque uniquement.
+## Modules
+- Dans le score : démarrage, disque, ressources (mémoire et processeur), redémarrage, batterie (PC portables).
+- Hors score : fichiers (Corbeille et fichiers temporaires).
+- Barème et seuils dans `config.py`, calcul du score et conseils dans `modules/score.py`.
 
 ## Style
 Code commenté en français, fonctions courtes, type hints, pas de dépendance inutile.
