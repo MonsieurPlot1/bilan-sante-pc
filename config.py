@@ -41,6 +41,11 @@ BATTERIE_USURE_ZERO = 60
 # Un PC bridé est plus lent en tout, et se règle en quelques clics.
 ALIMENTATION_IMPACT = 10
 
+# Mémoire vive installée (hors score) : conseil en dessous de ce minimum, avec ce poids parmi les conseils
+# (moins que l'alimentation : en ajouter coûte de l'argent).
+RAM_INSTALLEE_MIN = 8 * 1024**3
+RAM_INSTALLEE_IMPACT = 8
+
 # Conseils.
 NB_CONSEILS_MAX = 3
 GROS_DOSSIER_SEUIL = 5 * 1024**3  # un dossier personnel est signalé à partir de 5 Go

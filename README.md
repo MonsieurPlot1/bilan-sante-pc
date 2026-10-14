@@ -12,7 +12,8 @@ un score sur 100 et 3 conseils au maximum.
   n'apparaît que si les vider ferait vraiment de la place sur un disque presque plein. Un bouton
   permet de vider la Corbeille, après confirmation.
 - **Mémoire et processeur** : la mémoire vive utilisée, la charge du processeur mesurée pendant
-  3 secondes et les 5 programmes qui prennent le plus de mémoire.
+  3 secondes, les 5 programmes qui prennent le plus de mémoire et la mémoire vive installée
+  (conseil hors score sous 8 Go).
 - **Redémarrage** : depuis combien de jours Windows n'a pas vraiment redémarré (« Arrêter » ne
   suffit pas, à cause du démarrage rapide), et si une mise à jour attend un redémarrage.
 - **Alimentation** (hors score) : si Windows bride le PC pour économiser l'énergie (économiseur

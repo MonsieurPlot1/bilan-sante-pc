@@ -181,6 +181,19 @@ class TestAlimentation(unittest.TestCase):
         self.assertIn("efficacité énergétique", conseils[1])
 
 
+class TestMemoireInstallee(unittest.TestCase):
+    def test_peu_de_memoire(self):
+        resultat = score.calculer(pc(ressources={**ressources(), "installee": 4 * GO}))
+        self.assertEqual(resultat["score"], 100)  # hors score
+        self.assertIn("n'a que 4 Go de mémoire vive", resultat["conseils"][0])
+
+    def test_8_go_suffisent(self):
+        self.assertEqual(score.calculer(pc(ressources={**ressources(), "installee": 8 * GO}))["conseils"], [])
+
+    def test_inconnue(self):
+        self.assertEqual(score.calculer(pc(ressources={**ressources(), "installee": None}))["conseils"], [])
+
+
 class TestCasExtremes(unittest.TestCase):
     def test_ram_a_95(self):
         resultat = score.calculer(pc(ressources=ressources(ram=95)))

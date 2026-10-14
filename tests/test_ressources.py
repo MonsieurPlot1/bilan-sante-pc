@@ -43,4 +43,5 @@ def test_scan_reel(monkeypatch):
     assert 0 < resultat["ram"]["utilise"] <= resultat["ram"]["total"]
     assert 0 <= resultat["cpu"] <= 100
     assert 0 < len(resultat["processus"]) <= 5
-    assert len(resultat["constats"]) == 2
+    assert resultat["installee"] >= resultat["ram"]["total"]  # une part est réservée au matériel
+    assert len(resultat["constats"]) == 3

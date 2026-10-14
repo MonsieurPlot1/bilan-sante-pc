@@ -55,6 +55,17 @@ def memoire_par_processus() -> list[tuple[str, int]]:
         position += info.suivant
 
 
+def memoire_installee() -> int | None:
+    """Mémoire vive installée sur la carte mère, en octets, ou None si Windows ne la donne pas.
+
+    psutil donne la mémoire utilisable par Windows, un peu plus petite (une partie est réservée au matériel).
+    """
+    kilo_octets = ctypes.c_ulonglong()
+    if not ctypes.WinDLL("kernel32").GetPhysicallyInstalledSystemMemory(ctypes.byref(kilo_octets)):
+        return None
+    return kilo_octets.value * 1024
+
+
 def plus_gourmands(processus: list[tuple[str, int]], nombre: int = NB_PROCESSUS) -> list[dict]:
     """Les `nombre` programmes qui occupent le plus de mémoire, regroupés par nom.
 
@@ -75,12 +86,17 @@ def scan() -> dict:
     memoire = psutil.virtual_memory()
     cpu = psutil.cpu_percent(interval=DUREE_MESURE_CPU)
     ram = {"total": memoire.total, "utilise": memoire.total - memoire.available, "pourcentage": memoire.percent}
+    installee = memoire_installee()
+    constats = [f"Mémoire vive : {taille_lisible(ram['utilise'])} utilisés sur "
+                f"{taille_lisible(ram['total'])} ({ram['pourcentage']:.0f} %)."]
+    if installee:
+        constats.append(f"Mémoire vive installée : {installee / 1024**3:.0f} Go.")
+    constats.append(f"Processeur : occupé à {cpu:.0f} % en moyenne pendant {DUREE_MESURE_CPU} secondes.")
     return {
         "score": None,  # calculé ensuite par modules/score.calculer()
-        "constats": [f"Mémoire vive : {taille_lisible(ram['utilise'])} utilisés sur "
-                     f"{taille_lisible(ram['total'])} ({ram['pourcentage']:.0f} %).",
-                     f"Processeur : occupé à {cpu:.0f} % en moyenne pendant {DUREE_MESURE_CPU} secondes."],
+        "constats": constats,
         "ram": ram,
+        "installee": installee,
         "cpu": cpu,
         "processus": plus_gourmands(memoire_par_processus()),
     }

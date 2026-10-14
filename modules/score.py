@@ -156,6 +156,12 @@ def conseil_alimentation(resultat: dict) -> str | None:
     return None
 
 
+def conseil_memoire_installee(octets: int) -> str:
+    return (f"Ce PC n'a que {octets / 1024**3:.0f} Go de mémoire vive : c'est peu pour Windows 11 aujourd'hui, "
+            "surtout avec un navigateur et plusieurs programmes ouverts (8 Go est un minimum confortable). "
+            "Sur beaucoup de PC, on peut en ajouter : un réparateur peut te dire si c'est possible sur le tien.")
+
+
 def conseil_batterie(sante: float) -> str:
     return (f"La batterie ne garde plus que {sante * 100:.0f} % de sa capacité d'origine : c'est l'usure "
             "normale avec le temps, et c'est pour ça que l'autonomie baisse. Si ça te gêne, "
@@ -241,6 +247,9 @@ def calculer(resultats: dict[str, dict | None]) -> dict:
                      if c[0] >= IMPACT_MIN]
     if resultats.get("alimentation") and (texte := conseil_alimentation(resultats["alimentation"])):
         conseils.append((config.ALIMENTATION_IMPACT, texte))  # hors score : poids fixe
+    installee = (resultats.get("ressources") or {}).get("installee")
+    if installee and installee < config.RAM_INSTALLEE_MIN:
+        conseils.append((config.RAM_INSTALLEE_IMPACT, conseil_memoire_installee(installee)))
     conseils.sort(key=lambda conseil: conseil[0], reverse=True)
 
     return {
