@@ -6,7 +6,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # avant d'importer Qt : aucune fenêtre visible
 
 import pytest
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QApplication
@@ -162,9 +162,10 @@ def test_bouton_grise_si_corbeille_vide(fenetre, tmp_path, monkeypatch):
 
 
 def test_progression_affichee(fenetre):
+    fini = QSignalSpy(fenetre.glissement.finished)
     fenetre.avancer(2, 6, "Disque")
     assert fenetre.progression.maximum() == 600  # en centièmes de partie : la barre glisse
-    QTest.qWait(600)
+    assert fini.wait(3000)  # attend la vraie fin du glissement : un délai fixe échouait sur un PC chargé
     assert fenetre.progression.value() == 100  # une partie finie
     assert fenetre.info.text() == "Analyse en cours : Disque (2 sur 6)…"
 
