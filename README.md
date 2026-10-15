@@ -9,8 +9,9 @@ un score sur 100 et 3 conseils au maximum.
   compter ceux désactivés dans Paramètres > Applications > Démarrage.
 - **Disque** : l'espace libre de chaque disque et les plus gros dossiers de ton profil utilisateur,
   et si Windows est sur un SSD ou sur un disque dur classique (HDD, conseil hors score).
-- **Fichiers inutiles** (hors score) : la taille de la Corbeille, des fichiers temporaires et du cache
-  des navigateurs (Chrome, Edge, Firefox). Un conseil
+- **Fichiers inutiles** (hors score) : la taille de la Corbeille, des fichiers temporaires, du cache
+  des navigateurs (Chrome, Edge, Firefox) et de l'ancienne version de Windows gardée après une grosse
+  mise à jour (`Windows.old`, taille approximative). Un conseil
   n'apparaît que si les vider ferait vraiment de la place sur un disque presque plein. Un bouton
   permet de vider la Corbeille, après confirmation.
 - **Mémoire et processeur** : la mémoire vive utilisée, la charge du processeur mesurée pendant

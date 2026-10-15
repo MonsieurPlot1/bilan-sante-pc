@@ -1,4 +1,5 @@
-"""Module fichiers inutiles : taille de la Corbeille, des fichiers temporaires et du cache des navigateurs.
+"""Module fichiers inutiles : taille de la Corbeille, des fichiers temporaires, du cache des navigateurs
+et de l'ancienne version de Windows (Windows.old).
 
 Le scan est en lecture seule. Seule exception de toute l'application : vider_corbeille(),
 lancée uniquement par le bouton « Vider la Corbeille », après la confirmation de Windows.
@@ -70,15 +71,19 @@ def scan(precedent: dict | None = None) -> dict:
     """Point d'entrée du module (hors score) : renvoie les tailles et les constats.
 
     `precedent` : résultat d'une analyse précédente, pour ne remesurer que la Corbeille (après l'avoir
-    vidée) : parcourir les fichiers temporaires et les caches peut prendre plusieurs secondes.
+    vidée) : parcourir les fichiers temporaires, les caches et Windows.old peut prendre plusieurs secondes.
     """
     lecteur = os.environ.get("SystemDrive", "C:").upper()
     temporaires = tempfile.gettempdir()
     taille_temporaires = precedent["temporaires"] if precedent else taille_dossier(temporaires)
     navigateurs = precedent["navigateurs"] if precedent else caches_navigateurs()
+    # Gardée après une grosse mise à jour de Windows ; 0 si le dossier n'existe pas.
+    # shortcut: les fichiers à plusieurs liens (WinSxS) comptent une fois par lien, d'où « environ » ;
+    # passer par os.stat (st_nlink) si l'écart avec les Paramètres gêne.
+    ancien_windows = precedent["ancien_windows"] if precedent else taille_dossier(lecteur + os.sep + "Windows.old")
     taille_corbeille = corbeille()
     # Ce qui libérerait de la place sur le disque de Windows, le seul qui compte dans le score.
-    sur_systeme = corbeille(lecteur + os.sep)
+    sur_systeme = corbeille(lecteur + os.sep) + ancien_windows
     if temporaires.upper().startswith(lecteur):
         sur_systeme += taille_temporaires
     if str(dossier_local()).upper().startswith(lecteur):
@@ -88,11 +93,14 @@ def scan(precedent: dict | None = None) -> dict:
     if navigateurs:
         detail = ", ".join(f"{nom} {taille_lisible(taille)}" for nom, taille in navigateurs.items())
         constats.append(f"Cache des navigateurs : {taille_lisible(sum(navigateurs.values()))} ({detail}).")
+    if ancien_windows:
+        constats.append(f"Ancienne version de Windows (Windows.old) : environ {taille_lisible(ancien_windows)}.")
     return {
         "score": None,  # hors score : voir modules/score.conseils_fichiers()
         "constats": constats,
         "corbeille": taille_corbeille,
         "temporaires": taille_temporaires,
         "navigateurs": navigateurs,
+        "ancien_windows": ancien_windows,
         "recuperable_systeme": sur_systeme,
     }

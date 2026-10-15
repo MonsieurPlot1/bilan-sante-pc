@@ -28,11 +28,11 @@ def ressources(ram: float = 40, cpu: float = 10, processus: list[dict] | None = 
             "processus": processus}
 
 
-def fichiers(corbeille: float = 0, temporaires: float = 0, caches: float = 0) -> dict:
+def fichiers(corbeille: float = 0, temporaires: float = 0, caches: float = 0, ancien_windows: float = 0) -> dict:
     """Tailles en Go, toutes sur le disque de Windows."""
     return {"corbeille": corbeille * GO, "temporaires": temporaires * GO,
-            "navigateurs": {"Chrome": caches * GO} if caches else {},
-            "recuperable_systeme": (corbeille + temporaires + caches) * GO}
+            "navigateurs": {"Chrome": caches * GO} if caches else {}, "ancien_windows": ancien_windows * GO,
+            "recuperable_systeme": (corbeille + temporaires + caches + ancien_windows) * GO}
 
 
 def redemarrage(jours: float = 1, en_attente: bool = False) -> dict:
@@ -141,6 +141,13 @@ class TestFichiers(unittest.TestCase):
         self.assertTrue(conseil.startswith("La Corbeille contient 8,0 Go, les fichiers temporaires occupent 2,0 Go "
                                            "et le cache des navigateurs 1,0 Go"))
         self.assertIn("« Images et fichiers en cache »", conseil)  # pas les mots de passe ni l'historique
+        self.assertNotIn("ancienne version de Windows", conseil)
+
+    def test_ancienne_version_de_windows(self):
+        conseil = score.calculer(pc(disque=disque(90), fichiers=fichiers(0, 2, ancien_windows=20)))["conseils"][1]
+        self.assertTrue(conseil.startswith("Les fichiers temporaires occupent 2,0 Go et l'ancienne version de "
+                                           "Windows environ 20,0 Go"))
+        self.assertIn("tu ne pourras plus revenir en arrière", conseil)  # prudence : c'est définitif
 
     def test_corbeille_vide(self):
         conseil = score.calculer(pc(disque=disque(90), fichiers=fichiers(0, 10)))["conseils"][1]
