@@ -1,5 +1,11 @@
 # Journal des versions
 
+## v0.2.6 - 2026-10-16
+
+- Fichiers inutiles : l'ancienne version de Windows gardée après une grosse mise à jour (dossier
+  Windows.old) est mesurée, avec une taille approximative, et comptée dans la place récupérable. Le
+  conseil indique où la supprimer et prévient qu'on ne pourra plus revenir à l'ancienne version.
+
 ## v0.2.5 - 2026-10-14
 
 - Démarrage : les programmes désactivés dans Paramètres > Applications > Démarrage ne comptent plus.
