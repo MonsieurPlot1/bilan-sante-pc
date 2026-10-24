@@ -74,6 +74,8 @@ LIGNE_ALTERNEE = _selon_mode("#1b1f27", "#f6f7f9")
 SELECTION = _selon_mode("#2a3550", "#dbe5ff")
 POIGNEE = _selon_mode("#2c3240", "#c9ced8")      # barres de défilement
 POIGNEE_SURVOL = _selon_mode("#3a4152", "#aeb4c0")
+ONGLETS_FOND = _selon_mode("#171a21", "#eef0f4")  # bande des onglets
+ONGLET_ACTIF = _selon_mode("#2a303d", "#ffffff")  # onglet choisi, en relief sur la bande
 
 # Couleurs d'état, réservées au niveau de santé (toujours accompagnées d'un texte).
 NIVEAUX = {"vert": _selon_mode("#34d399", "#15803d"), "orange": _selon_mode("#fbbf24", "#b45309"),
@@ -101,6 +103,10 @@ ICONE = {
     "bouclier": "", "conseil": "", "historique": "",
     "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "", "valide": "", "soleil": "", "lune": "",
     "deplier": "", "replier": "", "erreur": "",
+    # Onglets, éléments et catégories de la page Stockage.
+    "bilan": "", "stockage": "", "dossier": "", "fichier": "",
+    "systeme": "", "applications": "", "jeux": "", "videos": "", "photos": "", "musique": "",
+    "documents": "", "archives": "", "temporaires": "", "corbeille": "", "sauvegardes": "", "autres": "",
 }
 
 
@@ -151,7 +157,7 @@ def icone(nom: str, couleur: str = TEXTE, taille: int = 16) -> QIcon:
 
 
 STYLE = f"""
-QMainWindow, QScrollArea, QWidget#contenu {{ background: {FOND}; }}
+QMainWindow, QScrollArea, QWidget#contenu, QWidget#racine {{ background: {FOND}; }}
 QWidget {{ color: {TEXTE}; }}
 QLabel {{ background: transparent; }}
 QLabel#secondaire {{ color: {TEXTE_2}; }}
@@ -166,6 +172,16 @@ QFrame#heros {{ border: 1px solid {BORDURE}; border-radius: 18px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {HEROS}, stop:1 {SURFACE}); }}
 QFrame#conseil {{ background: {SURFACE}; border: 1px solid {BORDURE}; border-radius: 12px; }}
 QFrame#carte:hover, QFrame#conseil:hover {{ border-color: {SURVOL_BORDURE}; }}
+QFrame#ligne {{ background: transparent; border-radius: 10px; }}
+QFrame#ligne:hover {{ background: {SURFACE_2}; }}
+QFrame#ligne:focus {{ background: {SURFACE_2}; }}
+
+QFrame#onglets {{ background: {ONGLETS_FOND}; border: 1px solid {BORDURE}; border-radius: 12px; }}
+QPushButton#onglet {{ background: transparent; color: {TEXTE_2}; border: 1px solid transparent; border-radius: 9px;
+                      padding: 6px 16px; font-weight: 600; }}
+QPushButton#onglet:hover {{ color: {TEXTE}; }}
+QPushButton#onglet:checked {{ background: {ONGLET_ACTIF}; color: {TEXTE}; border-color: {BORDURE}; }}
+QPushButton#onglet:focus {{ border-color: {ACCENT_CLAIR}; }}
 
 QLabel#pastille {{ border-radius: 10px; padding: 2px 10px; font-weight: 600; }}
 QLabel#pastille[niveau="vert"] {{ color: {NIVEAUX["vert"]}; background: {rgba(NIVEAUX["vert"], 31)}; }}
@@ -197,6 +213,14 @@ QTreeWidget::item:selected {{ background: {SELECTION}; color: {TEXTE}; }}
 QHeaderView {{ background: transparent; }}
 QHeaderView::section {{ background: {SURFACE_2}; color: {TEXTE_3}; border: none;
                         border-bottom: 1px solid {BORDURE}; padding: 6px 4px; font-weight: 600; }}
+
+QComboBox {{ background: {SURFACE_2}; color: {TEXTE}; border: 1px solid {BORDURE}; border-radius: 9px;
+             padding: 6px 32px 6px 12px; }}
+QComboBox:hover {{ background: {SURVOL}; border-color: {SURVOL_BORDURE}; }}
+QComboBox:focus {{ border-color: {ACCENT_CLAIR}; }}
+QComboBox::drop-down {{ border: none; width: 22px; }}
+QComboBox QAbstractItemView {{ background: {SURFACE_2}; color: {TEXTE}; border: 1px solid {BORDURE};
+                               selection-background-color: {SELECTION}; selection-color: {TEXTE}; outline: 0; }}
 
 QProgressBar {{ border: none; background: {SURFACE_2}; max-height: 4px; border-radius: 2px; }}
 QProgressBar::chunk {{ background: {ACCENT_CLAIR}; border-radius: 2px; }}

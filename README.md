@@ -25,13 +25,23 @@ un score sur 100 et 3 conseils au maximum.
   du pilote de batterie de Windows. Si le PC ne donne pas cette information, l'application l'écrit
   au lieu d'inventer un chiffre.
 
+## L'onglet Stockage
+
+Il montre ce qui prend de la place sur un disque : les plus gros dossiers et fichiers, et 12 catégories
+(Système, Applications, Jeux, Vidéos, Photos, Musique, Documents, Archives, Fichiers temporaires, Corbeille,
+Sauvegardes, Autres). Un fichier est classé d'abord selon son emplacement (une vidéo dans le dossier d'un jeu
+compte dans Jeux), puis selon son extension. Système, c'est l'espace utilisé moins tout le reste : Windows et
+les fichiers que l'application n'a pas le droit de lire. L'analyse parcourt tout le disque (une ou deux
+minutes), elle n'est pas enregistrée et n'entre pas dans le score.
+
 ## Ce qu'elle ne fait jamais
 
 - Elle ne modifie, ne supprime et ne désactive rien : elle se contente de lire.
   Seule exception : le bouton « Vider la Corbeille », qui n'agit que si tu cliques dessus
   et que tu confirmes dans la fenêtre de Windows. Pense à vérifier la Corbeille avant : c'est définitif.
 - Les boutons « Ouvrir » sous les conseils affichent seulement la bonne page des Paramètres, le dossier
-  concerné ou le Gestionnaire des tâches : c'est toi qui décides ensuite quoi changer.
+  concerné ou le Gestionnaire des tâches : c'est toi qui décides ensuite quoi changer. Dans l'onglet
+  Stockage, « Afficher » ouvre seulement l'Explorateur à l'emplacement d'un dossier ou d'un fichier.
 - Elle n'envoie aucune donnée : tout reste sur ton PC, sans aucun accès au réseau.
 
 Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` :

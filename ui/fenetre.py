@@ -11,14 +11,15 @@ from functools import cache
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QStandardPaths, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPalette
-from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
-                               QProgressBar, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
+                               QMessageBox, QProgressBar, QPushButton, QStackedWidget, QVBoxLayout, QWidget)
 
 import config
 import historique
 from modules import fichiers
 from modules.disque import taille_lisible
 from ui import analyse, theme
+from ui.stockage import PageStockage
 from ui.widgets import (Carte, CarteConseil, DefilementDoux, Fondu, Graphique, Jauge, Logo, PastilleIcone,
                         apparaitre, pastille, repolir, titre_section)
 
@@ -30,6 +31,9 @@ COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élém
             "batterie": []}
 
 DUREE_FONDU = 300  # millisecondes : passage en douceur entre le mode clair et le mode sombre
+DUREE_ONGLET = 180  # millisecondes : passage en douceur d'un onglet à l'autre
+ONGLETS = [("Bilan de santé", "bilan"), ("Stockage", "stockage")]  # (texte, icône)
+ONGLET_STOCKAGE = 1
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # boutons de la barre de titre sombres
 DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 35, 36  # Windows 11 : fond et texte de la barre de titre
 
@@ -80,20 +84,79 @@ class Fenetre(QMainWindow):
         self.setMinimumSize(760, 560)
         self.resultat: dict | None = None
         self.analyse: Analyse | None = None
+        self.bilan_en_cours = False
+        self.onglet = 0  # onglet affiché, gardé quand le contenu est recréé
+        # Page Stockage : gardés ici, car la page est recréée au changement de mode clair/sombre.
+        self.resultat_stockage: dict | None = None
+        self.racine_stockage: str | None = None
         self.statusBar().showMessage("Prêt")
         self.construire()
         colorer_barre_titre(self, QColor(theme.FOND), QColor(theme.TEXTE))  # barre de titre fondue dans le fond
 
     def construire(self) -> None:
-        """Crée le contenu de la fenêtre avec les couleurs du thème, et y remet la dernière analyse.
+        """Crée le contenu de la fenêtre avec les couleurs du thème, et y remet les dernières analyses.
 
+        En haut, l'en-tête et les onglets restent en place ; dessous, chaque onglet défile à part.
         Appelée aussi au changement de mode clair/sombre : l'ancien contenu est remplacé.
         """
+        haut = QVBoxLayout()
+        haut.setContentsMargins(32, 22, 32, 8)
+        haut.setSpacing(16)
+        haut.addLayout(self._entete())
+        haut.addWidget(self._onglets(), alignment=Qt.AlignmentFlag.AlignLeft)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self._page_bilan())
+        self.pages.addWidget(self._page_stockage())
+        self.pages.setCurrentIndex(self.onglet)
+
+        racine = QWidget(objectName="racine")
+        disposition = QVBoxLayout(racine)
+        disposition.setContentsMargins(0, 0, 0, 0)
+        disposition.setSpacing(0)
+        disposition.addLayout(haut)
+        disposition.addWidget(self.pages, 1)
+        self.setCentralWidget(racine)  # Qt supprime l'ancien contenu
+        if self.resultat:
+            self.afficher(self.resultat, animer=False)  # même analyse : la jauge ne se re-remplit pas
+        else:
+            self.afficher_historique_existant()
+
+    # --- Construction des zones de la fenêtre ---
+
+    def _onglets(self) -> QFrame:
+        cadre = QFrame(objectName="onglets")
+        ligne = QHBoxLayout(cadre)
+        ligne.setContentsMargins(3, 3, 3, 3)
+        ligne.setSpacing(2)
+        self.groupe_onglets = QButtonGroup(cadre)  # un seul onglet coché à la fois
+        for numero, (texte, icone) in enumerate(ONGLETS):
+            symbole = theme.icone(icone, theme.TEXTE_2, 14)
+            symbole.addPixmap(theme.pixmap_icone(icone, theme.ACCENT_CLAIR, 14), QIcon.Mode.Normal, QIcon.State.On)
+            bouton = QPushButton(f" {texte}", objectName="onglet", checkable=True,
+                                 cursor=Qt.CursorShape.PointingHandCursor, icon=symbole)
+            self.groupe_onglets.addButton(bouton, numero)
+            ligne.addWidget(bouton)
+        self.groupe_onglets.button(self.onglet).setChecked(True)
+        self.groupe_onglets.idClicked.connect(self.changer_page)
+        return cadre
+
+    @staticmethod
+    def _defilement(contenu: QWidget) -> DefilementDoux:
+        defilement = DefilementDoux(widgetResizable=True, frameShape=QFrame.Shape.NoFrame)
+        defilement.setWidget(contenu)
+        return defilement
+
+    def _page_stockage(self) -> DefilementDoux:
+        self.stockage = PageStockage(self.ouvrir, self.resultat_stockage, self.racine_stockage)
+        self.stockage.statut.connect(self.statusBar().showMessage)
+        self.stockage.occupee.connect(self._autoriser_mode)
+        return self._defilement(self.stockage)
+
+    def _page_bilan(self) -> DefilementDoux:
         contenu = QWidget(objectName="contenu")
         disposition = QVBoxLayout(contenu)
-        disposition.setContentsMargins(32, 26, 32, 26)
+        disposition.setContentsMargins(32, 10, 32, 26)
         disposition.setSpacing(16)
-        disposition.addLayout(self._entete())
         disposition.addWidget(self._heros())
         # Les conseils juste sous le score : ce qu'il y a à faire se voit sans faire défiler.
         disposition.addSpacing(6)
@@ -106,16 +169,7 @@ class Fenetre(QMainWindow):
         disposition.addLayout(self._cartes())
         disposition.addLayout(self._actions())
         disposition.addStretch()
-
-        defilement = DefilementDoux(widgetResizable=True, frameShape=QFrame.Shape.NoFrame)
-        defilement.setWidget(contenu)
-        self.setCentralWidget(defilement)  # Qt supprime l'ancien contenu
-        if self.resultat:
-            self.afficher(self.resultat, animer=False)  # même analyse : la jauge ne se re-remplit pas
-        else:
-            self.afficher_historique_existant()
-
-    # --- Construction des zones de la fenêtre ---
+        return self._defilement(contenu)
 
     def _entete(self) -> QHBoxLayout:
         titre = QLabel("Bilan santé PC", font=theme.police(18, QFont.Weight.DemiBold, titre=True))
@@ -215,6 +269,10 @@ class Fenetre(QMainWindow):
                                  icon=theme.icone("effacer", theme.TEXTE_2, 14))
         self.vider.clicked.connect(self.vider_corbeille)
         self.cartes["fichiers"].layout().addWidget(self.vider, alignment=Qt.AlignmentFlag.AlignLeft)
+        voir = QPushButton("Voir ce qui prend de la place", objectName="lien", cursor=Qt.CursorShape.PointingHandCursor,
+                           icon=theme.icone("stockage", theme.ACCENT_CLAIR, 12))
+        voir.clicked.connect(lambda: self.changer_page(ONGLET_STOCKAGE))
+        self.cartes["disque"].layout().addWidget(voir, alignment=Qt.AlignmentFlag.AlignLeft)
         colonnes = [QVBoxLayout(), QVBoxLayout()]
         for position, carte in enumerate(self.cartes.values()):
             colonnes[position % 2].addWidget(carte)
@@ -279,7 +337,8 @@ class Fenetre(QMainWindow):
         self.bouton.setEnabled(False)
         self.bouton.setText("  Analyse en cours…")
         self.phrase.setText("Analyse de ton PC en cours…")
-        self.mode.setEnabled(False)  # recréer la fenêtre pendant l'analyse perdrait l'affichage de la progression
+        self.bilan_en_cours = True
+        self._autoriser_mode()
         self.copier.setEnabled(False)
         self.enregistrer.setEnabled(False)
         self.vider.setEnabled(False)
@@ -347,7 +406,8 @@ class Fenetre(QMainWindow):
         self.progression.hide()
         self.bouton.setText("  Relancer l'analyse")
         self.bouton.setEnabled(True)
-        self.mode.setEnabled(True)
+        self.bilan_en_cours = False
+        self._autoriser_mode()
         self.copier.setEnabled(True)
         self.enregistrer.setEnabled(True)
         self.statusBar().showMessage(f"Terminé en {resultat['duree']:.0f} s")
@@ -405,6 +465,23 @@ class Fenetre(QMainWindow):
         self.statusBar().showMessage(f"Corbeille vidée : {taille_lisible(libere)} libérés. "
                                      "Relance l'analyse pour mettre le score à jour.")
 
+    def _autoriser_mode(self) -> None:
+        """Le changement de mode recrée tout le contenu : pas pendant une analyse, qui perdrait son affichage."""
+        self.mode.setEnabled(not self.bilan_en_cours and not self.stockage.en_cours())
+
+    def changer_page(self, numero: int) -> None:
+        """Onglets : la nouvelle page apparaît en fondu rapide sur l'ancienne."""
+        self.groupe_onglets.button(numero).setChecked(True)  # aussi quand on arrive par un lien
+        if numero == self.pages.currentIndex():
+            return
+        fondu = Fondu(self, self.grab(), DUREE_ONGLET)
+        self.onglet = numero
+        self.pages.setCurrentIndex(numero)
+        fondu.hide()  # l'image de la nouvelle page, sans le fondu par-dessus
+        nouvelle = self.grab()
+        fondu.show()
+        fondu.demarrer(nouvelle)
+
     def changer_mode(self) -> None:
         """Bouton clair/sombre : retient le choix, puis recrée le contenu avec les nouvelles couleurs."""
         try:
@@ -421,7 +498,9 @@ class Fenetre(QMainWindow):
     def _preparer_fondu(self, fondu: Fondu) -> None:
         """Recrée le contenu avec les nouvelles couleurs, sous l'image de l'ancien."""
         ancien_fond, ancien_texte = QColor(theme.FOND), QColor(theme.TEXTE)
-        position = self.centralWidget().verticalScrollBar().value()
+        positions = [self.pages.widget(numero).verticalScrollBar().value() for numero in range(self.pages.count())]
+        self.resultat_stockage, self.racine_stockage = self.stockage.resultat, self.stockage.racine
+        self.stockage.arreter()  # analyse finie, mais son thread peut vivre encore un instant
         # Ancien contenu supprimé tout de suite : la nouvelle feuille de style n'a pas à le restyler.
         self.takeCentralWidget()
         importlib.reload(theme)  # les couleurs sont des constantes du module : on le relit pour les recalculer
@@ -429,11 +508,12 @@ class Fenetre(QMainWindow):
         self.construire()
         fondu.raise_()
         # Au tour suivant de Qt (tailles calculées) : même position, image du nouvel affichage, fondu.
-        QTimer.singleShot(0, lambda: self._fondre(fondu, position, ancien_fond, ancien_texte))
+        QTimer.singleShot(0, lambda: self._fondre(fondu, positions, ancien_fond, ancien_texte))
 
-    def _fondre(self, fondu: Fondu, position: int, ancien_fond: QColor, ancien_texte: QColor) -> None:
+    def _fondre(self, fondu: Fondu, positions: list[int], ancien_fond: QColor, ancien_texte: QColor) -> None:
         """Lance le fondu ; la barre de titre suit le même mélange de couleurs, étape par étape."""
-        self.centralWidget().verticalScrollBar().setValue(position)
+        for numero, position in enumerate(positions):  # chaque onglet reste au même endroit
+            self.pages.widget(numero).verticalScrollBar().setValue(position)
         fondu.hide()
         nouvelle = self.grab()
         fondu.show()
@@ -493,10 +573,12 @@ class Fenetre(QMainWindow):
         self.statusBar().showMessage("Rapport enregistré.", 4000)
 
     def closeEvent(self, evenement) -> None:
-        # Fermer pendant l'analyse : on cache la fenêtre puis on attend la fin du thread,
-        # sinon Qt plante en détruisant un thread encore actif.
-        if self.analyse and self.analyse.isRunning():
+        # Fermer pendant une analyse : on cache la fenêtre puis on attend la fin des threads,
+        # sinon Qt plante en détruisant un thread encore actif. L'analyse du stockage s'arrête en route.
+        if (self.analyse and self.analyse.isRunning()) or self.stockage.en_cours():
             self.hide()
+        self.stockage.arreter()
+        if self.analyse:
             self.analyse.wait()
         super().closeEvent(evenement)
 

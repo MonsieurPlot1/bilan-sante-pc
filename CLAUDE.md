@@ -18,6 +18,7 @@ Python 3.15, PySide6, psutil, winreg, PyInstaller. Windows 11, VS Code.
 ## Modules
 - Dans le score : démarrage, disque, ressources (mémoire et processeur), redémarrage, batterie (PC portables).
 - Hors score : fichiers (Corbeille, fichiers temporaires, cache des navigateurs, Windows.old), alimentation (mode d'économie d'énergie).
+- Onglet à part, hors du bilan : stockage (`modules/stockage.py`, page `ui/stockage.py`), ce qui occupe un disque en 12 catégories.
 - Barème et seuils dans `config.py`, calcul du score et conseils dans `modules/score.py`.
 
 ## Style

@@ -222,7 +222,7 @@ def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
     depart = theme.CLAIR
     fenetre.show()  # tailles réelles, pour la position de défilement
     QTest.qWait(10)
-    fenetre.centralWidget().verticalScrollBar().setValue(300)
+    fenetre.pages.currentWidget().verticalScrollBar().setValue(300)
     try:
         fenetre.mode.click()
         QTest.qWait(50)  # le changement se fait juste après le clic, sous le fondu
@@ -233,7 +233,7 @@ def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
         assert fenetre.findChild(Fondu, "fondu").isVisible()  # fondu en cours
         QTest.qWait(fenetre_module.DUREE_FONDU + 200)
         assert fenetre.findChild(Fondu, "fondu") is None  # fondu terminé et retiré
-        assert fenetre.centralWidget().verticalScrollBar().value() == 300  # on reste au même endroit
+        assert fenetre.pages.currentWidget().verticalScrollBar().value() == 300  # on reste au même endroit
         fenetre.lancer()
         assert not fenetre.mode.isEnabled()  # pas de changement pendant l'analyse
         fenetre.analyse.wait()
@@ -301,7 +301,7 @@ def test_molette_qui_glisse(fenetre, tmp_path, monkeypatch):
     fenetre.afficher(analyse_faite(tmp_path))
     fenetre.show()
     QTest.qWait(10)
-    zone = fenetre.centralWidget()
+    zone = fenetre.pages.currentWidget()
     barre = zone.verticalScrollBar()
     cran = QWheelEvent(QPointF(10, 10), QPointF(10, 10), QPoint(0, 0), QPoint(0, -120), Qt.MouseButton.NoButton,
                        Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
