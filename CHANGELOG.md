@@ -1,5 +1,11 @@
 # Journal des versions
 
+## v0.2.7 - 2026-10-24
+
+- Nouvelle icône de l'application (anneau vert et battement de cœur) : sur le .exe, dans la barre de
+  titre, la barre des tâches et les boîtes de dialogue, et en tête de la fenêtre à la place de l'ancien
+  symbole bleu.
+
 ## v0.2.6 - 2026-10-16
 
 - Fichiers inutiles : l'ancienne version de Windows gardée après une grosse mise à jour (dossier
