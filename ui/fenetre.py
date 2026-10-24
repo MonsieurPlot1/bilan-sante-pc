@@ -446,7 +446,8 @@ class Fenetre(QMainWindow):
         self.statusBar().showMessage("Historique effacé.", 4000)
 
     def vider_corbeille(self) -> None:
-        """Seule action qui modifie le PC, et seulement sur ce clic : Windows demande lui-même confirmation."""
+        """Une des deux seules actions qui modifient le PC (avec « Supprimer » de l'onglet Stockage), et
+        seulement sur ce clic : Windows demande lui-même confirmation."""
         try:
             avant = fichiers.corbeille()
             fichiers.vider_corbeille(int(self.winId()))

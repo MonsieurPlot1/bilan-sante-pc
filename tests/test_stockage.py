@@ -2,6 +2,7 @@
 
 import ctypes
 import os
+import shutil
 import subprocess
 from collections import namedtuple
 from pathlib import Path
@@ -157,6 +158,70 @@ def test_fichiers_personnels(disque):
     assert profil in personnels["incomplets"]  # il contient AppData, qui n'est pas personnel
     assert videos not in personnels["incomplets"]
     assert not any(dossier.startswith(os.path.join(profil, "AppData")) for dossier in personnels["fichiers"])
+
+
+def test_supprimable(disque, monkeypatch):
+    """« Supprimer » seulement sur les fichiers et dossiers personnels, jamais un dossier de Windows ni ce qui
+    en contient un."""
+    profil = disque / "Users" / "moi"
+    film = str(profil / "Videos" / "film.mkv")
+    assert stockage.supprimable(film, "videos") and stockage.supprimable(film)  # sa catégorie, ou une copie en double
+    assert stockage.supprimable(str(profil / "Videos" / "Vacances"))
+    assert not stockage.supprimable(film, "jeux")  # logiciels, jeux, caches : désinstaller ou nettoyer avec Windows
+    assert not stockage.supprimable(None, "corbeille")
+    ailleurs = str(disque / "Donnees" / "film.mkv")
+    assert not stockage.supprimable(ailleurs, "videos")  # disque de Windows, hors du profil
+    monkeypatch.setenv("SystemDrive", "Z:")  # le faux disque n'est plus celui de Windows
+    monkeypatch.setenv("OneDrive", str(disque / "OneDrive"))
+    assert stockage.supprimable(ailleurs, "videos")
+    for dossier in (profil / "Videos", profil / "Downloads", profil, disque / "Users", disque / "OneDrive", disque):
+        assert not stockage.supprimable(str(dossier)), dossier
+
+
+def test_contenu(tmp_path):
+    """Ce qui part avec un dossier, classé comme pendant l'analyse (pour la confirmation et les chiffres)."""
+    dossier = tmp_path / "Vacances"
+    for chemin, taille in {"film.mp4": 300, "Jour1/photo.jpg": 20, "Jour1/notes.txt": 5, "inconnu.xyz": 2,
+                           "desktop.ini": 7}.items():
+        fichier(dossier, chemin, taille)
+    ctypes.windll.kernel32.SetFileAttributesW(str(dossier / "desktop.ini"), 0x4)  # SYSTEM : reste dans Système
+    assert stockage.contenu(str(dossier)) == ({"videos": 300, "photos": 20, "documents": 5, "autres": 2}, 5)
+    assert stockage.contenu(str(dossier / "film.mp4")) == ({"videos": 300}, 1)
+    with pytest.raises(OSError):
+        stockage.contenu(str(dossier / "absent"))
+
+
+def test_retirer(disque, monkeypatch):
+    """Un fichier mis à la Corbeille : sa place passe dans la Corbeille, le disque n'a pas plus de place libre."""
+    resultat = stockage.scan(str(disque))
+    film = disque / "Users" / "moi" / "Videos" / "film.mkv"
+    film.unlink()  # comme mis à la Corbeille
+    monkeypatch.setattr(stockage, "corbeille", lambda _: 25 + 300)
+    stockage.retirer(resultat, str(film), False, {"videos": 300})
+    parties = categories(resultat)
+    assert parties["videos"]["taille"] == 0 and parties["videos"]["elements"] == []
+    assert parties["videos"]["surtout_dans"] == []
+    assert parties["corbeille"]["taille"] == 325 and parties["corbeille"]["elements"][0]["taille"] == 325
+    assert parties["systeme"]["taille"] == UTILISE - 1400
+    assert sum(c["taille"] for c in resultat["categories"]) == UTILISE
+
+
+def test_retirer_un_dossier_supprime_pour_de_bon(disque, monkeypatch):
+    """Trop gros pour la Corbeille, supprimé pour de bon (Windows l'a demandé) : la place est libérée."""
+    for chemin, taille in {"Users/moi/Projet/clip.mp4": 100, "Users/moi/Projet/Notes/plan.pdf": 10}.items():
+        fichier(disque, chemin, taille)
+    resultat = stockage.scan(str(disque))
+    systeme = categories(resultat)["systeme"]["taille"]
+    projet = disque / "Users" / "moi" / "Projet"
+    shutil.rmtree(projet)
+    monkeypatch.setattr(stockage.psutil, "disk_usage", lambda _: Usage(20_000, UTILISE - 110, 10_110, 49.5))
+    stockage.retirer(resultat, str(projet), True, {"videos": 100, "documents": 10})
+    parties = categories(resultat)
+    assert (parties["videos"]["taille"], parties["documents"]["taille"], parties["corbeille"]["taille"]) == (300, 10, 25)
+    assert parties["systeme"]["taille"] == systeme  # Système ne bouge pas
+    assert (resultat["utilise"], resultat["libre"]) == (UTILISE - 110, 10_110)
+    assert [e["nom"] for e in parties["videos"]["elements"]] == ["film.mkv"]
+    assert [d["nom"] for d in parties["videos"]["surtout_dans"]] == ["Vidéos"]
 
 
 def test_fichier_systeme_dans_systeme(disque):

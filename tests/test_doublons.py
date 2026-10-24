@@ -79,6 +79,37 @@ def test_doublons(releve, disque):
     assert etapes["rapide"][0] == etapes["rapide"][1] and etapes["contenu"][0] == etapes["contenu"][1] > 0
 
 
+def test_retirer(releve, disque):
+    """Après la mise à la Corbeille d'une copie ou d'un dossier, les groupes et la place en trop suivent."""
+    trouves = doublons.chercher(releve())
+    doublons.retirer(trouves, str(disque / "Ailleurs" / "p1.jpg"))
+    doublons.retirer(trouves, str(disque / "Bureau" / "copie.rar"))
+    assert resume(trouves, disque) == [
+        (True, ["Photos\\Vacances", "Sauvegarde\\Vacances"], 7010),
+        (False, ["Downloads\\film (1).rar", "Downloads\\film.rar"], 4000),
+        (False, ["Photos\\Vacances\\p1.jpg", "Presque\\Vacances\\p1.jpg", "Sauvegarde\\Vacances\\p1.jpg"], 3000),
+        (False, ["Photos\\Vacances\\Jour1\\p3.jpg", "Presque\\Vacances\\Jour1\\p3.jpg",
+                 "Sauvegarde\\Vacances\\Jour1\\p3.jpg"], 1000),
+    ]
+    assert trouves["nombre"] == 4 and trouves["en_trop"] == 15010
+    # Un des deux dossiers identiques : plus de dossier en double, ses fichiers ne comptent plus.
+    doublons.retirer(trouves, str(disque / "Sauvegarde" / "Vacances"))
+    # Un des deux derniers films : il n'est plus en double.
+    doublons.retirer(trouves, str(disque / "Downloads" / "film.rar"))
+    assert resume(trouves, disque) == [
+        (False, ["Photos\\Vacances\\p1.jpg", "Presque\\Vacances\\p1.jpg"], 3000),
+        (False, ["Photos\\Vacances\\Jour1\\p3.jpg", "Presque\\Vacances\\Jour1\\p3.jpg"], 1000),
+    ]
+    assert trouves["nombre"] == 2 and trouves["en_trop"] == 4000
+
+
+def test_fichier_change_dans_un_dossier_en_double(releve, disque):
+    """Un fichier enlevé d'un des dossiers identiques : ce dossier n'est plus une copie de l'autre."""
+    trouves = doublons.chercher(releve())
+    doublons.retirer(trouves, str(disque / "Photos" / "Vacances" / "p2.jpg"))
+    assert not any(groupe["dossier"] for groupe in trouves["groupes"])
+
+
 def test_lien_physique(releve, tmp_path):
     """Deux noms pour le même fichier : il n'y a rien en trop sur le disque."""
     original = ecrire(tmp_path / "disque", "Docs/rapport.pdf", os.urandom(2000))

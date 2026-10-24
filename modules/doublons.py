@@ -15,6 +15,8 @@ import time
 from collections import defaultdict
 from typing import Callable
 
+from modules.stockage import dans
+
 TAILLE_MIN_FICHIER = 1024**2  # un doublon plus petit ne vaut pas la peine d'être montré
 TAILLE_MIN_DOSSIER = 10 * 1024**2
 ECHANTILLON = 64 * 1024  # lu au début et à la fin d'un fichier pour la comparaison rapide
@@ -253,3 +255,32 @@ def chercher(personnels: dict, progression: Progression = lambda *_: None,
         "en_trop": sum(g["en_trop"] for g in groupes),
         "duree": time.perf_counter() - debut,
     }
+
+
+def retirer(resultat: dict, chemin: str) -> None:
+    """Met à jour les doublons trouvés après la mise à la Corbeille de `chemin` (fichier ou dossier).
+
+    Une copie partie avec `chemin`, ou un dossier dont un fichier est parti (il n'est plus identique), ne
+    compte plus ; un groupe qui n'a plus qu'un exemplaire n'est plus en double. Les groupes qui n'étaient
+    pas montrés ne sont pas recalculés : « Relancer la recherche » le fait.
+    """
+    copies_de_dossiers = [copie for groupe in resultat["groupes"] if groupe["dossier"] for copie in groupe["copies"]]
+    gardes = []
+    for groupe in resultat["groupes"]:
+        avant = groupe["en_trop"]
+        parties = [copie for copie in groupe["copies"] if dans(copie, chemin) or dans(chemin, copie)]
+        groupe["copies"] = [copie for copie in groupe["copies"] if copie not in parties]
+        reste = len(groupe["copies"]) - 1  # exemplaires en trop, au plus
+        if reste < 1:
+            groupe["en_trop"] = 0
+            resultat["nombre"] -= 1
+        elif groupe["dossier"]:
+            groupe["en_trop"] = groupe["taille"] * reste
+        elif parties:
+            # Seules les copies rangées hors des dossiers en double étaient comptées en trop.
+            dehors = sum(1 for copie in parties if not any(dans(copie, d) for d in copies_de_dossiers))
+            groupe["en_trop"] = max(0, min(avant - groupe["taille"] * dehors, groupe["taille"] * reste))
+        if reste >= 1:
+            gardes.append(groupe)
+        resultat["en_trop"] -= avant - groupe["en_trop"]
+    resultat["groupes"] = sorted(gardes, key=lambda g: g["en_trop"], reverse=True)

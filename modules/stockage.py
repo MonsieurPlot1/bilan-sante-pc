@@ -7,14 +7,20 @@ Un fichier est classé d'abord selon son emplacement (dossier d'un jeu, d'un log
 s'il n'est dans aucun emplacement connu, selon son extension : une vidéo d'un jeu compte dans Jeux.
 « Système » n'est pas parcouru : c'est l'espace utilisé du disque moins tout le reste (Windows,
 points de restauration, fichiers que l'application n'a pas le droit de lire).
+
+Seule action, sur un clic « Supprimer » de la page : supprimable() dit quels fichiers et dossiers
+personnels peuvent être mis à la Corbeille (modules.fichiers.mettre_a_la_corbeille), retirer() met
+ensuite l'analyse à jour.
 """
 
 import ctypes
 import heapq
 import os
 import re
+import stat
 import tempfile
 import time
+import winreg
 from ctypes import wintypes
 from dataclasses import dataclass
 from functools import cache
@@ -80,6 +86,8 @@ FICHIERS_SYSTEME = {"pagefile.sys": "Mémoire virtuelle (pagefile.sys)",
 SUR_INTERNET = 0x1000 | 0x40000 | 0x400000  # OFFLINE, RECALL_ON_OPEN, RECALL_ON_DATA_ACCESS : OneDrive « en ligne »
 REDUIT = 0x200 | 0x800  # SPARSE_FILE, COMPRESSED : la place prise est plus petite que la taille du fichier
 FICHIER_SYSTEME = 0x4  # SYSTEM : fichier de Windows (registre du profil, desktop.ini…)
+
+RESTE_WINDOWS = "Windows et fichiers protégés"  # Système, sans les fichiers de Windows mesurés à part
 
 NB_ELEMENTS = 12  # éléments montrés par catégorie
 NB_DOSSIERS = 3   # dossiers « Surtout dans » des catégories classées par extension
@@ -361,6 +369,21 @@ def _surtout_dans(comptage: _Comptage, cle: str) -> list[dict]:
     return [{"nom": nom_element(chemin), "chemin": chemin, "taille": taille} for taille, chemin in dossiers]
 
 
+def _systeme(utilise: int, hors_systeme: int, speciaux: list[dict]) -> tuple[int, list[dict]]:
+    """Système : ce que Windows dit utilisé, moins tout ce qui a été compté ailleurs ; et ses éléments.
+
+    Jamais moins que les fichiers de Windows mesurés (les copies de Windows.old peuvent être comptées en double).
+    """
+    mesures = sum(e["taille"] for e in speciaux)
+    taille = max(mesures, utilise - hors_systeme)
+    elements = [{"nom": RESTE_WINDOWS, "chemin": None, "taille": taille - mesures, "dossier": True}] + speciaux
+    return taille, sorted((e for e in elements if e["taille"]), key=lambda e: e["taille"], reverse=True)
+
+
+def _elements_corbeille(taille: int) -> list[dict]:
+    return [{"nom": "Corbeille", "chemin": None, "taille": taille, "dossier": True}] if taille else []
+
+
 def disque_systeme() -> str:
     return os.environ.get("SystemDrive", "C:") + os.sep
 
@@ -391,23 +414,15 @@ def scan(racine: str | None = None, progression: Callable[[int, int], None] = la
     if not parcourir(racine, comptage, regles_emplacements(racine), nouvelles, arret):
         return None
 
-    # Système : ce que Windows dit utilisé, moins tout ce qui a été compté ailleurs.
-    # Jamais moins que les fichiers de Windows mesurés (les copies de Windows.old peuvent être comptées en double).
     hors_systeme = sum(taille for cle, taille in comptage.tailles.items() if cle != "systeme")
-    speciaux = sorted(comptage.speciaux, key=lambda e: e["taille"], reverse=True)
-    systeme = max(sum(e["taille"] for e in speciaux), usage.used - hors_systeme)
-    reste_windows = max(0, systeme - sum(e["taille"] for e in speciaux))
-    elements_systeme = [{"nom": "Windows et fichiers protégés", "chemin": None, "taille": reste_windows,
-                         "dossier": True}] + speciaux
-    comptage.tailles["systeme"] = systeme
+    comptage.tailles["systeme"], elements_systeme = _systeme(usage.used, hors_systeme, comptage.speciaux)
 
     categories = []
     for cle, nom, description in CATEGORIES:
         if cle == "systeme":
-            elements = sorted((e for e in elements_systeme if e["taille"]), key=lambda e: e["taille"], reverse=True)
+            elements = elements_systeme
         elif cle == "corbeille":
-            taille = comptage.tailles["corbeille"]
-            elements = [{"nom": "Corbeille", "chemin": None, "taille": taille, "dossier": True}] if taille else []
+            elements = _elements_corbeille(comptage.tailles["corbeille"])
         else:
             elements = _elements(comptage, cle)
         categories.append({"cle": cle, "nom": nom, "description": description, "taille": comptage.tailles[cle],
@@ -432,3 +447,125 @@ def scan(racine: str | None = None, progression: Callable[[int, int], None] = la
         "personnels": comptage.personnels(),  # pour modules/doublons.chercher()
         "duree": time.perf_counter() - debut,
     }
+
+
+# --- Suppression : seulement sur un clic « Supprimer » de la page, après confirmation ---
+
+CLE_DOSSIERS_WINDOWS = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+
+
+def dans(chemin: str, dossier: str) -> bool:
+    """Vrai si `chemin` est `dossier` lui-même ou se trouve à l'intérieur."""
+    return chemin == dossier or chemin.startswith(dossier.rstrip(os.sep) + os.sep)
+
+
+def dossiers_proteges() -> list[str]:
+    """Dossiers à ne jamais mettre à la Corbeille, ni rien qui les contienne : le profil, les dossiers
+    de Windows (Bureau, Documents, Téléchargements, AppData…) et OneDrive. Clés : os.path.normcase."""
+    dossiers = [str(Path.home())] + [str(Path.home() / nom) for nom in DOSSIERS_A_TRIER]
+    dossiers += [os.environ[nom] for nom in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial")
+                 if os.environ.get(nom)]
+    try:  # là où Windows les range vraiment (Bureau déplacé dans OneDrive, Documents sur D:…)
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CLE_DOSSIERS_WINDOWS) as cle:
+            valeurs = [winreg.EnumValue(cle, i) for i in range(winreg.QueryInfoKey(cle)[1])]
+        dossiers += [os.path.expandvars(valeur) for _, valeur, _ in valeurs if isinstance(valeur, str) and valeur]
+    except OSError:
+        pass
+    return [os.path.normcase(os.path.abspath(dossier)) for dossier in dossiers]
+
+
+def supprimable(chemin: str | None, categorie: str | None = None) -> bool:
+    """Vrai si « Supprimer » est proposé pour cet élément (`categorie` : la sienne, None pour une copie en double).
+
+    Seulement les fichiers et dossiers personnels : ceux des catégories classées par extension (Vidéos,
+    Archives…) et les copies en double. Un logiciel ou un jeu se désinstalle, Windows nettoie lui-même ses
+    caches et ses sauvegardes. Sur le disque de Windows, seulement dans le profil. Jamais un disque entier,
+    le profil, Bureau, Téléchargements… ni un dossier qui en contient un.
+    """
+    if not chemin or (categorie is not None and categorie not in PAR_EXTENSION):
+        return False
+    cible = os.path.normcase(os.path.abspath(chemin))
+    if os.path.dirname(cible) == cible:
+        return False
+    if dans(cible, os.path.normcase(disque_systeme())) and not dans(cible, os.path.normcase(str(Path.home()))):
+        return False
+    return not any(dans(protege, cible) for protege in dossiers_proteges())
+
+
+def contenu(chemin: str) -> tuple[dict[str, int], int]:
+    """Place prise par catégorie (classée comme pendant l'analyse) et nombre de fichiers, pour un fichier
+    ou un dossier personnel. Les fichiers de Windows (desktop.ini…) restent dans Système.
+
+    Mesuré avant la mise à la Corbeille (pour la confirmation), puis après (ce qui n'a pas pu partir).
+    OSError s'il n'existe plus.
+    """
+    tailles: dict[str, int] = {}
+    nombre = 0
+
+    def compter(nom: str, chemin_fichier: str, infos: os.stat_result) -> None:
+        nonlocal nombre
+        nombre += 1
+        if not infos.st_file_attributes & FICHIER_SYSTEME:
+            cle = CATEGORIE_EXTENSION.get(os.path.splitext(nom)[1].lower(), "autres")
+            tailles[cle] = tailles.get(cle, 0) + taille_sur_disque(chemin_fichier, infos)
+
+    infos = os.stat(chemin, follow_symlinks=False)
+    if not stat.S_ISDIR(infos.st_mode):
+        compter(os.path.basename(chemin), chemin, infos)
+        return tailles, nombre
+    pile = [chemin]
+    while pile:
+        try:
+            with os.scandir(pile.pop()) as entrees:
+                entrees = list(entrees)
+        except OSError:  # sous-dossier protégé : pas compté
+            continue
+        for entree in entrees:
+            try:
+                if entree.is_symlink() or entree.is_junction():
+                    continue  # un lien part avec le dossier, sans ce vers quoi il pointe
+                if entree.is_dir(follow_symlinks=False):
+                    pile.append(entree.path)
+                else:
+                    compter(entree.name, entree.path, entree.stat(follow_symlinks=False))
+            except OSError:
+                continue
+    return tailles, nombre
+
+
+def retirer(resultat: dict, chemin: str, dossier: bool, enleve: dict[str, int]) -> None:
+    """Met l'analyse à jour après la mise à la Corbeille de `chemin`.
+
+    `enleve` : place qui a vraiment quitté chaque catégorie (contenu() avant, moins après). La Corbeille et
+    l'espace utilisé sont remesurés, Système est recalculé comme pendant l'analyse, et ce qui a disparu
+    n'est plus montré.
+    """
+    racine = resultat["racine"]
+    usage = psutil.disk_usage(racine)
+    resultat["utilise"], resultat["libre"] = usage.used, usage.free
+    categories = {c["cle"]: c for c in resultat["categories"]}
+    for cle, octets in enleve.items():
+        categories[cle]["taille"] = max(0, categories[cle]["taille"] - octets)
+    try:
+        categories["corbeille"]["taille"] = corbeille(racine)
+    except OSError:  # à peu près : ce qui est parti est dans la Corbeille
+        categories["corbeille"]["taille"] += sum(enleve.values())
+    categories["corbeille"]["elements"] = _elements_corbeille(categories["corbeille"]["taille"])
+
+    for categorie in resultat["categories"]:
+        categorie["elements"] = [e for e in categorie["elements"]
+                                 if not (e["chemin"] and dans(e["chemin"], chemin) and not os.path.lexists(e["chemin"]))]
+        lieux = []
+        for lieu in categorie["surtout_dans"]:
+            if dans(lieu["chemin"], chemin) and not os.path.lexists(lieu["chemin"]):
+                continue
+            if not dossier and lieu["chemin"] == os.path.dirname(chemin):  # le fichier était rangé là
+                lieu["taille"] -= enleve.get(categorie["cle"], 0)
+            if lieu["taille"] > 0:
+                lieux.append(lieu)
+        categorie["surtout_dans"] = sorted(lieux, key=lambda lieu: lieu["taille"], reverse=True)
+
+    systeme = categories["systeme"]
+    speciaux = [e for e in systeme["elements"] if e["nom"] != RESTE_WINDOWS]
+    hors_systeme = sum(c["taille"] for c in resultat["categories"] if c["cle"] != "systeme")
+    systeme["taille"], systeme["elements"] = _systeme(usage.used, hors_systeme, speciaux)

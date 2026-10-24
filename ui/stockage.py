@@ -1,6 +1,7 @@
 """Page Stockage : ce qui prend de la place sur un disque, classé en 12 catégories, et les doublons (PySide6).
 
-Lecture seule : les boutons « Afficher » ouvrent seulement l'Explorateur, rien n'est supprimé.
+Les boutons « Afficher » ouvrent seulement l'Explorateur. Seule action qui modifie le PC : « Supprimer »,
+sur un fichier ou un dossier personnel, le met à la Corbeille après confirmation.
 """
 
 import logging
@@ -13,10 +14,10 @@ from typing import Callable
 import psutil
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QThread, QVariantAnimation, Qt, Signal
 from PySide6.QtGui import QFont, QPainter
-from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QMessageBox, QProgressBar,
+                               QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
-from modules import disque, doublons, stockage
+from modules import disque, doublons, fichiers, stockage
 from modules.disque import taille_lisible
 from ui import theme
 from ui.analyse import AIDE, arriere_plan
@@ -114,10 +115,15 @@ def colonne_chiffres(haut: str, bas: str) -> QWidget:
     return colonne
 
 
-class LigneElement(QFrame):
-    """Un dossier ou un fichier : nom, emplacement, taille, et « Afficher » pour le voir dans l'Explorateur."""
+Action = Callable[[str, bool], None]  # (chemin, dossier ?)
 
-    def __init__(self, element: dict, montrer: Callable[[str, bool], None], categorie: str | None = None) -> None:
+
+class LigneElement(QFrame):
+    """Un dossier ou un fichier : nom, emplacement, taille, « Afficher » pour le voir dans l'Explorateur,
+    et « Supprimer » si `supprimer` est donné (fichiers personnels seulement)."""
+
+    def __init__(self, element: dict, montrer: Action, categorie: str | None = None,
+                 supprimer: Action | None = None) -> None:
         super().__init__(objectName="ligne")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         icone = QLabel()
@@ -144,6 +150,19 @@ class LigneElement(QFrame):
                                  toolTip="Ouvrir son emplacement dans l'Explorateur (rien n'est modifié)")
             bouton.clicked.connect(lambda: montrer(element["chemin"], element["dossier"]))
             disposition.addWidget(bouton)
+        if supprimer:
+            effacer = QPushButton("Supprimer", objectName="supprimer", cursor=Qt.CursorShape.PointingHandCursor,
+                                  icon=theme.icone("corbeille", theme.TEXTE_2, 12),
+                                  accessibleName=f"Supprimer {os.path.basename(element['chemin'])}",
+                                  toolTip="Mettre à la Corbeille, après confirmation : récupérable tant qu'elle "
+                                          "n'est pas vidée")
+            effacer.clicked.connect(lambda: supprimer(element["chemin"], element["dossier"]))
+            disposition.addWidget(effacer)
+
+
+def si_supprimable(supprimer: Action, chemin: str | None, categorie: str | None = None) -> Action | None:
+    """L'action « Supprimer » pour un élément personnel, rien pour le reste (voir stockage.supprimable)."""
+    return supprimer if stockage.supprimable(chemin, categorie) else None
 
 
 class LigneDepliable(QFrame):
@@ -188,6 +207,12 @@ class LigneDepliable(QFrame):
         if self.ouvert:  # ouvert : plus de limite, le contenu peut changer de hauteur avec la fenêtre
             self.detail.setMaximumHeight(HAUTEUR_LIBRE)
 
+    def deplier(self) -> None:
+        """Ouvre tout de suite, sans animation : la ligne remplace une ligne qui était ouverte."""
+        self.ouvert = True
+        self.chevron.setPixmap(theme.pixmap_icone("replier", theme.TEXTE_3, 12))
+        self.detail.setMaximumHeight(HAUTEUR_LIBRE)
+
     def mousePressEvent(self, evenement) -> None:
         if evenement.button() == Qt.MouseButton.LeftButton and evenement.position().y() < self.detail.y():
             self.basculer()  # clic sur l'en-tête ; un clic dans le détail n'y touche pas
@@ -211,8 +236,8 @@ def detail_vide(marge_gauche: int) -> tuple[QWidget, QVBoxLayout]:
 class LigneCategorie(LigneDepliable):
     """Une catégorie : icône, nom, explication, taille et part du disque ; un clic déplie ce qu'elle contient."""
 
-    def __init__(self, categorie: dict, utilise: int, montrer: Callable[[str, bool], None],
-                 ouvrir: Callable[[str], None]) -> None:
+    def __init__(self, categorie: dict, utilise: int, montrer: Action, ouvrir: Callable[[str], None],
+                 supprimer: Action) -> None:
         barre = BarreScore()
         textes = QVBoxLayout()
         textes.setSpacing(4)
@@ -229,7 +254,8 @@ class LigneCategorie(LigneDepliable):
 
         detail, contenu = detail_vide(46)
         for element in categorie["elements"][:NB_PAR_CATEGORIE]:
-            contenu.addWidget(LigneElement(element, montrer))
+            contenu.addWidget(LigneElement(element, montrer,
+                                           supprimer=si_supprimable(supprimer, element["chemin"], categorie["cle"])))
         if not categorie["elements"]:
             contenu.addWidget(QLabel("Rien à montrer ici.", objectName="secondaire"))
         if categorie["surtout_dans"]:
@@ -253,7 +279,7 @@ class LigneCategorie(LigneDepliable):
 class LigneDoublon(LigneDepliable):
     """Un groupe de doublons : ce qui est en double, combien de fois, la place en trop ; un clic montre où."""
 
-    def __init__(self, groupe: dict, montrer: Callable[[str, bool], None]) -> None:
+    def __init__(self, groupe: dict, montrer: Action, supprimer: Action) -> None:
         icone = QLabel()
         icone.setPixmap(theme.pixmap_icone("dossier" if groupe["dossier"] else "fichier", theme.TEXTE_3, 16))
         nature = "dossiers identiques" if groupe["dossier"] else "exemplaires"
@@ -272,7 +298,8 @@ class LigneDoublon(LigneDepliable):
         for copie in groupe["copies"]:
             ou = f"Dans {stockage.nom_element(os.path.dirname(copie))}"
             contenu.addWidget(LigneElement({"nom": ou, "chemin": copie, "taille": groupe["taille"],
-                                            "dossier": groupe["dossier"]}, montrer))
+                                            "dossier": groupe["dossier"]}, montrer,
+                                           supprimer=si_supprimable(supprimer, copie)))
         super().__init__(entete, detail, f"{groupe['nom']} : {len(groupe['copies'])} {nature}")
         self.groupe = groupe
 
@@ -424,7 +451,8 @@ class PageStockage(QWidget):
         texte = QLabel("Pour faire de la place sans risque, commence par les fichiers temporaires et la Corbeille, "
                        "puis trie Téléchargements. Pour enlever un jeu ou un logiciel, désinstalle-le depuis les "
                        "Paramètres ou son lanceur (Steam, Epic…) : supprimer son dossier à la main laisse des "
-                       "restes. Ici, rien n'est supprimé : « Afficher » ouvre seulement l'Explorateur.",
+                       "restes. Ici, « Supprimer » (sur tes fichiers personnels seulement) met à la Corbeille, "
+                       "après confirmation : la place n'est libérée qu'une fois la Corbeille vidée.",
                        objectName="secondaire", wordWrap=True)
         libelle, cible = stockage.LIEN_STOCKAGE
         bouton = QPushButton(libelle, objectName="lien", cursor=Qt.CursorShape.PointingHandCursor,
@@ -485,7 +513,7 @@ class PageStockage(QWidget):
                            for e in c["elements"]), key=lambda paire: paire[0]["taille"], reverse=True)
         vider(self.liste_plus_gros)
         for position, (element, cle) in enumerate(elements[:NB_PLUS_GROS]):
-            ligne = LigneElement(element, self.montrer, cle)
+            ligne = LigneElement(element, self.montrer, cle, si_supprimable(self.supprimer, element["chemin"], cle))
             self.liste_plus_gros.addWidget(ligne)
             if animer:
                 apparaitre(ligne, delai=position * 40)
@@ -494,7 +522,7 @@ class PageStockage(QWidget):
 
         vider(self.liste_categories)
         for categorie in sorted(resultat["categories"], key=lambda c: c["taille"], reverse=True):
-            ligne = LigneCategorie(categorie, utilise, self.montrer, self.ouvrir)
+            ligne = LigneCategorie(categorie, utilise, self.montrer, self.ouvrir, self.supprimer)
             self.liste_categories.addWidget(ligne)
             ligne.remplir(categorie["taille"] / utilise if utilise else 0, animer)
         self._afficher_doublons(animer)
@@ -516,10 +544,11 @@ class PageStockage(QWidget):
         self.resume_doublons.setText(f"{nombre} {'groupe' if nombre == 1 else 'groupes'} en double : jusqu'à "
                                      f"{taille_lisible(self.doublons['en_trop'])} à récupérer")
         montres = f" Les {len(groupes)} qui prennent le plus de place sont montrés." if nombre > len(groupes) else ""
-        self.note_doublons.setText("En gardant un seul exemplaire de chacun. Vérifie avant de supprimer quoi que ce "
-                                   f"soit : l'application, elle, ne supprime rien.{montres}")
+        self.note_doublons.setText("En gardant un seul exemplaire de chacun. Clique sur un groupe pour voir où sont "
+                                   "les copies : « Supprimer » en met une à la Corbeille, après confirmation."
+                                   f"{montres}")
         for position, groupe in enumerate(groupes):
-            ligne = LigneDoublon(groupe, self.montrer)
+            ligne = LigneDoublon(groupe, self.montrer, self.supprimer)
             self.liste_doublons.addWidget(ligne)
             if animer:
                 apparaitre(ligne, delai=min(position, 10) * 40)
@@ -535,23 +564,23 @@ class PageStockage(QWidget):
     def en_cours(self) -> bool:
         return self.occupe
 
+    def _occuper(self, occupe: bool) -> None:
+        """Pendant une analyse, une recherche ou une suppression, rien d'autre ne se lance."""
+        self.occupe = occupe
+        for widget in (self.bouton, self.bouton_doublons, self.choix, *self.findChildren(QPushButton, "supprimer")):
+            widget.setEnabled(not occupe)
+        self.occupee.emit(occupe)
+
     def _demarrer(self, fonction: Callable, erreur: str, avancer: Callable, finir: Callable) -> None:
         self.arreter()  # la précédente finit tout juste : on attend son thread avant de le remplacer
-        self.occupe = True
-        self.bouton.setEnabled(False)
-        self.bouton_doublons.setEnabled(False)
-        self.choix.setEnabled(False)
+        self._occuper(True)
         self.travail = Travail(fonction, erreur)
         self.travail.avance.connect(avancer)
         self.travail.termine.connect(finir)
         self.travail.start()
-        self.occupee.emit(True)
 
     def _terminer(self) -> None:
-        self.occupe = False
-        for widget in (self.bouton, self.bouton_doublons, self.choix):
-            widget.setEnabled(True)
-        self.occupee.emit(False)
+        self._occuper(False)
 
     def _arreter_en_cours(self, bouton: QPushButton) -> None:
         """Le bouton de l'analyse en cours sert à l'arrêter."""
@@ -668,7 +697,7 @@ class PageStockage(QWidget):
         self.racine = self.choix.itemData(numero)
         self._sans_resultat()
 
-    # --- Actions (lecture seule) ---
+    # --- Actions ---
 
     def montrer(self, chemin: str, dossier: bool) -> None:
         """Ouvre l'emplacement dans l'Explorateur : le dossier lui-même, ou celui du fichier, fichier sélectionné."""
@@ -680,3 +709,83 @@ class PageStockage(QWidget):
         except OSError:
             journal.exception("Impossible d'afficher %s", chemin)
             self.statut.emit("Cet emplacement n'a pas pu s'ouvrir.")
+
+    def supprimer(self, chemin: str, dossier: bool) -> None:
+        """« Supprimer » : met un fichier ou un dossier personnel à la Corbeille, après confirmation, puis met
+        les chiffres à jour. Seule action de la page qui modifie le PC, et seulement sur ce clic."""
+        nom = os.path.basename(chemin)
+        if self.en_cours():
+            return
+        try:
+            avant, nombre = stockage.contenu(chemin)
+        except OSError:
+            self.statut.emit(f"« {nom} » est introuvable : il a peut-être déjà été déplacé ou supprimé.")
+            return
+        if not self.confirmer_suppression(chemin, dossier, sum(avant.values()), nombre):
+            return
+        corbeille_avant = self._taille("corbeille")
+        focus = QApplication.focusWidget()
+        if focus and self.isAncestorOf(focus):
+            focus.clearFocus()  # sinon Qt donne le focus à la ligne suivante et fait défiler la page
+        self._occuper(True)  # Windows peut montrer sa progression : rien d'autre ne se lance pendant ce temps
+        try:
+            fichiers.mettre_a_la_corbeille(chemin, int(self.window().winId()))
+            apres = stockage.contenu(chemin)[0] if os.path.lexists(chemin) else {}
+        except (OSError, ValueError):
+            journal.exception("Impossible de mettre %s à la Corbeille", chemin)
+            self.statut.emit(f"« {nom} » n'a pas pu être mis à la Corbeille.")
+            return
+        finally:
+            self._occuper(False)
+        enleve = {cle: octets - apres.get(cle, 0) for cle, octets in avant.items() if octets > apres.get(cle, 0)}
+        reste = os.path.lexists(chemin)
+        if reste and not enleve:  # annulé dans la fenêtre de Windows, ou fichier ouvert dans un programme
+            self.statut.emit(f"« {nom} » n'a pas été mis à la Corbeille.")
+            return
+        try:
+            stockage.retirer(self.resultat, chemin, dossier, enleve)
+            if self.doublons:
+                doublons.retirer(self.doublons, chemin)
+        except OSError:
+            journal.exception("Chiffres non mis à jour après la suppression de %s", chemin)
+        self._rafraichir()
+        if reste:
+            self.statut.emit(f"« {nom} » n'a été mis à la Corbeille qu'en partie : un fichier est peut-être "
+                             "ouvert dans un programme.")
+        elif self._taille("corbeille") > corbeille_avant or not enleve:
+            self.statut.emit(f"« {nom} » est dans la Corbeille. Vide-la pour libérer la place.")
+        else:  # trop gros pour la Corbeille : Windows a demandé s'il fallait le supprimer pour de bon
+            self.statut.emit(f"« {nom} » supprimé : {taille_lisible(sum(enleve.values()))} libérés.")
+
+    def confirmer_suppression(self, chemin: str, dossier: bool, taille: int, nombre: int) -> bool:
+        """Demande confirmation avant de mettre à la Corbeille ; vrai si c'est confirmé."""
+        nom = os.path.basename(chemin)
+        if dossier:
+            quoi = (f"le dossier « {nom} » ({nombre_lisible(nombre)} {'fichier' if nombre <= 1 else 'fichiers'}, "
+                    f"{taille_lisible(taille)})")
+        else:
+            quoi = f"le fichier « {nom} » ({taille_lisible(taille)})"
+        boite = QMessageBox(QMessageBox.Icon.Question, "Mettre à la Corbeille", f"Mettre {quoi} à la Corbeille ?",
+                            parent=self)
+        boite.setInformativeText(f"Emplacement : {os.path.dirname(chemin)}\n\nTu pourras le récupérer dans la "
+                                 "Corbeille tant qu'elle n'est pas vidée. La place sur le disque n'est libérée "
+                                 "qu'une fois la Corbeille vidée.")
+        confirmer = boite.addButton("Mettre à la Corbeille", QMessageBox.ButtonRole.DestructiveRole)
+        boite.setDefaultButton(boite.addButton("Annuler", QMessageBox.ButtonRole.RejectRole))
+        boite.exec()
+        return boite.clickedButton() is confirmer
+
+    def _taille(self, cle: str) -> int:
+        return next(c["taille"] for c in self.resultat["categories"] if c["cle"] == cle)
+
+    def _rafraichir(self) -> None:
+        """Après une suppression : les listes avec les chiffres à jour, dépliées comme avant."""
+        categories = {ligne.categorie["cle"] for ligne in self.lignes_categories() if ligne.ouvert}
+        groupes = [ligne.groupe for ligne in self.lignes_doublons() if ligne.ouvert]
+        self.afficher(self.resultat, animer=False)
+        for ligne in self.lignes_categories():
+            if ligne.categorie["cle"] in categories:
+                ligne.deplier()
+        for ligne in self.lignes_doublons():
+            if any(ligne.groupe is groupe for groupe in groupes):  # même groupe, mis à jour
+                ligne.deplier()

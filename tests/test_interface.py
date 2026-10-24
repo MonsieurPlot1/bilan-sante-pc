@@ -30,10 +30,12 @@ def app():
 
 @pytest.fixture(autouse=True)
 def corbeille_protegee(monkeypatch):
-    """Aucun test ne doit vider la vraie Corbeille : il faut remplacer vider_corbeille explicitement."""
+    """Aucun test ne doit toucher à la vraie Corbeille : il faut remplacer vider_corbeille et
+    mettre_a_la_corbeille explicitement."""
     def interdit(*_):
-        raise AssertionError("un test a tenté de vider la vraie Corbeille")
+        raise AssertionError("un test a tenté de toucher à la vraie Corbeille")
     monkeypatch.setattr(module_fichiers, "vider_corbeille", interdit)
+    monkeypatch.setattr(module_fichiers, "mettre_a_la_corbeille", interdit)
 
 
 @pytest.fixture(autouse=True)

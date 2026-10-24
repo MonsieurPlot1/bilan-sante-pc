@@ -205,6 +205,10 @@ QPushButton#lien, QPushButton#discret {{ background: transparent; border: none; 
 QPushButton#lien {{ color: {ACCENT_CLAIR}; text-align: left; }}
 QPushButton#discret {{ color: {TEXTE_2}; }}
 QPushButton#lien:hover, QPushButton#discret:hover {{ color: {TEXTE}; background: {SURFACE_2}; border-radius: 7px; }}
+QPushButton#supprimer {{ background: transparent; border: none; padding: 4px 6px; color: {TEXTE_2}; }}
+QPushButton#supprimer:hover, QPushButton#supprimer:focus {{ color: {NIVEAUX["rouge"]};
+                                                            background: {rgba(NIVEAUX["rouge"], 31)}; border-radius: 7px; }}
+QPushButton#supprimer:disabled {{ color: {TEXTE_3}; background: transparent; }}
 
 QTreeWidget {{ background: {SURFACE_2}; border: none; border-radius: 10px; padding: 4px;
                alternate-background-color: {LIGNE_ALTERNEE}; outline: 0; }}

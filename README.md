@@ -39,11 +39,22 @@ logiciels ni des jeux, où des copies sont normales) et montre les fichiers et l
 moins 1 Mo, avec la place qu'ils prennent en trop. Deux fichiers sont en double s'ils ont exactement le
 même contenu, même avec des noms différents. La recherche lit les fichiers sans rien modifier.
 
+À côté de tes fichiers et dossiers personnels (vidéos, photos, archives… et les copies en double), un
+bouton « Supprimer » les met à la Corbeille, après confirmation : ils restent récupérables tant qu'elle
+n'est pas vidée, et la place n'est libérée qu'une fois la Corbeille vidée. Il n'apparaît jamais sur un
+logiciel, un jeu (désinstalle-les depuis les Paramètres ou leur lanceur), les fichiers de Windows, les
+caches, ni sur ton dossier personnel, Bureau, Documents ou Téléchargements eux-mêmes. Sur le disque de
+Windows, il n'apparaît que dans ton dossier personnel.
+
 ## Ce qu'elle ne fait jamais
 
 - Elle ne modifie, ne supprime et ne désactive rien : elle se contente de lire.
-  Seule exception : le bouton « Vider la Corbeille », qui n'agit que si tu cliques dessus
-  et que tu confirmes dans la fenêtre de Windows. Pense à vérifier la Corbeille avant : c'est définitif.
+  Deux exceptions, qui n'agissent que si tu cliques dessus et que tu confirmes :
+  - le bouton « Vider la Corbeille » (confirmation dans la fenêtre de Windows). Pense à vérifier
+    la Corbeille avant : c'est définitif ;
+  - les boutons « Supprimer » de l'onglet Stockage, qui mettent un fichier ou un dossier personnel
+    à la Corbeille. Si Windows ne peut pas l'y mettre (trop gros), il te demande avant de le supprimer
+    pour de bon.
 - Les boutons « Ouvrir » sous les conseils affichent seulement la bonne page des Paramètres, le dossier
   concerné ou le Gestionnaire des tâches : c'est toi qui décides ensuite quoi changer. Dans l'onglet
   Stockage, « Afficher » ouvre seulement l'Explorateur à l'emplacement d'un dossier ou d'un fichier.
