@@ -1,7 +1,7 @@
 """Page Stockage : ce qui prend de la place sur un disque, classé en 12 catégories, et les doublons (PySide6).
 
 Les boutons « Afficher » ouvrent seulement l'Explorateur. Seule action qui modifie le PC : « Supprimer »,
-sur un fichier ou un dossier personnel, le met à la Corbeille après confirmation.
+sur un fichier ou un dossier personnel, le supprime définitivement après confirmation.
 """
 
 import logging
@@ -154,8 +154,8 @@ class LigneElement(QFrame):
             effacer = QPushButton("Supprimer", objectName="supprimer", cursor=Qt.CursorShape.PointingHandCursor,
                                   icon=theme.icone("corbeille", theme.TEXTE_2, 12),
                                   accessibleName=f"Supprimer {os.path.basename(element['chemin'])}",
-                                  toolTip="Mettre à la Corbeille, après confirmation : récupérable tant qu'elle "
-                                          "n'est pas vidée")
+                                  toolTip="Supprimer définitivement, après confirmation (sans passer par la "
+                                          "Corbeille)")
             effacer.clicked.connect(lambda: supprimer(element["chemin"], element["dossier"]))
             disposition.addWidget(effacer)
 
@@ -451,8 +451,8 @@ class PageStockage(QWidget):
         texte = QLabel("Pour faire de la place sans risque, commence par les fichiers temporaires et la Corbeille, "
                        "puis trie Téléchargements. Pour enlever un jeu ou un logiciel, désinstalle-le depuis les "
                        "Paramètres ou son lanceur (Steam, Epic…) : supprimer son dossier à la main laisse des "
-                       "restes. Ici, « Supprimer » (sur tes fichiers personnels seulement) met à la Corbeille, "
-                       "après confirmation : la place n'est libérée qu'une fois la Corbeille vidée.",
+                       "restes. Ici, « Supprimer » (sur tes fichiers personnels seulement) les efface "
+                       "définitivement, sans passer par la Corbeille : vérifie avec « Afficher » avant.",
                        objectName="secondaire", wordWrap=True)
         libelle, cible = stockage.LIEN_STOCKAGE
         bouton = QPushButton(libelle, objectName="lien", cursor=Qt.CursorShape.PointingHandCursor,
@@ -545,7 +545,7 @@ class PageStockage(QWidget):
                                      f"{taille_lisible(self.doublons['en_trop'])} à récupérer")
         montres = f" Les {len(groupes)} qui prennent le plus de place sont montrés." if nombre > len(groupes) else ""
         self.note_doublons.setText("En gardant un seul exemplaire de chacun. Clique sur un groupe pour voir où sont "
-                                   "les copies : « Supprimer » en met une à la Corbeille, après confirmation."
+                                   "les copies : « Supprimer » en efface une définitivement, après confirmation."
                                    f"{montres}")
         for position, groupe in enumerate(groupes):
             ligne = LigneDoublon(groupe, self.montrer, self.supprimer)
@@ -711,8 +711,8 @@ class PageStockage(QWidget):
             self.statut.emit("Cet emplacement n'a pas pu s'ouvrir.")
 
     def supprimer(self, chemin: str, dossier: bool) -> None:
-        """« Supprimer » : met un fichier ou un dossier personnel à la Corbeille, après confirmation, puis met
-        les chiffres à jour. Seule action de la page qui modifie le PC, et seulement sur ce clic."""
+        """« Supprimer » : supprime définitivement un fichier ou un dossier personnel, après confirmation, puis
+        met les chiffres à jour. Seule action de la page qui modifie le PC, et seulement sur ce clic."""
         nom = os.path.basename(chemin)
         if self.en_cours():
             return
@@ -723,24 +723,23 @@ class PageStockage(QWidget):
             return
         if not self.confirmer_suppression(chemin, dossier, sum(avant.values()), nombre):
             return
-        corbeille_avant = self._taille("corbeille")
         focus = QApplication.focusWidget()
         if focus and self.isAncestorOf(focus):
             focus.clearFocus()  # sinon Qt donne le focus à la ligne suivante et fait défiler la page
         self._occuper(True)  # Windows peut montrer sa progression : rien d'autre ne se lance pendant ce temps
         try:
-            fichiers.mettre_a_la_corbeille(chemin, int(self.window().winId()))
+            fichiers.supprimer(chemin, int(self.window().winId()))
             apres = stockage.contenu(chemin)[0] if os.path.lexists(chemin) else {}
         except (OSError, ValueError):
-            journal.exception("Impossible de mettre %s à la Corbeille", chemin)
-            self.statut.emit(f"« {nom} » n'a pas pu être mis à la Corbeille.")
+            journal.exception("Impossible de supprimer %s", chemin)
+            self.statut.emit(f"« {nom} » n'a pas pu être supprimé.")
             return
         finally:
             self._occuper(False)
         enleve = {cle: octets - apres.get(cle, 0) for cle, octets in avant.items() if octets > apres.get(cle, 0)}
         reste = os.path.lexists(chemin)
-        if reste and not enleve:  # annulé dans la fenêtre de Windows, ou fichier ouvert dans un programme
-            self.statut.emit(f"« {nom} » n'a pas été mis à la Corbeille.")
+        if reste and not enleve:  # fichier ouvert dans un programme, accès refusé… (Windows l'a dit)
+            self.statut.emit(f"« {nom} » n'a pas été supprimé : il est peut-être ouvert dans un programme.")
             return
         try:
             stockage.retirer(self.resultat, chemin, dossier, enleve)
@@ -749,34 +748,29 @@ class PageStockage(QWidget):
         except OSError:
             journal.exception("Chiffres non mis à jour après la suppression de %s", chemin)
         self._rafraichir()
+        libere = taille_lisible(sum(enleve.values()))
         if reste:
-            self.statut.emit(f"« {nom} » n'a été mis à la Corbeille qu'en partie : un fichier est peut-être "
-                             "ouvert dans un programme.")
-        elif self._taille("corbeille") > corbeille_avant or not enleve:
-            self.statut.emit(f"« {nom} » est dans la Corbeille. Vide-la pour libérer la place.")
-        else:  # trop gros pour la Corbeille : Windows a demandé s'il fallait le supprimer pour de bon
-            self.statut.emit(f"« {nom} » supprimé : {taille_lisible(sum(enleve.values()))} libérés.")
+            self.statut.emit(f"« {nom} » n'a été supprimé qu'en partie ({libere} libérés) : un fichier est "
+                             "peut-être ouvert dans un programme.")
+        else:
+            self.statut.emit(f"« {nom} » supprimé : {libere} libérés.")
 
     def confirmer_suppression(self, chemin: str, dossier: bool, taille: int, nombre: int) -> bool:
-        """Demande confirmation avant de mettre à la Corbeille ; vrai si c'est confirmé."""
+        """Demande confirmation avant de supprimer définitivement ; vrai si c'est confirmé."""
         nom = os.path.basename(chemin)
         if dossier:
             quoi = (f"le dossier « {nom} » ({nombre_lisible(nombre)} {'fichier' if nombre <= 1 else 'fichiers'}, "
                     f"{taille_lisible(taille)})")
         else:
             quoi = f"le fichier « {nom} » ({taille_lisible(taille)})"
-        boite = QMessageBox(QMessageBox.Icon.Question, "Mettre à la Corbeille", f"Mettre {quoi} à la Corbeille ?",
-                            parent=self)
-        boite.setInformativeText(f"Emplacement : {os.path.dirname(chemin)}\n\nTu pourras le récupérer dans la "
-                                 "Corbeille tant qu'elle n'est pas vidée. La place sur le disque n'est libérée "
-                                 "qu'une fois la Corbeille vidée.")
-        confirmer = boite.addButton("Mettre à la Corbeille", QMessageBox.ButtonRole.DestructiveRole)
+        boite = QMessageBox(QMessageBox.Icon.Warning, "Supprimer définitivement",
+                            f"Supprimer définitivement {quoi} ?", parent=self)
+        boite.setInformativeText(f"Emplacement : {os.path.dirname(chemin)}\n\nIl ne passera pas par la Corbeille : "
+                                 "impossible de le récupérer ensuite.")
+        confirmer = boite.addButton("Supprimer définitivement", QMessageBox.ButtonRole.DestructiveRole)
         boite.setDefaultButton(boite.addButton("Annuler", QMessageBox.ButtonRole.RejectRole))
         boite.exec()
         return boite.clickedButton() is confirmer
-
-    def _taille(self, cle: str) -> int:
-        return next(c["taille"] for c in self.resultat["categories"] if c["cle"] == cle)
 
     def _rafraichir(self) -> None:
         """Après une suppression : les listes avec les chiffres à jour, dépliées comme avant."""

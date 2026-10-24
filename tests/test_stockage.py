@@ -192,22 +192,21 @@ def test_contenu(tmp_path):
 
 
 def test_retirer(disque, monkeypatch):
-    """Un fichier mis à la Corbeille : sa place passe dans la Corbeille, le disque n'a pas plus de place libre."""
+    """Un fichier supprimé : sa catégorie diminue, la place est libérée, Système ne bouge pas."""
     resultat = stockage.scan(str(disque))
     film = disque / "Users" / "moi" / "Videos" / "film.mkv"
-    film.unlink()  # comme mis à la Corbeille
-    monkeypatch.setattr(stockage, "corbeille", lambda _: 25 + 300)
+    film.unlink()
+    monkeypatch.setattr(stockage.psutil, "disk_usage", lambda _: Usage(20_000, UTILISE - 300, 10_300, 48.5))
     stockage.retirer(resultat, str(film), False, {"videos": 300})
     parties = categories(resultat)
     assert parties["videos"]["taille"] == 0 and parties["videos"]["elements"] == []
     assert parties["videos"]["surtout_dans"] == []
-    assert parties["corbeille"]["taille"] == 325 and parties["corbeille"]["elements"][0]["taille"] == 325
+    assert parties["corbeille"]["taille"] == 25
     assert parties["systeme"]["taille"] == UTILISE - 1400
-    assert sum(c["taille"] for c in resultat["categories"]) == UTILISE
+    assert sum(c["taille"] for c in resultat["categories"]) == resultat["utilise"] == UTILISE - 300
 
 
-def test_retirer_un_dossier_supprime_pour_de_bon(disque, monkeypatch):
-    """Trop gros pour la Corbeille, supprimé pour de bon (Windows l'a demandé) : la place est libérée."""
+def test_retirer_un_dossier(disque, monkeypatch):
     for chemin, taille in {"Users/moi/Projet/clip.mp4": 100, "Users/moi/Projet/Notes/plan.pdf": 10}.items():
         fichier(disque, chemin, taille)
     resultat = stockage.scan(str(disque))

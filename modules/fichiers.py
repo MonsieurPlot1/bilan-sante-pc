@@ -3,7 +3,7 @@ et de l'ancienne version de Windows (Windows.old).
 
 Le scan est en lecture seule. Seules exceptions de toute l'application, uniquement sur clic :
 vider_corbeille(), lancée par le bouton « Vider la Corbeille » après la confirmation de Windows, et
-mettre_a_la_corbeille(), lancée par un bouton « Supprimer » de l'onglet Stockage après confirmation.
+supprimer(), lancée par un bouton « Supprimer » de l'onglet Stockage après confirmation.
 """
 
 import ctypes
@@ -53,11 +53,9 @@ def vider_corbeille(fenetre: int = 0) -> None:
     shell32.SHEmptyRecycleBinW(fenetre, None, 0)
 
 
-# SHFileOperationW : suppression vers la Corbeille.
+# SHFileOperationW : suppression définitive (sans FOF_ALLOWUNDO, rien ne passe par la Corbeille).
 FO_DELETE = 3
 FOF_NOCONFIRMATION = 0x10  # l'application a déjà demandé confirmation
-FOF_ALLOWUNDO = 0x40  # à la Corbeille, récupérable
-FOF_WANTNUKEWARNING = 0x4000  # Windows prévient avant de supprimer pour de bon ce qui n'y tient pas
 
 
 class _OperationFichiers(ctypes.Structure):  # SHFILEOPSTRUCTW
@@ -67,19 +65,19 @@ class _OperationFichiers(ctypes.Structure):  # SHFILEOPSTRUCTW
                 ("correspondances", ctypes.c_void_p), ("titre", wintypes.LPCWSTR)]
 
 
-def mettre_a_la_corbeille(chemin: str, fenetre: int = 0) -> None:
-    """Met un fichier ou un dossier à la Corbeille, d'où il reste récupérable tant qu'elle n'est pas vidée.
+def supprimer(chemin: str, fenetre: int = 0) -> None:
+    """Supprime définitivement un fichier ou un dossier, sans passer par la Corbeille.
 
-    Windows montre sa progression et ses erreurs (fichier ouvert dans un programme…), et demande avant
-    de supprimer pour de bon ce qui ne tient pas dans la Corbeille. L'appelant vérifie ensuite ce qui a
-    vraiment disparu. `fenetre` : identifiant de la fenêtre parente, pour que Windows s'affiche par-dessus.
+    Windows montre sa progression et ses erreurs (fichier ouvert dans un programme…). L'appelant vérifie
+    ensuite ce qui a vraiment disparu. `fenetre` : identifiant de la fenêtre parente, pour que Windows
+    s'affiche par-dessus.
     """
     # Un seul élément, désigné en entier : pas de chemin relatif, pas de joker, pas la racine d'un disque.
     if not os.path.isabs(chemin) or any(c in chemin for c in "*?") or os.path.dirname(chemin) == chemin:
         raise ValueError(f"Chemin refusé : {chemin!r}")
     liste = ctypes.create_unicode_buffer(chemin + "\0")  # liste de chemins terminée par deux zéros
     operation = _OperationFichiers(fenetre=fenetre, operation=FO_DELETE, depuis=ctypes.addressof(liste),
-                                   options=FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING)
+                                   options=FOF_NOCONFIRMATION)
     shell32 = ctypes.WinDLL("shell32")
     shell32.SHFileOperationW.argtypes = [ctypes.c_void_p]
     shell32.SHFileOperationW.restype = ctypes.c_int

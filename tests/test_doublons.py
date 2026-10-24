@@ -80,7 +80,7 @@ def test_doublons(releve, disque):
 
 
 def test_retirer(releve, disque):
-    """Après la mise à la Corbeille d'une copie ou d'un dossier, les groupes et la place en trop suivent."""
+    """Après la suppression d'une copie ou d'un dossier, les groupes et la place en trop suivent."""
     trouves = doublons.chercher(releve())
     doublons.retirer(trouves, str(disque / "Ailleurs" / "p1.jpg"))
     doublons.retirer(trouves, str(disque / "Bureau" / "copie.rar"))

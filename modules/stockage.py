@@ -9,7 +9,7 @@ s'il n'est dans aucun emplacement connu, selon son extension : une vidéo d'un j
 points de restauration, fichiers que l'application n'a pas le droit de lire).
 
 Seule action, sur un clic « Supprimer » de la page : supprimable() dit quels fichiers et dossiers
-personnels peuvent être mis à la Corbeille (modules.fichiers.mettre_a_la_corbeille), retirer() met
+personnels peuvent être supprimés définitivement (modules.fichiers.supprimer), retirer() met
 ensuite l'analyse à jour.
 """
 
@@ -380,10 +380,6 @@ def _systeme(utilise: int, hors_systeme: int, speciaux: list[dict]) -> tuple[int
     return taille, sorted((e for e in elements if e["taille"]), key=lambda e: e["taille"], reverse=True)
 
 
-def _elements_corbeille(taille: int) -> list[dict]:
-    return [{"nom": "Corbeille", "chemin": None, "taille": taille, "dossier": True}] if taille else []
-
-
 def disque_systeme() -> str:
     return os.environ.get("SystemDrive", "C:") + os.sep
 
@@ -422,7 +418,8 @@ def scan(racine: str | None = None, progression: Callable[[int, int], None] = la
         if cle == "systeme":
             elements = elements_systeme
         elif cle == "corbeille":
-            elements = _elements_corbeille(comptage.tailles["corbeille"])
+            taille = comptage.tailles["corbeille"]
+            elements = [{"nom": "Corbeille", "chemin": None, "taille": taille, "dossier": True}] if taille else []
         else:
             elements = _elements(comptage, cle)
         categories.append({"cle": cle, "nom": nom, "description": description, "taille": comptage.tailles[cle],
@@ -460,7 +457,7 @@ def dans(chemin: str, dossier: str) -> bool:
 
 
 def dossiers_proteges() -> list[str]:
-    """Dossiers à ne jamais mettre à la Corbeille, ni rien qui les contienne : le profil, les dossiers
+    """Dossiers à ne jamais supprimer, ni rien qui les contienne : le profil, les dossiers
     de Windows (Bureau, Documents, Téléchargements, AppData…) et OneDrive. Clés : os.path.normcase."""
     dossiers = [str(Path.home())] + [str(Path.home() / nom) for nom in DOSSIERS_A_TRIER]
     dossiers += [os.environ[nom] for nom in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial")
@@ -496,7 +493,7 @@ def contenu(chemin: str) -> tuple[dict[str, int], int]:
     """Place prise par catégorie (classée comme pendant l'analyse) et nombre de fichiers, pour un fichier
     ou un dossier personnel. Les fichiers de Windows (desktop.ini…) restent dans Système.
 
-    Mesuré avant la mise à la Corbeille (pour la confirmation), puis après (ce qui n'a pas pu partir).
+    Mesuré avant la suppression (pour la confirmation), puis après (ce qui n'a pas pu partir).
     OSError s'il n'existe plus.
     """
     tailles: dict[str, int] = {}
@@ -534,23 +531,16 @@ def contenu(chemin: str) -> tuple[dict[str, int], int]:
 
 
 def retirer(resultat: dict, chemin: str, dossier: bool, enleve: dict[str, int]) -> None:
-    """Met l'analyse à jour après la mise à la Corbeille de `chemin`.
+    """Met l'analyse à jour après la suppression de `chemin`.
 
-    `enleve` : place qui a vraiment quitté chaque catégorie (contenu() avant, moins après). La Corbeille et
-    l'espace utilisé sont remesurés, Système est recalculé comme pendant l'analyse, et ce qui a disparu
-    n'est plus montré.
+    `enleve` : place qui a vraiment quitté chaque catégorie (contenu() avant, moins après). L'espace utilisé
+    est remesuré, Système est recalculé comme pendant l'analyse, et ce qui a disparu n'est plus montré.
     """
-    racine = resultat["racine"]
-    usage = psutil.disk_usage(racine)
+    usage = psutil.disk_usage(resultat["racine"])
     resultat["utilise"], resultat["libre"] = usage.used, usage.free
     categories = {c["cle"]: c for c in resultat["categories"]}
     for cle, octets in enleve.items():
         categories[cle]["taille"] = max(0, categories[cle]["taille"] - octets)
-    try:
-        categories["corbeille"]["taille"] = corbeille(racine)
-    except OSError:  # à peu près : ce qui est parti est dans la Corbeille
-        categories["corbeille"]["taille"] += sum(enleve.values())
-    categories["corbeille"]["elements"] = _elements_corbeille(categories["corbeille"]["taille"])
 
     for categorie in resultat["categories"]:
         categorie["elements"] = [e for e in categorie["elements"]

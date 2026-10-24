@@ -258,7 +258,7 @@ def chercher(personnels: dict, progression: Progression = lambda *_: None,
 
 
 def retirer(resultat: dict, chemin: str) -> None:
-    """Met à jour les doublons trouvés après la mise à la Corbeille de `chemin` (fichier ou dossier).
+    """Met à jour les doublons trouvés après la suppression de `chemin` (fichier ou dossier).
 
     Une copie partie avec `chemin`, ou un dossier dont un fichier est parti (il n'est plus identique), ne
     compte plus ; un groupe qui n'a plus qu'un exemplaire n'est plus en double. Les groupes qui n'étaient

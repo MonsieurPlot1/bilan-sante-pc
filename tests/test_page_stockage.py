@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 from modules import doublons, stockage
 from modules import fichiers as module_fichiers
 from tests.test_interface import app, corbeille_protegee, fenetre, rien_ne_s_ouvre  # noqa: F401 (fixtures)
-from tests.test_stockage import UTILISE, disque  # noqa: F401 (fixture)
+from tests.test_stockage import UTILISE, Usage, disque  # noqa: F401 (fixture)
 from ui import fenetre as fenetre_module
 from ui import stockage as page_stockage
 from ui.stockage import HAUTEUR_LIBRE, LigneElement
@@ -257,24 +257,30 @@ def test_supprimer_seulement_les_fichiers_personnels(fenetre, disque):
     assert avec == ["film.mkv", "setup.exe"]  # pas le jeu, les logiciels, les caches ni Windows.old
 
 
+def taille(page, cle: str) -> int:
+    return next(c["taille"] for c in page.resultat["categories"] if c["cle"] == cle)
+
+
 def test_supprimer(fenetre, disque, monkeypatch):
     film = disque / "Users" / "moi" / "Videos" / "film.mkv"
     page = fenetre.stockage
     page.afficher(resultat_du_faux_disque(disque), animer=False)
-    envoyes, confirmations = [], []
-    monkeypatch.setattr(module_fichiers, "mettre_a_la_corbeille",
-                        lambda chemin, _fenetre: envoyes.append(chemin) or os.remove(chemin))
-    monkeypatch.setattr(stockage, "corbeille", lambda _: 25 + 300)  # le film y est maintenant
+    supprimes, confirmations = [], []
+    monkeypatch.setattr(module_fichiers, "supprimer", lambda chemin, _fenetre: supprimes.append(chemin) or
+                        os.remove(chemin))
+    monkeypatch.setattr(stockage.psutil, "disk_usage", lambda _: Usage(20_000, UTILISE - 300, 10_300, 48.5))
     monkeypatch.setattr(page, "confirmer_suppression", lambda *arguments: confirmations.append(arguments) or True)
+    systeme = taille(page, "systeme")
     videos = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "videos")
     videos.basculer()
     boutons_supprimer(videos)[0].click()
-    assert confirmations == [(str(film), False, 300, 1)] and envoyes == [str(film)]
+    assert confirmations == [(str(film), False, 300, 1)] and supprimes == [str(film)]
     videos = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "videos")
     assert videos.ouvert and videos.categorie["taille"] == 0  # toujours dépliée, à jour
-    assert page._taille("corbeille") == 325
+    assert taille(page, "corbeille") == 25 and taille(page, "systeme") == systeme  # rien ne passe par la Corbeille
+    assert page.utilise.text() == "9,5 Ko utilisés"  # 9 700 octets : la place est libérée
     assert "film.mkv" not in [textes(ligne)[0] for ligne in page_stockage.lignes(page.liste_plus_gros)]
-    assert fenetre.statusBar().currentMessage() == "« film.mkv » est dans la Corbeille. Vide-la pour libérer la place."
+    assert fenetre.statusBar().currentMessage() == "« film.mkv » supprimé : 300 octets libérés."
 
 
 def test_suppression_annulee(fenetre, disque, monkeypatch):
@@ -282,19 +288,20 @@ def test_suppression_annulee(fenetre, disque, monkeypatch):
     page.afficher(resultat_du_faux_disque(disque), animer=False)
     monkeypatch.setattr(page, "confirmer_suppression", lambda *_: False)
     film = disque / "Users" / "moi" / "Videos" / "film.mkv"
-    page.supprimer(str(film), False)  # la vraie Corbeille est interdite pendant les tests
-    assert film.exists() and page._taille("videos") == 300
+    page.supprimer(str(film), False)  # supprimer pour de vrai est interdit pendant les tests
+    assert film.exists() and taille(page, "videos") == 300
 
 
 def test_suppression_refusee_par_windows(fenetre, disque, monkeypatch):
-    """Annulée dans la fenêtre de Windows, ou fichier ouvert dans un programme : rien ne change."""
+    """Fichier ouvert dans un programme, accès refusé… : Windows le dit, rien ne change ici."""
     page = fenetre.stockage
     page.afficher(resultat_du_faux_disque(disque), animer=False)
     monkeypatch.setattr(page, "confirmer_suppression", lambda *_: True)
-    monkeypatch.setattr(module_fichiers, "mettre_a_la_corbeille", lambda *_: None)
+    monkeypatch.setattr(module_fichiers, "supprimer", lambda *_: None)
     page.supprimer(str(disque / "Users" / "moi" / "Videos" / "film.mkv"), False)
-    assert fenetre.statusBar().currentMessage() == "« film.mkv » n'a pas été mis à la Corbeille."
-    assert page._taille("videos") == 300
+    assert fenetre.statusBar().currentMessage() == ("« film.mkv » n'a pas été supprimé : il est peut-être ouvert "
+                                                    "dans un programme.")
+    assert taille(page, "videos") == 300
 
 
 def test_supprimer_un_doublon(fenetre, disque, monkeypatch):
@@ -306,7 +313,7 @@ def test_supprimer_un_doublon(fenetre, disque, monkeypatch):
     page.afficher(resultat_du_faux_disque(disque), animer=False)
     page.doublons = doublons.chercher(page.resultat["personnels"])
     page._afficher_doublons(animer=False)
-    monkeypatch.setattr(module_fichiers, "mettre_a_la_corbeille", lambda chemin, _fenetre: os.remove(chemin))
+    monkeypatch.setattr(module_fichiers, "supprimer", lambda chemin, _fenetre: os.remove(chemin))
     monkeypatch.setattr(page, "confirmer_suppression", lambda *_: True)
     (ligne,) = page.lignes_doublons()
     premier, second = boutons_supprimer(ligne)  # chaque copie a le sien
@@ -333,8 +340,9 @@ def test_confirmation(fenetre, monkeypatch):
     confirme = fenetre.stockage.confirmer_suppression(r"C:\Users\moi\Pictures\Vacances", True, 3 * 1024**3, 124)
     (boite,) = boites
     assert not confirme  # fermée sans cliquer : rien n'est supprimé
-    assert boite.text() == "Mettre le dossier « Vacances » (124 fichiers, 3,0 Go) à la Corbeille ?"
+    assert boite.text() == "Supprimer définitivement le dossier « Vacances » (124 fichiers, 3,0 Go) ?"
     assert boite.informativeText().startswith("Emplacement : C:\\Users\\moi\\Pictures")
+    assert "impossible de le récupérer" in boite.informativeText()
     assert boite.defaultButton().text() == "Annuler"
 
 
