@@ -89,6 +89,7 @@ class Fenetre(QMainWindow):
         # Page Stockage : gardés ici, car la page est recréée au changement de mode clair/sombre.
         self.resultat_stockage: dict | None = None
         self.racine_stockage: str | None = None
+        self.doublons_stockage: dict | None = None
         self.statusBar().showMessage("Prêt")
         self.construire()
         colorer_barre_titre(self, QColor(theme.FOND), QColor(theme.TEXTE))  # barre de titre fondue dans le fond
@@ -147,7 +148,8 @@ class Fenetre(QMainWindow):
         return defilement
 
     def _page_stockage(self) -> DefilementDoux:
-        self.stockage = PageStockage(self.ouvrir, self.resultat_stockage, self.racine_stockage)
+        self.stockage = PageStockage(self.ouvrir, self.resultat_stockage, self.racine_stockage,
+                                     self.doublons_stockage)
         self.stockage.statut.connect(self.statusBar().showMessage)
         self.stockage.occupee.connect(self._autoriser_mode)
         return self._defilement(self.stockage)
@@ -500,6 +502,7 @@ class Fenetre(QMainWindow):
         ancien_fond, ancien_texte = QColor(theme.FOND), QColor(theme.TEXTE)
         positions = [self.pages.widget(numero).verticalScrollBar().value() for numero in range(self.pages.count())]
         self.resultat_stockage, self.racine_stockage = self.stockage.resultat, self.stockage.racine
+        self.doublons_stockage = self.stockage.doublons
         self.stockage.arreter()  # analyse finie, mais son thread peut vivre encore un instant
         # Ancien contenu supprimé tout de suite : la nouvelle feuille de style n'a pas à le restyler.
         self.takeCentralWidget()

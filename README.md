@@ -34,6 +34,11 @@ compte dans Jeux), puis selon son extension. Système, c'est l'espace utilisé m
 les fichiers que l'application n'a pas le droit de lire. L'analyse parcourt tout le disque (une ou deux
 minutes), elle n'est pas enregistrée et n'entre pas dans le score.
 
+Ensuite, « Chercher les doublons » compare le contenu de tes fichiers personnels (pas ceux de Windows, des
+logiciels ni des jeux, où des copies sont normales) et montre les fichiers et les dossiers en double d'au
+moins 1 Mo, avec la place qu'ils prennent en trop. Deux fichiers sont en double s'ils ont exactement le
+même contenu, même avec des noms différents. La recherche lit les fichiers sans rien modifier.
+
 ## Ce qu'elle ne fait jamais
 
 - Elle ne modifie, ne supprime et ne désactive rien : elle se contente de lire.

@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPushButton
 
-from modules import stockage
+from modules import doublons, stockage
 from tests.test_interface import app, corbeille_protegee, fenetre, rien_ne_s_ouvre  # noqa: F401 (fixtures)
 from tests.test_stockage import UTILISE, disque  # noqa: F401 (fixture)
 from ui import fenetre as fenetre_module
@@ -57,7 +57,7 @@ def test_onglets(fenetre):
 def test_avant_analyse(fenetre):
     page = fenetre.stockage
     assert page.bouton.text().strip() == "Analyser le stockage"
-    assert page.categories.isHidden() and page.plus_gros.isHidden()
+    assert all(section.isHidden() for section in page.sections)
     assert page.etat.text() in page_stockage.ETATS.values()  # remplissage du disque lu tout de suite
 
 
@@ -146,14 +146,14 @@ def test_analyse_en_erreur(fenetre, monkeypatch):
     attendre(lambda: not page.en_cours() and page.bouton.isEnabled(), 5000)
     QTest.qWait(50)
     assert page.info.text().startswith("L'analyse du stockage n'a pas pu aboutir.")
-    assert page.info.objectName() == "erreur" and page.categories.isHidden()
+    assert page.info.objectName() == "erreur" and all(section.isHidden() for section in page.sections)
 
 
 def test_fermer_pendant_l_analyse(fenetre, monkeypatch):
     monkeypatch.setattr(stockage, "scan", lent)
     fenetre.stockage.lancer()
     fenetre.close()  # arrête l'analyse et attend le thread : pas de plantage de Qt
-    assert not fenetre.stockage.analyse.isRunning()
+    assert not fenetre.stockage.travail.isRunning()
 
 
 def test_resultat_garde_au_changement_de_mode(fenetre, disque):
@@ -177,3 +177,75 @@ def test_textes():
     assert page_stockage.part_lisible(0, 100) == "0 %" and page_stockage.part_lisible(1, 1000) == "moins de 1 %"
     assert page_stockage.part_lisible(49, 100) == "49 %"
     assert [page_stockage.niveau_remplissage(p) for p in (50, 80, 96)] == ["vert", "orange", "rouge"]
+
+
+def lent_doublons(_personnels, progression, arret):
+    """Recherche de doublons qui ne finit que si on l'arrête."""
+    progression("rapide", 1, 2)
+    while not arret():
+        time.sleep(0.01)
+    return None
+
+
+def test_recherche_des_doublons(fenetre, disque, monkeypatch):
+    monkeypatch.setattr(doublons, "TAILLE_MIN_FICHIER", 100)
+    film = disque / "Users" / "moi" / "Videos" / "film.mkv"
+    (disque / "Users" / "moi" / "Downloads" / "film (copie).mkv").write_bytes(film.read_bytes())
+    page = fenetre.stockage
+    page.afficher(resultat_du_faux_disque(disque), animer=False)
+    assert not page.intro_doublons.isHidden() and page.bouton_doublons.text().strip() == "Chercher les doublons"
+    page.chercher_doublons()
+    assert page.en_cours() and not fenetre.mode.isEnabled() and not page.bouton.isEnabled()  # une chose à la fois
+    attendre(lambda: not page.en_cours())
+    assert fenetre.mode.isEnabled() and page.bouton.isEnabled()
+    assert page.resume_doublons.text() == "1 groupe en double : jusqu'à 300 octets à récupérer"
+    assert page.intro_doublons.isHidden() and page.bouton_doublons.text().strip() == "Relancer la recherche"
+    (ligne,) = page.lignes_doublons()
+    copies = [e.findChildren(page_stockage.TexteCoupe)[0].text() for e in ligne.detail.findChildren(LigneElement)]
+    assert copies == ["Dans Téléchargements", "Dans Vidéos"]
+
+
+def test_arreter_la_recherche_des_doublons(fenetre, disque, monkeypatch):
+    monkeypatch.setattr(doublons, "chercher", lent_doublons)
+    page = fenetre.stockage
+    page.afficher(resultat_du_faux_disque(disque), animer=False)
+    page.chercher_doublons()
+    page.chercher_doublons()  # le même bouton arrête
+    assert page.bouton_doublons.text().strip() == "Arrêt en cours…"
+    attendre(lambda: not page.en_cours() and page.bouton_doublons.isEnabled())
+    QTest.qWait(50)
+    assert page.doublons is None and page.bouton_doublons.text().strip() == "Chercher les doublons"
+    assert fenetre.statusBar().currentMessage() == "Recherche des doublons arrêtée."
+
+
+def test_recherche_des_doublons_en_erreur(fenetre, disque, monkeypatch):
+    def plante(*_):
+        raise RuntimeError("fichier disparu")
+    monkeypatch.setattr(doublons, "chercher", plante)
+    page = fenetre.stockage
+    page.afficher(resultat_du_faux_disque(disque), animer=False)
+    page.chercher_doublons()
+    attendre(lambda: not page.en_cours())
+    QTest.qWait(50)
+    assert page.info_doublons.text().startswith("La recherche des doublons n'a pas pu aboutir.")
+    assert page.info_doublons.objectName() == "erreur" and not page.info_doublons.isHidden()
+
+
+def test_nouvelle_analyse_oublie_les_doublons(fenetre, disque):
+    """Après une nouvelle analyse du disque, les fichiers ont pu changer : les doublons sont à chercher à nouveau."""
+    page = fenetre.stockage
+    page.doublons = {"groupes": [], "nombre": 0, "en_trop": 0, "duree": 1.0}
+    page.afficher(resultat_du_faux_disque(disque), animer=False)
+    assert page.resume_doublons.text() == "Aucun doublon d'au moins 1 Mo dans tes fichiers personnels."
+    page.fin(stockage.scan(str(disque)))
+    assert page.doublons is None and not page.intro_doublons.isHidden()
+
+
+def test_progression_des_doublons(fenetre):
+    page = fenetre.stockage
+    page.avancer_doublons(("rapide", 5, 10))
+    assert page.info_doublons.text() == "Comparaison rapide : 5 fichiers sur 10…"
+    assert page.glissement_doublons.endValue() == 50
+    page.avancer_doublons(("contenu", 512, 1024))
+    assert page.info_doublons.text() == "Lecture du contenu : 512 octets sur 1,0 Ko…"
+    assert page.glissement_doublons.endValue() == 550

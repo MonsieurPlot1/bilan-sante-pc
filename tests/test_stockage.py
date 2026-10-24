@@ -1,5 +1,6 @@
 """Tests du module stockage. Lancer avec : python -m pytest"""
 
+import ctypes
 import os
 import subprocess
 from collections import namedtuple
@@ -144,3 +145,25 @@ def test_scan_reel_rapide(monkeypatch):
     """Sur le vrai PC, arrêté tout de suite : le module se lance sans erreur et n'invente rien."""
     assert stockage.scan(arret=lambda: True) is None
     assert stockage.disque_systeme().endswith(os.sep)
+
+
+def test_fichiers_personnels(disque):
+    """Ce que la recherche de doublons pourra comparer : les fichiers classés par extension, et leurs dossiers."""
+    personnels = stockage.scan(str(disque))["personnels"]
+    profil = str(disque / "Users" / "moi")
+    videos = os.path.join(profil, "Videos")
+    assert personnels["fichiers"][videos] == [("film.mkv", 300)]
+    assert personnels["parents"][videos] == profil
+    assert profil in personnels["incomplets"]  # il contient AppData, qui n'est pas personnel
+    assert videos not in personnels["incomplets"]
+    assert not any(dossier.startswith(os.path.join(profil, "AppData")) for dossier in personnels["fichiers"])
+
+
+def test_fichier_systeme_dans_systeme(disque):
+    """Un fichier de Windows dans le profil (registre, desktop.ini…) n'est pas un fichier personnel."""
+    registre = disque / "Users" / "moi" / "NTUSER.DAT"
+    registre.write_bytes(b"r" * 77)
+    ctypes.windll.kernel32.SetFileAttributesW(str(registre), 0x4)  # SYSTEM
+    resultat = stockage.scan(str(disque))
+    assert categories(resultat)["autres"]["taille"] == 3  # comme avant : il reste dans Système
+    assert ("NTUSER.DAT", 77) not in resultat["personnels"]["fichiers"][str(disque / "Users" / "moi")]

@@ -1,4 +1,4 @@
-"""Page Stockage : ce qui prend de la place sur un disque, classé en 12 catégories (PySide6).
+"""Page Stockage : ce qui prend de la place sur un disque, classé en 12 catégories, et les doublons (PySide6).
 
 Lecture seule : les boutons « Afficher » ouvrent seulement l'Explorateur, rien n'est supprimé.
 """
@@ -16,7 +16,7 @@ from PySide6.QtGui import QFont, QPainter
 from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy,
                                QVBoxLayout, QWidget)
 
-from modules import disque, stockage
+from modules import disque, doublons, stockage
 from modules.disque import taille_lisible
 from ui import theme
 from ui.analyse import AIDE, arriere_plan
@@ -32,26 +32,29 @@ LARGEUR_CHIFFRES = 96  # colonne taille et part du disque (« moins de 1 % »)
 # Remplissage du disque : mot affiché à côté de la jauge (la couleur n'est jamais seule).
 ETATS = {"vert": "Assez de place", "orange": "Bien rempli", "rouge": "Presque plein"}
 
+TEXTE_DOUBLONS = ("Cherche les fichiers et les dossiers en double dans tes fichiers personnels (pas dans Windows, "
+                  "les logiciels ni les jeux, où des copies sont normales). La comparaison lit le contenu des "
+                  "fichiers sans rien modifier et peut prendre quelques minutes.")
 
-class AnalyseStockage(QThread):
-    """Parcourt le disque hors du thread de l'interface, en priorité basse."""
 
-    avance = Signal(float, int)  # octets comptés (float : au-delà de 2 Go), fichiers comptés
+class Travail(QThread):
+    """Analyse longue (stockage ou doublons) hors du thread de l'interface, en priorité basse ; arrêtable."""
+
+    avance = Signal(object)  # valeurs de la progression, telles que la fonction les donne
     termine = Signal(object)  # résultat, None si l'analyse a été arrêtée, ou {"erreur": texte}
 
-    def __init__(self, racine: str) -> None:
+    def __init__(self, fonction: Callable[[Callable, Callable[[], bool]], dict | None], erreur: str) -> None:
         super().__init__()
-        self.racine = racine
+        self.fonction, self.erreur = fonction, erreur
         self.arret = threading.Event()
 
     def run(self) -> None:
         try:
             with arriere_plan():
-                resultat = stockage.scan(self.racine, lambda octets, nombre: self.avance.emit(float(octets), nombre),
-                                         self.arret.is_set)
+                resultat = self.fonction(lambda *valeurs: self.avance.emit(valeurs), self.arret.is_set)
         except Exception:  # n'importe quelle panne : la page l'annonce au lieu de rester bloquée
-            journal.exception("Échec de l'analyse du stockage")
-            resultat = {"erreur": f"L'analyse du stockage n'a pas pu aboutir. {AIDE}"}
+            journal.exception(self.erreur)
+            resultat = {"erreur": f"{self.erreur} {AIDE}"}
         self.termine.emit(resultat)
 
 
@@ -97,6 +100,20 @@ class ListeDisques(QComboBox):
         QPainter(self).drawPixmap(self.width() - cote - 12, (self.height() - cote) // 2, image)
 
 
+def colonne_chiffres(haut: str, bas: str) -> QWidget:
+    """Taille en gras et précision discrète dessous, sur une largeur fixe : les barres restent comparables."""
+    grand = QLabel(haut, font=theme.police(11, QFont.Weight.DemiBold), alignment=Qt.AlignmentFlag.AlignRight)
+    petit = QLabel(bas, objectName="discret", alignment=Qt.AlignmentFlag.AlignRight)
+    colonne = QWidget(fixedWidth=LARGEUR_CHIFFRES)
+    chiffres = QVBoxLayout(colonne)
+    chiffres.setContentsMargins(0, 0, 0, 0)
+    chiffres.setSpacing(2)
+    chiffres.addWidget(grand)
+    chiffres.addWidget(petit)
+    chiffres.addStretch()
+    return colonne
+
+
 class LigneElement(QFrame):
     """Un dossier ou un fichier : nom, emplacement, taille, et « Afficher » pour le voir dans l'Explorateur."""
 
@@ -129,81 +146,31 @@ class LigneElement(QFrame):
             disposition.addWidget(bouton)
 
 
-class LigneCategorie(QFrame):
-    """Une catégorie : icône, nom, explication, taille et part du disque ; un clic déplie ce qu'elle contient."""
+class LigneDepliable(QFrame):
+    """Ligne dont l'en-tête, cliqué (ou Entrée, Espace au clavier), déplie un détail en douceur."""
 
-    def __init__(self, categorie: dict, utilise: int, montrer: Callable[[str, bool], None],
-                 ouvrir: Callable[[str], None]) -> None:
+    def __init__(self, entete: QHBoxLayout, detail: QWidget, nom: str) -> None:
         super().__init__(objectName="ligne")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
-        self.categorie, self.ouvert = categorie, False
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # dépliable au clavier (Entrée ou Espace)
-        self.setAccessibleName(f"{categorie['nom']} : {taille_lisible(categorie['taille'])}")
-
-        nom = QLabel(categorie["nom"], font=theme.police(11, QFont.Weight.DemiBold))
-        description = QLabel(categorie["description"], objectName="secondaire", wordWrap=True)
-        self.barre = BarreScore()
-        textes = QVBoxLayout()
-        textes.setSpacing(4)
-        textes.addWidget(nom)
-        textes.addWidget(description)
-        textes.addSpacing(2)
-        textes.addWidget(self.barre)
-        taille = QLabel(taille_lisible(categorie["taille"]), font=theme.police(11, QFont.Weight.DemiBold),
-                        alignment=Qt.AlignmentFlag.AlignRight)
-        part = QLabel(part_lisible(categorie["taille"], utilise), objectName="discret",
-                      alignment=Qt.AlignmentFlag.AlignRight)
-        chiffres = QVBoxLayout()
-        chiffres.setSpacing(2)
-        chiffres.addWidget(taille)
-        chiffres.addWidget(part)
-        chiffres.addStretch()
-        colonne = QWidget(fixedWidth=LARGEUR_CHIFFRES)  # même largeur partout : barres comparables
-        colonne.setLayout(chiffres)
-        chiffres.setContentsMargins(0, 0, 0, 0)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName(nom)
+        self.ouvert = False
         self.chevron = QLabel()
         self.chevron.setPixmap(theme.pixmap_icone("deplier", theme.TEXTE_3, 12))
-        entete = QHBoxLayout()
-        entete.setSpacing(14)
-        entete.addWidget(PastilleIcone(categorie["cle"], taille=36), alignment=Qt.AlignmentFlag.AlignTop)
-        entete.addLayout(textes, 1)
-        entete.addWidget(colonne)
         entete.addWidget(self.chevron, alignment=Qt.AlignmentFlag.AlignTop)
-
-        self.detail = QWidget(maximumHeight=0)
+        self.detail = detail
+        self.detail.setMaximumHeight(0)
         self.detail.setCursor(Qt.CursorShape.ArrowCursor)
-        contenu = QVBoxLayout(self.detail)
-        contenu.setContentsMargins(46, 8, 0, 4)
-        contenu.setSpacing(2)
-        for element in categorie["elements"][:NB_PAR_CATEGORIE]:
-            contenu.addWidget(LigneElement(element, montrer))
-        if not categorie["elements"]:
-            contenu.addWidget(QLabel("Rien à montrer ici.", objectName="secondaire"))
-        if categorie["surtout_dans"]:
-            lieux = ", ".join(f"{d['nom']} ({taille_lisible(d['taille'])})" for d in categorie["surtout_dans"])
-            surtout = QLabel(f"Surtout dans : {lieux}", objectName="secondaire", wordWrap=True)
-            surtout.setContentsMargins(10, 6, 0, 0)
-            contenu.addWidget(surtout)
-        if categorie["lien"]:
-            libelle, cible = categorie["lien"]
-            lien = QPushButton(libelle, objectName="lien", cursor=Qt.CursorShape.PointingHandCursor,
-                               icon=theme.icone("ouvrir", theme.ACCENT_CLAIR, 12))
-            lien.clicked.connect(lambda: ouvrir(cible))
-            contenu.addWidget(lien, alignment=Qt.AlignmentFlag.AlignLeft)
         # Dépliage en douceur (hauteur animée), comme le détail des cartes du bilan.
         self.animation = QVariantAnimation(self, duration=220, easingCurve=QEasingCurve.Type.OutCubic)
         self.animation.valueChanged.connect(lambda hauteur: self.detail.setMaximumHeight(round(hauteur)))
         self.animation.finished.connect(self._fin_animation)
-
         disposition = QVBoxLayout(self)
         disposition.setContentsMargins(12, 12, 14, 12)
         disposition.setSpacing(0)
         disposition.addLayout(entete)
         disposition.addWidget(self.detail)
-
-    def remplir(self, ratio: float, animer: bool) -> None:
-        self.barre.definir(ratio, theme.ACCENT_CLAIR, animer)
 
     def basculer(self) -> None:
         self.ouvert = not self.ouvert
@@ -233,6 +200,83 @@ class LigneCategorie(QFrame):
         super().keyPressEvent(evenement)
 
 
+def detail_vide(marge_gauche: int) -> tuple[QWidget, QVBoxLayout]:
+    detail = QWidget()
+    contenu = QVBoxLayout(detail)
+    contenu.setContentsMargins(marge_gauche, 8, 0, 4)
+    contenu.setSpacing(2)
+    return detail, contenu
+
+
+class LigneCategorie(LigneDepliable):
+    """Une catégorie : icône, nom, explication, taille et part du disque ; un clic déplie ce qu'elle contient."""
+
+    def __init__(self, categorie: dict, utilise: int, montrer: Callable[[str, bool], None],
+                 ouvrir: Callable[[str], None]) -> None:
+        barre = BarreScore()
+        textes = QVBoxLayout()
+        textes.setSpacing(4)
+        textes.addWidget(QLabel(categorie["nom"], font=theme.police(11, QFont.Weight.DemiBold)))
+        textes.addWidget(QLabel(categorie["description"], objectName="secondaire", wordWrap=True))
+        textes.addSpacing(2)
+        textes.addWidget(barre)
+        entete = QHBoxLayout()
+        entete.setSpacing(14)
+        entete.addWidget(PastilleIcone(categorie["cle"], taille=36), alignment=Qt.AlignmentFlag.AlignTop)
+        entete.addLayout(textes, 1)
+        entete.addWidget(colonne_chiffres(taille_lisible(categorie["taille"]),
+                                          part_lisible(categorie["taille"], utilise)))
+
+        detail, contenu = detail_vide(46)
+        for element in categorie["elements"][:NB_PAR_CATEGORIE]:
+            contenu.addWidget(LigneElement(element, montrer))
+        if not categorie["elements"]:
+            contenu.addWidget(QLabel("Rien à montrer ici.", objectName="secondaire"))
+        if categorie["surtout_dans"]:
+            lieux = ", ".join(f"{d['nom']} ({taille_lisible(d['taille'])})" for d in categorie["surtout_dans"])
+            surtout = QLabel(f"Surtout dans : {lieux}", objectName="secondaire", wordWrap=True)
+            surtout.setContentsMargins(10, 6, 0, 0)
+            contenu.addWidget(surtout)
+        if categorie["lien"]:
+            libelle, cible = categorie["lien"]
+            lien = QPushButton(libelle, objectName="lien", cursor=Qt.CursorShape.PointingHandCursor,
+                               icon=theme.icone("ouvrir", theme.ACCENT_CLAIR, 12))
+            lien.clicked.connect(lambda: ouvrir(cible))
+            contenu.addWidget(lien, alignment=Qt.AlignmentFlag.AlignLeft)
+        super().__init__(entete, detail, f"{categorie['nom']} : {taille_lisible(categorie['taille'])}")
+        self.categorie, self.barre = categorie, barre
+
+    def remplir(self, ratio: float, animer: bool) -> None:
+        self.barre.definir(ratio, theme.ACCENT_CLAIR, animer)
+
+
+class LigneDoublon(LigneDepliable):
+    """Un groupe de doublons : ce qui est en double, combien de fois, la place en trop ; un clic montre où."""
+
+    def __init__(self, groupe: dict, montrer: Callable[[str, bool], None]) -> None:
+        icone = QLabel()
+        icone.setPixmap(theme.pixmap_icone("dossier" if groupe["dossier"] else "fichier", theme.TEXTE_3, 16))
+        nature = "dossiers identiques" if groupe["dossier"] else "exemplaires"
+        textes = QVBoxLayout()
+        textes.setSpacing(2)
+        textes.addWidget(TexteCoupe(groupe["nom"], font=theme.police(10.5, QFont.Weight.DemiBold)))
+        textes.addWidget(QLabel(f"{len(groupe['copies'])} {nature} de {taille_lisible(groupe['taille'])}",
+                                objectName="secondaire"))
+        entete = QHBoxLayout()
+        entete.setSpacing(12)
+        entete.addWidget(icone, alignment=Qt.AlignmentFlag.AlignTop)
+        entete.addLayout(textes, 1)
+        entete.addWidget(colonne_chiffres(taille_lisible(groupe["en_trop"]), "en trop"))
+
+        detail, contenu = detail_vide(20)
+        for copie in groupe["copies"]:
+            ou = f"Dans {stockage.nom_element(os.path.dirname(copie))}"
+            contenu.addWidget(LigneElement({"nom": ou, "chemin": copie, "taille": groupe["taille"],
+                                            "dossier": groupe["dossier"]}, montrer))
+        super().__init__(entete, detail, f"{groupe['nom']} : {len(groupe['copies'])} {nature}")
+        self.groupe = groupe
+
+
 def carte(marges: tuple[int, int, int, int] = (22, 18, 22, 18)) -> tuple[QFrame, QVBoxLayout]:
     cadre = QFrame(objectName="carte")
     disposition = QVBoxLayout(cadre)
@@ -241,20 +285,32 @@ def carte(marges: tuple[int, int, int, int] = (22, 18, 22, 18)) -> tuple[QFrame,
     return cadre, disposition
 
 
+def vider(disposition: QVBoxLayout) -> None:
+    while disposition.count():
+        ancien = disposition.takeAt(0).widget()
+        ancien.hide()  # caché tout de suite : la suppression n'a lieu qu'au prochain tour de Qt
+        ancien.deleteLater()
+
+
+def lignes(disposition: QVBoxLayout) -> list[QWidget]:
+    return [disposition.itemAt(i).widget() for i in range(disposition.count())]
+
+
 class PageStockage(QWidget):
     """Contenu de l'onglet Stockage. La fenêtre le place dans une zone de défilement."""
 
     statut = Signal(str)  # message pour la barre d'état
     occupee = Signal(bool)  # analyse en cours : la fenêtre bloque le changement de mode clair/sombre
 
-    def __init__(self, ouvrir: Callable[[str], None], resultat: dict | None = None,
-                 racine: str | None = None) -> None:
+    def __init__(self, ouvrir: Callable[[str], None], resultat: dict | None = None, racine: str | None = None,
+                 doublons_trouves: dict | None = None) -> None:
         super().__init__(objectName="contenu")
         self.ouvrir = ouvrir
         self.resultat = resultat
+        self.doublons = doublons_trouves
         # Le thread est gardé après sa fin : son signal de fin arrive un instant avant qu'il s'arrête,
-        # et Qt plante s'il détruit un thread encore actif. `occupe` dit si l'analyse est en cours.
-        self.analyse: AnalyseStockage | None = None
+        # et Qt plante s'il détruit un thread encore actif. `occupe` dit si une analyse est en cours.
+        self.travail: Travail | None = None
         self.occupe = False
         self.espace_utilise = 0  # au lancement de l'analyse : sert à estimer sa progression
         self.disques = disque.lister_disques()
@@ -264,16 +320,14 @@ class PageStockage(QWidget):
         disposition.setContentsMargins(32, 10, 32, 26)
         disposition.setSpacing(16)
         disposition.addWidget(self._heros())
-        disposition.addSpacing(6)
-        self.titre_plus_gros = titre_section("Ce qui prend le plus de place")
-        self.plus_gros, self.liste_plus_gros = carte((10, 10, 10, 10))
-        disposition.addWidget(self.titre_plus_gros)
-        disposition.addWidget(self.plus_gros)
-        disposition.addSpacing(6)
-        self.titre_categories = titre_section("Par catégorie")
-        self.categories, self.liste_categories = carte((10, 10, 10, 10))
-        disposition.addWidget(self.titre_categories)
-        disposition.addWidget(self.categories)
+        self.sections = []  # titres et cartes montrés seulement après l'analyse
+        for titre, cadre in ((titre_section("Ce qui prend le plus de place"), self._plus_gros()),
+                             (titre_section("En double"), self._doublons()),
+                             (titre_section("Par catégorie"), self._categories())):
+            disposition.addSpacing(6)
+            disposition.addWidget(titre)
+            disposition.addWidget(cadre)
+            self.sections += [titre, cadre]
         disposition.addWidget(self._aide())
         disposition.addStretch()
 
@@ -313,10 +367,7 @@ class PageStockage(QWidget):
                                   icon=theme.icone("analyser", "white", 16),
                                   font=theme.police(11.5, QFont.Weight.DemiBold))
         self.bouton.clicked.connect(self.lancer)
-        self.progression = QProgressBar(textVisible=False, maximum=1000)
-        self.progression.hide()
-        self.glissement = QPropertyAnimation(self.progression, b"value", self.progression,
-                                             duration=450, easingCurve=QEasingCurve.Type.OutCubic)
+        self.progression, self.glissement = self._barre_progression()
 
         cadre = QFrame(objectName="heros")
         disposition = QVBoxLayout(cadre)
@@ -329,6 +380,42 @@ class PageStockage(QWidget):
         disposition.addSpacing(6)
         disposition.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignLeft)
         disposition.addWidget(self.progression)
+        return cadre
+
+    @staticmethod
+    def _barre_progression() -> tuple[QProgressBar, QPropertyAnimation]:
+        """Barre graduée en millièmes, qui glisse d'une valeur à l'autre au lieu de sauter."""
+        barre = QProgressBar(textVisible=False, maximum=1000)
+        barre.hide()
+        return barre, QPropertyAnimation(barre, b"value", barre, duration=450, easingCurve=QEasingCurve.Type.OutCubic)
+
+    def _plus_gros(self) -> QFrame:
+        cadre, self.liste_plus_gros = carte((10, 10, 10, 10))
+        return cadre
+
+    def _categories(self) -> QFrame:
+        cadre, self.liste_categories = carte((10, 10, 10, 10))
+        return cadre
+
+    def _doublons(self) -> QFrame:
+        cadre, disposition = carte()
+        disposition.setSpacing(10)
+        self.intro_doublons = QLabel(TEXTE_DOUBLONS, objectName="secondaire", wordWrap=True)
+        self.resume_doublons = QLabel(wordWrap=True, font=theme.police(11, QFont.Weight.DemiBold))
+        self.note_doublons = QLabel(objectName="secondaire", wordWrap=True)
+        self.liste_doublons = QVBoxLayout()
+        self.liste_doublons.setSpacing(2)
+        self.info_doublons = QLabel(objectName="secondaire", wordWrap=True)
+        self.progression_doublons, self.glissement_doublons = self._barre_progression()
+        self.bouton_doublons = QPushButton(cursor=Qt.CursorShape.PointingHandCursor,
+                                           icon=theme.icone("copier", theme.TEXTE, 14))
+        self.bouton_doublons.clicked.connect(self.chercher_doublons)
+        for widget in (self.intro_doublons, self.resume_doublons, self.note_doublons):
+            disposition.addWidget(widget)
+        disposition.addLayout(self.liste_doublons)
+        disposition.addWidget(self.info_doublons)
+        disposition.addWidget(self.progression_doublons)
+        disposition.addWidget(self.bouton_doublons, alignment=Qt.AlignmentFlag.AlignLeft)
         return cadre
 
     def _aide(self) -> QFrame:
@@ -361,109 +448,154 @@ class PageStockage(QWidget):
                          f"({pourcentage:.0f} % utilisé)")
         self.jauge.definir(pourcentage / 100, theme.NIVEAUX[niveau], animer)
 
+    @staticmethod
+    def _message(etiquette: QLabel, texte: str, erreur: bool = False) -> None:
+        etiquette.setText(texte)
+        etiquette.setObjectName("erreur" if erreur else "secondaire")
+        repolir(etiquette)
+
     def _sans_resultat(self, erreur: str | None = None, animer: bool = True) -> None:
         """Avant toute analyse de ce disque : son remplissage, lu tout de suite, et l'invitation à analyser."""
-        self.resultat = None
+        self.resultat = self.doublons = None
         try:
             usage = psutil.disk_usage(self.racine)
             self._remplissage(usage.used, usage.total, usage.free, animer)
         except OSError:
             journal.exception("Disque %s illisible", self.racine)
-        self.info.setText(erreur or "Lance l'analyse pour voir ce qui prend de la place. Elle lit les dossiers "
-                                    "sans rien changer et peut prendre une ou deux minutes.")
-        self.info.setObjectName("erreur" if erreur else "secondaire")
-        repolir(self.info)
+        self._message(self.info, erreur or "Lance l'analyse pour voir ce qui prend de la place. Elle lit les "
+                                           "dossiers sans rien changer et peut prendre une ou deux minutes.",
+                      erreur=bool(erreur))
         self.bouton.setText("  Analyser le stockage")
-        for widget in (self.titre_plus_gros, self.plus_gros, self.titre_categories, self.categories):
+        for widget in self.sections:
             widget.hide()
 
     def afficher(self, resultat: dict, animer: bool = True) -> None:
         self.resultat = resultat
         utilise = resultat["utilise"]
         self._remplissage(utilise, resultat["total"], resultat["libre"], animer)
-        self.info.setText(f"Analyse du {resultat['date']:%d/%m/%Y à %H:%M} : "
-                          f"{nombre_lisible(resultat['fichiers'])} fichiers parcourus en {resultat['duree']:.0f} s.")
-        self.info.setObjectName("secondaire")
-        repolir(self.info)
+        self._message(self.info, f"Analyse du {resultat['date']:%d/%m/%Y à %H:%M} : "
+                                 f"{nombre_lisible(resultat['fichiers'])} fichiers parcourus en "
+                                 f"{resultat['duree']:.0f} s.")
         self.bouton.setText("  Relancer l'analyse")
+        for widget in self.sections:
+            widget.show()
 
         # Ce qui prend le plus de place, toutes catégories confondues (sauf Système : rien à y faire).
         elements = sorted(((e, c["cle"]) for c in resultat["categories"] if c["cle"] != "systeme"
                            for e in c["elements"]), key=lambda paire: paire[0]["taille"], reverse=True)
-        self._vider(self.liste_plus_gros)
+        vider(self.liste_plus_gros)
         for position, (element, cle) in enumerate(elements[:NB_PLUS_GROS]):
             ligne = LigneElement(element, self.montrer, cle)
             self.liste_plus_gros.addWidget(ligne)
             if animer:
                 apparaitre(ligne, delai=position * 40)
+        for widget in self.sections[:2]:
+            widget.setVisible(bool(elements))
 
-        self._vider(self.liste_categories)
+        vider(self.liste_categories)
         for categorie in sorted(resultat["categories"], key=lambda c: c["taille"], reverse=True):
             ligne = LigneCategorie(categorie, utilise, self.montrer, self.ouvrir)
             self.liste_categories.addWidget(ligne)
             ligne.remplir(categorie["taille"] / utilise if utilise else 0, animer)
-        for widget in (self.titre_plus_gros, self.plus_gros, self.titre_categories, self.categories):
-            widget.show()
-        self.plus_gros.setVisible(bool(elements))
-        self.titre_plus_gros.setVisible(bool(elements))
+        self._afficher_doublons(animer)
 
-    @staticmethod
-    def _vider(disposition: QVBoxLayout) -> None:
-        while disposition.count():
-            ancien = disposition.takeAt(0).widget()
-            ancien.hide()  # caché tout de suite : la suppression n'a lieu qu'au prochain tour de Qt
-            ancien.deleteLater()
+    def _afficher_doublons(self, animer: bool) -> None:
+        """Section « En double » : l'invitation à chercher, ou ce qui a été trouvé."""
+        vider(self.liste_doublons)
+        self.intro_doublons.setVisible(self.doublons is None)
+        self.resume_doublons.setVisible(self.doublons is not None)
+        self.note_doublons.setVisible(bool(self.doublons and self.doublons["nombre"]))
+        self.info_doublons.hide()
+        self.bouton_doublons.setText(" Chercher les doublons" if self.doublons is None else " Relancer la recherche")
+        if self.doublons is None:
+            return
+        nombre, groupes = self.doublons["nombre"], self.doublons["groupes"]
+        if not nombre:
+            self.resume_doublons.setText("Aucun doublon d'au moins 1 Mo dans tes fichiers personnels.")
+            return
+        self.resume_doublons.setText(f"{nombre} {'groupe' if nombre == 1 else 'groupes'} en double : jusqu'à "
+                                     f"{taille_lisible(self.doublons['en_trop'])} à récupérer")
+        montres = f" Les {len(groupes)} qui prennent le plus de place sont montrés." if nombre > len(groupes) else ""
+        self.note_doublons.setText("En gardant un seul exemplaire de chacun. Vérifie avant de supprimer quoi que ce "
+                                   f"soit : l'application, elle, ne supprime rien.{montres}")
+        for position, groupe in enumerate(groupes):
+            ligne = LigneDoublon(groupe, self.montrer)
+            self.liste_doublons.addWidget(ligne)
+            if animer:
+                apparaitre(ligne, delai=min(position, 10) * 40)
 
     def lignes_categories(self) -> list[LigneCategorie]:
-        return [self.liste_categories.itemAt(i).widget() for i in range(self.liste_categories.count())]
+        return lignes(self.liste_categories)
 
-    # --- Analyse ---
+    def lignes_doublons(self) -> list[LigneDoublon]:
+        return lignes(self.liste_doublons)
+
+    # --- Analyses (une seule à la fois) ---
 
     def en_cours(self) -> bool:
         return self.occupe
 
+    def _demarrer(self, fonction: Callable, erreur: str, avancer: Callable, finir: Callable) -> None:
+        self.arreter()  # la précédente finit tout juste : on attend son thread avant de le remplacer
+        self.occupe = True
+        self.bouton.setEnabled(False)
+        self.bouton_doublons.setEnabled(False)
+        self.choix.setEnabled(False)
+        self.travail = Travail(fonction, erreur)
+        self.travail.avance.connect(avancer)
+        self.travail.termine.connect(finir)
+        self.travail.start()
+        self.occupee.emit(True)
+
+    def _terminer(self) -> None:
+        self.occupe = False
+        for widget in (self.bouton, self.bouton_doublons, self.choix):
+            widget.setEnabled(True)
+        self.occupee.emit(False)
+
+    def _arreter_en_cours(self, bouton: QPushButton) -> None:
+        """Le bouton de l'analyse en cours sert à l'arrêter."""
+        self.travail.arret.set()
+        bouton.setEnabled(False)
+        bouton.setText(" " * (len(bouton.text()) - len(bouton.text().lstrip())) + "Arrêt en cours…")
+
+    @staticmethod
+    def _glisser(animation: QPropertyAnimation, valeur: int) -> None:
+        animation.stop()
+        animation.setEndValue(valeur)  # depuis la position du moment
+        animation.start()
+
     def lancer(self) -> None:
         """Lance l'analyse du disque choisi ; pendant l'analyse, le même bouton l'arrête."""
         if self.en_cours():
-            self.analyse.arret.set()
-            self.bouton.setEnabled(False)
-            self.bouton.setText("  Arrêt en cours…")
+            self._arreter_en_cours(self.bouton)
             return
-        self.arreter()  # l'analyse précédente finit tout juste : on attend son thread avant de le remplacer
-        self.occupe = True
-        self.bouton.setText("  Arrêter l'analyse")
-        self.choix.setEnabled(False)
-        self.glissement.stop()
-        self.progression.setValue(0)
-        self.progression.show()
-        self.info.setText("Analyse en cours : lecture des dossiers…")
-        self.info.setObjectName("secondaire")
-        repolir(self.info)
-        self.statut.emit("Analyse du stockage en cours… (rien n'est modifié)")
         try:
             self.espace_utilise = psutil.disk_usage(self.racine).used
         except OSError:
             self.espace_utilise = 0  # progression inconnue : la barre reste au début, le texte avance
-        self.analyse = AnalyseStockage(self.racine)
-        self.analyse.avance.connect(self.avancer)
-        self.analyse.termine.connect(self.fin)
-        self.analyse.start()
-        self.occupee.emit(True)
-
-    def avancer(self, octets: float, nombre: int) -> None:
-        """Progression estimée : la part de l'espace utilisé déjà comptée (Système, lui, n'est pas parcouru)."""
+        racine = self.racine
+        self._demarrer(lambda progression, arret: stockage.scan(racine, progression, arret),
+                       "L'analyse du stockage n'a pas pu aboutir.", self.avancer, self.fin)
+        self.bouton.setEnabled(True)  # il sert à arrêter
+        self.bouton.setText("  Arrêter l'analyse")
         self.glissement.stop()
-        self.glissement.setEndValue(min(990, round(1000 * octets / self.espace_utilise)) if self.espace_utilise else 0)
-        self.glissement.start()
+        self.progression.setValue(0)
+        self.progression.show()
+        self._message(self.info, "Analyse en cours : lecture des dossiers…")
+        self.statut.emit("Analyse du stockage en cours… (rien n'est modifié)")
+
+    def avancer(self, valeurs: tuple[int, int]) -> None:
+        """Progression estimée : la part de l'espace utilisé déjà comptée (Système, lui, n'est pas parcouru)."""
+        octets, nombre = valeurs
+        self._glisser(self.glissement, min(990, round(1000 * octets / self.espace_utilise))
+                      if self.espace_utilise else 0)
         self.info.setText(f"Analyse en cours : {nombre_lisible(nombre)} fichiers parcourus, "
-                          f"{taille_lisible(int(octets))} comptés…")
+                          f"{taille_lisible(octets)} comptés…")
 
     def fin(self, resultat: dict | None) -> None:
-        self.occupe = False
+        self._terminer()
         self.progression.hide()
-        self.bouton.setEnabled(True)
-        self.choix.setEnabled(True)
-        self.occupee.emit(False)
         if resultat is None:  # arrêtée : on garde ce qui était affiché
             self.statut.emit("Analyse du stockage arrêtée.")
             if self.resultat:
@@ -476,14 +608,61 @@ class PageStockage(QWidget):
             self._sans_resultat(resultat["erreur"])
             return
         resultat["date"] = datetime.now()
+        self.doublons = None  # les fichiers ont pu changer depuis la dernière recherche
         self.statut.emit(f"Stockage analysé en {resultat['duree']:.0f} s")
         self.afficher(resultat)
 
+    def chercher_doublons(self) -> None:
+        """Lance la recherche des doublons parmi les fichiers relevés ; pendant la recherche, le bouton l'arrête."""
+        if self.en_cours():
+            self._arreter_en_cours(self.bouton_doublons)
+            return
+        personnels = self.resultat["personnels"]
+        self._demarrer(lambda progression, arret: doublons.chercher(personnels, progression, arret),
+                       "La recherche des doublons n'a pas pu aboutir.", self.avancer_doublons, self.fin_doublons)
+        self.bouton_doublons.setEnabled(True)  # il sert à arrêter
+        self.bouton_doublons.setText(" Arrêter la recherche")
+        self.glissement_doublons.stop()
+        self.progression_doublons.setValue(0)
+        self.progression_doublons.show()
+        self._message(self.info_doublons, "Recherche en cours : comparaison des fichiers…")
+        self.info_doublons.show()
+        self.statut.emit("Recherche des doublons en cours… (rien n'est modifié)")
+
+    def avancer_doublons(self, valeurs: tuple[str, int, int]) -> None:
+        """Comparaison rapide (le premier dixième de la barre), puis lecture du contenu (le reste)."""
+        etape, fait, total = valeurs
+        if etape == "rapide":
+            valeur = round(100 * fait / total) if total else 100
+            texte = f"Comparaison rapide : {nombre_lisible(fait)} fichiers sur {nombre_lisible(total)}…"
+        else:
+            valeur = 100 + (round(900 * fait / total) if total else 900)
+            texte = f"Lecture du contenu : {taille_lisible(fait)} sur {taille_lisible(total)}…"
+        self._glisser(self.glissement_doublons, valeur)
+        self.info_doublons.setText(texte)
+
+    def fin_doublons(self, resultat: dict | None) -> None:
+        self._terminer()
+        self.progression_doublons.hide()
+        if resultat is None:
+            self.statut.emit("Recherche des doublons arrêtée.")
+            self._afficher_doublons(animer=False)
+            return
+        if "erreur" in resultat:
+            self.statut.emit("La recherche des doublons n'a pas pu aboutir.")
+            self._afficher_doublons(animer=False)
+            self._message(self.info_doublons, resultat["erreur"], erreur=True)
+            self.info_doublons.show()
+            return
+        self.doublons = resultat
+        self.statut.emit(f"Doublons cherchés en {resultat['duree']:.0f} s")
+        self._afficher_doublons(animer=True)
+
     def arreter(self) -> None:
         """Arrête l'analyse et attend la fin de son thread, avant que la page ou le thread soient détruits."""
-        if self.analyse:
-            self.analyse.arret.set()
-            self.analyse.wait()
+        if self.travail:
+            self.travail.arret.set()
+            self.travail.wait()
 
     def changer_disque(self, numero: int) -> None:
         self.racine = self.choix.itemData(numero)

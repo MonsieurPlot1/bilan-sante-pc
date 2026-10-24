@@ -79,6 +79,7 @@ FICHIERS_SYSTEME = {"pagefile.sys": "Mémoire virtuelle (pagefile.sys)",
 # Attributs Windows d'un fichier (st_file_attributes).
 SUR_INTERNET = 0x1000 | 0x40000 | 0x400000  # OFFLINE, RECALL_ON_OPEN, RECALL_ON_DATA_ACCESS : OneDrive « en ligne »
 REDUIT = 0x200 | 0x800  # SPARSE_FILE, COMPRESSED : la place prise est plus petite que la taille du fichier
+FICHIER_SYSTEME = 0x4  # SYSTEM : fichier de Windows (registre du profil, desktop.ini…)
 
 NB_ELEMENTS = 12  # éléments montrés par catégorie
 NB_DOSSIERS = 3   # dossiers « Surtout dans » des catégories classées par extension
@@ -137,6 +138,13 @@ REGLES_NOMS = {
     "hoyoplay": Regle("jeux", 1),  # Genshin Impact, Honkai
     "fivem": Regle("jeux"),
     "itch": Regle("jeux", 1),
+    # Outils de programmation : des logiciels installés dans un projet (des copies de fichiers y sont normales).
+    ".venv": Regle("applications"),
+    "venv": Regle("applications"),
+    "node_modules": Regle("applications"),
+    "site-packages": Regle("applications"),
+    "__pycache__": Regle("applications"),
+    ".git": Regle("applications"),
     "windows.old": Regle("sauvegardes"),
     "$windows.~bt": Regle("sauvegardes"),
     "$windows.~ws": Regle("sauvegardes"),
@@ -230,6 +238,15 @@ class _Comptage:
         self.fichiers: dict[str, list[tuple[int, str]]] = {cle: [] for cle in NOMS}  # plus gros, en tas
         self.speciaux: list[dict] = []  # fichiers de Windows à la racine
         self.octets = self.nombre = self.illisibles = 0
+        # Fichiers personnels (ceux classés par extension), pour la recherche de doublons :
+        # {dossier: [(nom, taille du contenu)]}, {sous-dossier: dossier parent}, et les dossiers dont une
+        # partie n'est pas personnelle ou pas lisible (on ne peut pas les comparer en entier).
+        self.perso_fichiers: dict[str, list[tuple[str, int]]] = {}
+        self.perso_parents: dict[str, str] = {}
+        self.perso_incomplets: set[str] = set()
+
+    def personnels(self) -> dict:
+        return {"fichiers": self.perso_fichiers, "parents": self.perso_parents, "incomplets": self.perso_incomplets}
 
     def ajouter(self, categorie: str, taille: int) -> None:
         self.tailles[categorie] += taille
@@ -282,20 +299,29 @@ def parcourir(racine: str, comptage: _Comptage, regles: dict[str, Regle],
                 entrees = list(entrees)
         except OSError:  # dossier protégé : il reste dans Système
             comptage.illisibles += 1
+            if categorie is None:
+                comptage.perso_incomplets.add(dossier)
             continue
         for entree in entrees:
             try:
                 # Jonctions et liens ignorés : ils pointent ailleurs (voire sur eux-mêmes).
                 if entree.is_symlink() or entree.is_junction():
-                    continue
+                    raise OSError("lien")
                 if entree.is_dir(follow_symlinks=False):
                     enfant = _enfant(entree.path, entree.name, categorie, element, reste, regles)
                     if enfant:
                         pile.append(enfant)
+                    if categorie is None and (not enfant or enfant[1] is not None):
+                        comptage.perso_incomplets.add(dossier)  # contient un dossier de logiciel, de jeu…
+                    elif categorie is None:
+                        comptage.perso_parents[entree.path] = dossier
                     continue
                 # Sous Windows, ces informations viennent de la lecture du dossier : pas d'accès au fichier.
-                taille = taille_sur_disque(entree.path, entree.stat(follow_symlinks=False))
+                infos = entree.stat(follow_symlinks=False)
+                taille = taille_sur_disque(entree.path, infos)
             except OSError:
+                if categorie is None:
+                    comptage.perso_incomplets.add(dossier)
                 continue
             if categorie is not None:
                 comptage.ajouter(categorie, taille)
@@ -304,9 +330,15 @@ def parcourir(racine: str, comptage: _Comptage, regles: dict[str, Regle],
             elif dossier == racine and entree.name.lower() in FICHIERS_SYSTEME:
                 comptage.speciaux.append({"nom": FICHIERS_SYSTEME[entree.name.lower()], "chemin": None,
                                           "taille": taille, "dossier": False})
+            elif infos.st_file_attributes & FICHIER_SYSTEME:
+                continue  # pas un fichier personnel : il reste dans Système (compté par différence)
             else:
                 extension = os.path.splitext(entree.name)[1].lower()
                 comptage.ajouter_fichier(CATEGORIE_EXTENSION.get(extension, "autres"), entree.path, dossier, taille)
+                if infos.st_file_attributes & SUR_INTERNET:
+                    comptage.perso_incomplets.add(dossier)  # le lire le téléchargerait : on ne le compare pas
+                else:
+                    comptage.perso_fichiers.setdefault(dossier, []).append((entree.name, infos.st_size))
         nouvelles()
     return True
 
@@ -397,5 +429,6 @@ def scan(racine: str | None = None, progression: Callable[[int, int], None] = la
         "categories": categories,
         "fichiers": comptage.nombre,
         "illisibles": comptage.illisibles,
+        "personnels": comptage.personnels(),  # pour modules/doublons.chercher()
         "duree": time.perf_counter() - debut,
     }
