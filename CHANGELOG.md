@@ -1,5 +1,19 @@
 # Journal des versions
 
+## v0.3.0 - 2026-10-24
+
+- Nouvel onglet « Stockage » (hors du score) : ce qui prend de la place sur un disque, classé en 12
+  catégories (Système, Applications, Jeux, Vidéos, Photos, Musique, Documents, Archives, Fichiers
+  temporaires, Corbeille, Sauvegardes, Autres), d'abord selon l'emplacement puis selon l'extension : une
+  vidéo dans le dossier d'un jeu compte dans Jeux. Les plus gros dossiers et fichiers, avec « Afficher »
+  pour les voir dans l'Explorateur. Accessible aussi depuis la carte Disque du bilan.
+- Recherche des doublons : fichiers et dossiers personnels au contenu identique (d'au moins 1 Mo), avec
+  la place qu'ils prennent en trop et l'emplacement de chaque copie.
+- Bouton « Supprimer » à côté des dossiers et fichiers de l'analyse (jeux, logiciels, caches, doublons…) :
+  suppression définitive, sans passer par la Corbeille, après une confirmation qui donne la taille réelle
+  et le nombre de fichiers. Windows, ses dossiers et le profil restent protégés. Avec « Vider la
+  Corbeille », c'est la seule action de l'application qui modifie le PC.
+
 ## v0.2.7 - 2026-10-24
 
 - Nouvelle icône de l'application (anneau vert et battement de cœur) : sur le .exe, dans la barre de
