@@ -19,8 +19,8 @@ import historique
 from modules import fichiers
 from modules.disque import taille_lisible
 from ui import analyse, theme
-from ui.widgets import (Carte, CarteConseil, DefilementDoux, Fondu, Graphique, Jauge, PastilleIcone, apparaitre,
-                        pastille, repolir, titre_section)
+from ui.widgets import (Carte, CarteConseil, DefilementDoux, Fondu, Graphique, Jauge, Logo, PastilleIcone,
+                        apparaitre, pastille, repolir, titre_section)
 
 journal = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ class Fenetre(QMainWindow):
 
         entete = QHBoxLayout()
         entete.setSpacing(14)
-        entete.addWidget(PastilleIcone("logo", taille=46))
+        entete.addWidget(Logo())
         entete.addLayout(textes, 1)
         entete.addWidget(self.mode, alignment=Qt.AlignmentFlag.AlignTop)
         return entete

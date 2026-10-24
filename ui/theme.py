@@ -96,7 +96,7 @@ ICONE_APPLICATION = Path(__file__).parent.parent / "assets" / "icon.ico"
 
 # Codes des icônes (communs à Segoe Fluent Icons et Segoe MDL2 Assets).
 ICONE = {
-    "logo": "", "demarrage": "", "disque": "", "ressources": "",
+    "demarrage": "", "disque": "", "ressources": "",
     "fichiers": "", "redemarrage": "", "batterie": "", "alimentation": "",
     "bouclier": "", "conseil": "", "historique": "",
     "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "", "valide": "", "soleil": "", "lune": "",

@@ -151,6 +151,19 @@ class PastilleIcone(QWidget):
         peintre.drawPixmap((self.width() - cote) // 2, (self.height() - cote) // 2, image)
 
 
+class Logo(QWidget):
+    """Icône de l'application en tête de la fenêtre, nette à toutes les échelles d'affichage."""
+
+    def __init__(self, taille: int = 48) -> None:  # 48 : une taille de l'ico, affichée telle quelle à l'échelle 100 %
+        super().__init__()
+        self.setFixedSize(taille, taille)
+
+    def paintEvent(self, _evenement) -> None:
+        peintre = QPainter(self)
+        peintre.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.windowIcon().paint(peintre, self.rect())  # Qt choisit la taille de l'ico selon l'écran
+
+
 def pastille(texte: str = "", niveau: str = "gris") -> QLabel:
     etiquette = QLabel(texte, objectName="pastille")
     etiquette.setProperty("niveau", niveau)

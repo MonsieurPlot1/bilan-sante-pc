@@ -17,7 +17,7 @@ from tests.test_analyse import faux_modules, plante
 from tests.test_score import GO, batterie, demarrage, disque, fichiers
 from ui import analyse
 from ui.fenetre import Fenetre, preparer_application
-from ui.widgets import Carte, Fondu, Graphique
+from ui.widgets import Carte, Fondu, Graphique, Logo
 from ui import fenetre as fenetre_module
 
 
@@ -206,12 +206,13 @@ def test_couleurs_du_theme():
     assert theme.rgba("#34d399", 31) == "rgba(52, 211, 153, 31)"  # même rendu qu'avant en thème sombre
 
 
-def test_icone_de_l_application(app):
+def test_icone_de_l_application(app, fenetre):
     from PySide6.QtCore import QSize
     from ui import theme
     assert theme.ICONE_APPLICATION.exists()
     tailles = app.windowIcon().availableSizes()
     assert QSize(16, 16) in tailles and QSize(256, 256) in tailles  # toutes les tailles de l'ico sont lues
+    assert not fenetre.findChild(Logo).windowIcon().isNull()  # la même icône en tête de la fenêtre
 
 
 def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
