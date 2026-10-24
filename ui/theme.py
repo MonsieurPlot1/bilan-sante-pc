@@ -90,6 +90,10 @@ TITRE = ("Segoe UI Variable Display", "Segoe UI")
 CORPS = ("Segoe UI Variable Text", "Segoe UI")
 ICONES = ("Segoe Fluent Icons", "Segoe MDL2 Assets")  # Windows 11, sinon Windows 10
 
+# Icône de l'application (barre de titre, barre des tâches, boîtes de dialogue). build.bat la copie au même
+# endroit dans le .exe, donc ce chemin marche aussi une fois compilé.
+ICONE_APPLICATION = Path(__file__).parent.parent / "assets" / "icon.ico"
+
 # Codes des icônes (communs à Segoe Fluent Icons et Segoe MDL2 Assets).
 ICONE = {
     "logo": "", "demarrage": "", "disque": "", "ressources": "",

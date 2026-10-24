@@ -73,5 +73,5 @@ build.bat
 ```
 
 Le résultat est dans `dist\BilanSantePC\BilanSantePC.exe` : copie tout le dossier
-`dist\BilanSantePC` pour l'emporter sur un autre PC. Pour une icône, place un fichier
-`assets\icon.ico` avant de compiler.
+`dist\BilanSantePC` pour l'emporter sur un autre PC. L'icône vient de `assets\icon.ico`
+(ses sources : `icon.svg`, et `icon-simple.svg` pour les petites tailles, de 16 à 24 pixels).

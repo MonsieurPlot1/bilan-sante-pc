@@ -10,7 +10,7 @@ from ctypes import wintypes
 from functools import cache
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QStandardPaths, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPalette
 from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
                                QProgressBar, QPushButton, QVBoxLayout, QWidget)
 
@@ -89,7 +89,6 @@ class Fenetre(QMainWindow):
 
         Appelée aussi au changement de mode clair/sombre : l'ancien contenu est remplacé.
         """
-        self.setWindowIcon(theme.icone("logo", theme.ACCENT_CLAIR, 32))
         contenu = QWidget(objectName="contenu")
         disposition = QVBoxLayout(contenu)
         disposition.setContentsMargins(32, 26, 32, 26)
@@ -552,9 +551,10 @@ def mode_barre_titre(app: QApplication) -> None:
 
 
 def preparer_application(app: QApplication) -> None:
-    """Thème clair ou sombre : style Fusion, police, palette et feuille de style."""
+    """Thème clair ou sombre : style Fusion, police, palette et feuille de style, et icône de l'application."""
     app.setStyle("Fusion")
     app.setFont(theme.police(10))
+    app.setWindowIcon(QIcon(str(theme.ICONE_APPLICATION)))  # vaut pour toutes les fenêtres, dialogues compris
     appliquer_couleurs(app)
 
 

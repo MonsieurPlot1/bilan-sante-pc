@@ -7,9 +7,9 @@ rem Python du venv du projet s'il existe, sinon celui du PATH.
 set PYTHON=python
 if exist .venv\Scripts\python.exe set PYTHON=.venv\Scripts\python.exe
 
-rem Icone facultative : assets\icon.ico si elle existe.
+rem Icone : assets\icon.ico, celle du .exe, et copiee a cote pour la fenetre (ui\theme.py).
 set ICONE=
-if exist assets\icon.ico set ICONE=--icon assets\icon.ico
+if exist assets\icon.ico set ICONE=--icon assets\icon.ico --add-data "assets\icon.ico;assets"
 
 %PYTHON% -m PyInstaller --noconfirm --clean --onedir --windowed --name BilanSantePC %ICONE% main.py
 if errorlevel 1 (

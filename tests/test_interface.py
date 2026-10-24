@@ -206,6 +206,14 @@ def test_couleurs_du_theme():
     assert theme.rgba("#34d399", 31) == "rgba(52, 211, 153, 31)"  # même rendu qu'avant en thème sombre
 
 
+def test_icone_de_l_application(app):
+    from PySide6.QtCore import QSize
+    from ui import theme
+    assert theme.ICONE_APPLICATION.exists()
+    tailles = app.windowIcon().availableSizes()
+    assert QSize(16, 16) in tailles and QSize(256, 256) in tailles  # toutes les tailles de l'ico sont lues
+
+
 def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
     from ui import theme
     faux_modules(monkeypatch)
