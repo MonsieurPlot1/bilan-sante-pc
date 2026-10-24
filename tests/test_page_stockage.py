@@ -2,6 +2,7 @@
 
 import importlib
 import os
+import shutil
 import time
 from datetime import datetime
 
@@ -250,11 +251,13 @@ def textes(ligne) -> list[str]:
     return [texte.text() for texte in ligne.findChildren(page_stockage.TexteCoupe)]
 
 
-def test_supprimer_seulement_les_fichiers_personnels(fenetre, disque):
+def test_supprimer_partout_sauf_windows(fenetre, disque):
     page = fenetre.stockage
     page.afficher(resultat_du_faux_disque(disque), animer=False)
-    avec = [textes(ligne)[0] for ligne in page_stockage.lignes(page.liste_plus_gros) if boutons_supprimer(ligne)]
-    assert avec == ["film.mkv", "setup.exe"]  # pas le jeu, les logiciels, les caches ni Windows.old
+    sans = [textes(ligne)[0] for ligne in page_stockage.lignes(page.liste_plus_gros) if not boutons_supprimer(ligne)]
+    assert sans == ["Windows.old"]  # le jeu, les logiciels et les caches aussi ; pas l'ancien Windows
+    temporaires = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "temporaires")
+    assert [bool(boutons_supprimer(e)) for e in temporaires.detail.findChildren(LigneElement)] == [True, False, False]
 
 
 def taille(page, cle: str) -> int:
@@ -274,13 +277,29 @@ def test_supprimer(fenetre, disque, monkeypatch):
     videos = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "videos")
     videos.basculer()
     boutons_supprimer(videos)[0].click()
-    assert confirmations == [(str(film), False, 300, 1)] and supprimes == [str(film)]
+    assert confirmations == [(str(film), False, 300, 1, "videos")] and supprimes == [str(film)]
     videos = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "videos")
     assert videos.ouvert and videos.categorie["taille"] == 0  # toujours dépliée, à jour
     assert taille(page, "corbeille") == 25 and taille(page, "systeme") == systeme  # rien ne passe par la Corbeille
     assert page.utilise.text() == "9,5 Ko utilisés"  # 9 700 octets : la place est libérée
     assert "film.mkv" not in [textes(ligne)[0] for ligne in page_stockage.lignes(page.liste_plus_gros)]
     assert fenetre.statusBar().currentMessage() == "« film.mkv » supprimé : 300 octets libérés."
+
+
+def test_supprimer_un_jeu(fenetre, disque, monkeypatch):
+    jeu = disque / "Program Files (x86)" / "Steam" / "steamapps" / "common" / "Jeu"
+    page = fenetre.stockage
+    page.afficher(resultat_du_faux_disque(disque), animer=False)
+    confirmations = []
+    monkeypatch.setattr(module_fichiers, "supprimer", lambda chemin, _fenetre: shutil.rmtree(chemin))
+    monkeypatch.setattr(stockage.psutil, "disk_usage", lambda _: Usage(20_000, UTILISE - 550, 10_550, 47.3))
+    monkeypatch.setattr(page, "confirmer_suppression", lambda *arguments: confirmations.append(arguments) or True)
+    systeme = taille(page, "systeme")
+    boutons_supprimer(page.liste_plus_gros.itemAt(0).widget())[0].click()  # le jeu, le plus gros
+    assert confirmations == [(str(jeu), True, 550, 2, "jeux")] and not jeu.exists()
+    assert taille(page, "jeux") == 0 and taille(page, "videos") == 300  # sa vidéo comptait dans Jeux
+    assert taille(page, "systeme") == systeme
+    assert fenetre.statusBar().currentMessage() == "« Jeu » supprimé : 550 octets libérés."
 
 
 def test_suppression_annulee(fenetre, disque, monkeypatch):
@@ -342,8 +361,10 @@ def test_confirmation(fenetre, monkeypatch):
     assert not confirme  # fermée sans cliquer : rien n'est supprimé
     assert boite.text() == "Supprimer définitivement le dossier « Vacances » (124 fichiers, 3,0 Go) ?"
     assert boite.informativeText().startswith("Emplacement : C:\\Users\\moi\\Pictures")
-    assert "impossible de le récupérer" in boite.informativeText()
+    assert "impossible de le récupérer" in boite.informativeText() and "désinstaller" not in boite.informativeText()
     assert boite.defaultButton().text() == "Annuler"
+    fenetre.stockage.confirmer_suppression(r"C:\Riot Games\VALORANT", True, 30 * 1024**3, 9000, "jeux")
+    assert "mieux vaut le désinstaller" in boites[-1].informativeText()
 
 
 def test_progression_des_doublons(fenetre):

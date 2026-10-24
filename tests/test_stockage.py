@@ -161,34 +161,45 @@ def test_fichiers_personnels(disque):
 
 
 def test_supprimable(disque, monkeypatch):
-    """« Supprimer » seulement sur les fichiers et dossiers personnels, jamais un dossier de Windows ni ce qui
-    en contient un."""
+    """« Supprimer » sur tout ce que l'analyse montre, sauf ce qui casserait Windows ou le profil."""
     profil = disque / "Users" / "moi"
-    film = str(profil / "Videos" / "film.mkv")
-    assert stockage.supprimable(film, "videos") and stockage.supprimable(film)  # sa catégorie, ou une copie en double
-    assert stockage.supprimable(str(profil / "Videos" / "Vacances"))
-    assert not stockage.supprimable(film, "jeux")  # logiciels, jeux, caches : désinstaller ou nettoyer avec Windows
-    assert not stockage.supprimable(None, "corbeille")
-    ailleurs = str(disque / "Donnees" / "film.mkv")
-    assert not stockage.supprimable(ailleurs, "videos")  # disque de Windows, hors du profil
-    monkeypatch.setenv("SystemDrive", "Z:")  # le faux disque n'est plus celui de Windows
-    monkeypatch.setenv("OneDrive", str(disque / "OneDrive"))
-    assert stockage.supprimable(ailleurs, "videos")
-    for dossier in (profil / "Videos", profil / "Downloads", profil, disque / "Users", disque / "OneDrive", disque):
-        assert not stockage.supprimable(str(dossier)), dossier
+    local = profil / "AppData" / "Local"
+    monkeypatch.setenv("ProgramFiles", str(disque / "Program Files"))
+    monkeypatch.setenv("ProgramData", str(disque / "ProgramData"))
+    monkeypatch.setenv("APPDATA", str(profil / "AppData" / "Roaming"))
+    monkeypatch.setenv("OneDrive", str(profil / "OneDrive"))
+    for chemin in (profil / "Videos" / "film.mkv", profil / "Videos" / "Vacances", profil / ".ollama",
+                   disque / "Program Files" / "Editeur", disque / "Program Files (x86)" / "Steam" / "steamapps",
+                   local / "Discord", local / "Discord" / "Cache", disque / "Donnees" / "film.mkv"):
+        assert stockage.supprimable(str(chemin)), chemin
+    for chemin in (disque, disque / "Windows" / "Temp", disque / "Windows.old", local / "Temp", local / "Microsoft",
+                   disque / "Program Files", disque / "Program Files" / "WindowsApps",
+                   disque / "ProgramData" / "Microsoft", disque / "ProgramData" / "Package Cache",
+                   local / "Packages" / "Microsoft.Photos_8wekyb3d8bbwe", local, profil / "AppData",
+                   profil / "Videos", profil / "Downloads", profil / "OneDrive", profil, disque / "Users"):
+        assert not stockage.supprimable(str(chemin)), chemin
+    assert not stockage.supprimable(None) and not stockage.supprimable("C:\\")
 
 
 def test_contenu(tmp_path):
-    """Ce qui part avec un dossier, classé comme pendant l'analyse (pour la confirmation et les chiffres)."""
+    """Ce qui part avec un dossier personnel, classé comme pendant l'analyse (confirmation et chiffres)."""
     dossier = tmp_path / "Vacances"
     for chemin, taille in {"film.mp4": 300, "Jour1/photo.jpg": 20, "Jour1/notes.txt": 5, "inconnu.xyz": 2,
                            "desktop.ini": 7}.items():
         fichier(dossier, chemin, taille)
     ctypes.windll.kernel32.SetFileAttributesW(str(dossier / "desktop.ini"), 0x4)  # SYSTEM : reste dans Système
-    assert stockage.contenu(str(dossier)) == ({"videos": 300, "photos": 20, "documents": 5, "autres": 2}, 5)
-    assert stockage.contenu(str(dossier / "film.mp4")) == ({"videos": 300}, 1)
+    assert stockage.contenu(str(dossier)) == ({"videos": 300, "photos": 20, "documents": 5, "autres": 2}, 4)
+    assert stockage.contenu(str(dossier / "film.mp4"), "videos") == ({"videos": 300}, 1)
     with pytest.raises(OSError):
         stockage.contenu(str(dossier / "absent"))
+
+
+def test_contenu_d_un_logiciel(disque):
+    """Un dossier rangé par son emplacement : ce qu'il contient compte comme pendant l'analyse (son cache à part)."""
+    discord = disque / "Users" / "moi" / "AppData" / "Local" / "Discord"
+    assert stockage.contenu(str(discord), "applications") == ({"applications": 60, "temporaires": 40}, 2)
+    jeu = disque / "Program Files (x86)" / "Steam" / "steamapps" / "common" / "Jeu"
+    assert stockage.contenu(str(jeu), "jeux") == ({"jeux": 550}, 2)  # sa vidéo aussi
 
 
 def test_retirer(disque, monkeypatch):

@@ -39,12 +39,14 @@ logiciels ni des jeux, où des copies sont normales) et montre les fichiers et l
 moins 1 Mo, avec la place qu'ils prennent en trop. Deux fichiers sont en double s'ils ont exactement le
 même contenu, même avec des noms différents. La recherche lit les fichiers sans rien modifier.
 
-À côté de tes fichiers et dossiers personnels (vidéos, photos, archives… et les copies en double), un
-bouton « Supprimer » les efface définitivement, après confirmation : ils ne passent pas par la Corbeille,
-la place est libérée tout de suite mais ils ne sont plus récupérables. Il n'apparaît jamais sur un
-logiciel, un jeu (désinstalle-les depuis les Paramètres ou leur lanceur), les fichiers de Windows, les
-caches, ni sur ton dossier personnel, Bureau, Documents ou Téléchargements eux-mêmes. Sur le disque de
-Windows, il n'apparaît que dans ton dossier personnel.
+À côté de chaque dossier et fichier trouvé (jeux, logiciels, caches, vidéos, archives… et les copies en
+double), un bouton « Supprimer » l'efface définitivement, après confirmation : il ne passe pas par la
+Corbeille, la place est libérée tout de suite mais il n'est plus récupérable. La confirmation donne la
+taille réelle et le nombre de fichiers. Pour un jeu ou un logiciel, la désinstallation (Paramètres ou son
+lanceur) reste plus propre. Le bouton n'apparaît jamais sur ce qui casserait Windows : le dossier Windows,
+l'ancien Windows (Windows.old), les dossiers de Windows et de Microsoft dans Program Files, ProgramData ou
+AppData, le dossier des fichiers temporaires, ni ton dossier personnel, Bureau, Documents ou
+Téléchargements eux-mêmes.
 
 ## Ce qu'elle ne fait jamais
 
@@ -53,7 +55,7 @@ Windows, il n'apparaît que dans ton dossier personnel.
   - le bouton « Vider la Corbeille » (confirmation dans la fenêtre de Windows). Pense à vérifier
     la Corbeille avant : c'est définitif ;
   - les boutons « Supprimer » de l'onglet Stockage, qui effacent définitivement un fichier ou un
-    dossier personnel, sans passer par la Corbeille : vérifie avec « Afficher » avant de confirmer.
+    dossier, sans passer par la Corbeille : vérifie avec « Afficher » avant de confirmer.
 - Les boutons « Ouvrir » sous les conseils affichent seulement la bonne page des Paramètres, le dossier
   concerné ou le Gestionnaire des tâches : c'est toi qui décides ensuite quoi changer. Dans l'onglet
   Stockage, « Afficher » ouvre seulement l'Explorateur à l'emplacement d'un dossier ou d'un fichier.

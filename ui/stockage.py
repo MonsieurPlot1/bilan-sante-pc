@@ -1,7 +1,8 @@
 """Page Stockage : ce qui prend de la place sur un disque, classé en 12 catégories, et les doublons (PySide6).
 
 Les boutons « Afficher » ouvrent seulement l'Explorateur. Seule action qui modifie le PC : « Supprimer »,
-sur un fichier ou un dossier personnel, le supprime définitivement après confirmation.
+sur un fichier ou un dossier de l'analyse, le supprime définitivement après confirmation (jamais ce qui
+casserait Windows ou le profil, voir stockage.supprimable).
 """
 
 import logging
@@ -120,7 +121,7 @@ Action = Callable[[str, bool], None]  # (chemin, dossier ?)
 
 class LigneElement(QFrame):
     """Un dossier ou un fichier : nom, emplacement, taille, « Afficher » pour le voir dans l'Explorateur,
-    et « Supprimer » si `supprimer` est donné (fichiers personnels seulement)."""
+    et « Supprimer » si `supprimer` est donné (tout, sauf ce qui casserait Windows ou le profil)."""
 
     def __init__(self, element: dict, montrer: Action, categorie: str | None = None,
                  supprimer: Action | None = None) -> None:
@@ -160,9 +161,9 @@ class LigneElement(QFrame):
             disposition.addWidget(effacer)
 
 
-def si_supprimable(supprimer: Action, chemin: str | None, categorie: str | None = None) -> Action | None:
-    """L'action « Supprimer » pour un élément personnel, rien pour le reste (voir stockage.supprimable)."""
-    return supprimer if stockage.supprimable(chemin, categorie) else None
+def si_supprimable(supprimer: Action, chemin: str | None) -> Action | None:
+    """L'action « Supprimer », sauf pour ce qui casserait Windows ou le profil (voir stockage.supprimable)."""
+    return supprimer if stockage.supprimable(chemin) else None
 
 
 class LigneDepliable(QFrame):
@@ -255,7 +256,7 @@ class LigneCategorie(LigneDepliable):
         detail, contenu = detail_vide(46)
         for element in categorie["elements"][:NB_PAR_CATEGORIE]:
             contenu.addWidget(LigneElement(element, montrer,
-                                           supprimer=si_supprimable(supprimer, element["chemin"], categorie["cle"])))
+                                           supprimer=si_supprimable(supprimer, element["chemin"])))
         if not categorie["elements"]:
             contenu.addWidget(QLabel("Rien à montrer ici.", objectName="secondaire"))
         if categorie["surtout_dans"]:
@@ -451,8 +452,8 @@ class PageStockage(QWidget):
         texte = QLabel("Pour faire de la place sans risque, commence par les fichiers temporaires et la Corbeille, "
                        "puis trie Téléchargements. Pour enlever un jeu ou un logiciel, désinstalle-le depuis les "
                        "Paramètres ou son lanceur (Steam, Epic…) : supprimer son dossier à la main laisse des "
-                       "restes. Ici, « Supprimer » (sur tes fichiers personnels seulement) les efface "
-                       "définitivement, sans passer par la Corbeille : vérifie avec « Afficher » avant.",
+                       "restes. Ici, « Supprimer » efface un dossier ou un fichier définitivement, sans passer par "
+                       "la Corbeille : vérifie avec « Afficher » avant. Windows et ton profil restent protégés.",
                        objectName="secondaire", wordWrap=True)
         libelle, cible = stockage.LIEN_STOCKAGE
         bouton = QPushButton(libelle, objectName="lien", cursor=Qt.CursorShape.PointingHandCursor,
@@ -513,7 +514,7 @@ class PageStockage(QWidget):
                            for e in c["elements"]), key=lambda paire: paire[0]["taille"], reverse=True)
         vider(self.liste_plus_gros)
         for position, (element, cle) in enumerate(elements[:NB_PLUS_GROS]):
-            ligne = LigneElement(element, self.montrer, cle, si_supprimable(self.supprimer, element["chemin"], cle))
+            ligne = LigneElement(element, self.montrer, cle, si_supprimable(self.supprimer, element["chemin"]))
             self.liste_plus_gros.addWidget(ligne)
             if animer:
                 apparaitre(ligne, delai=position * 40)
@@ -711,17 +712,21 @@ class PageStockage(QWidget):
             self.statut.emit("Cet emplacement n'a pas pu s'ouvrir.")
 
     def supprimer(self, chemin: str, dossier: bool) -> None:
-        """« Supprimer » : supprime définitivement un fichier ou un dossier personnel, après confirmation, puis
-        met les chiffres à jour. Seule action de la page qui modifie le PC, et seulement sur ce clic."""
+        """« Supprimer » : supprime définitivement un fichier ou un dossier de l'analyse, après confirmation,
+        puis met les chiffres à jour. Seule action de la page qui modifie le PC, et seulement sur ce clic."""
         nom = os.path.basename(chemin)
         if self.en_cours():
             return
+        categorie = self._categorie(chemin)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # un gros dossier se mesure en quelques secondes
         try:
-            avant, nombre = stockage.contenu(chemin)
+            avant, nombre = stockage.contenu(chemin, categorie)
         except OSError:
             self.statut.emit(f"« {nom} » est introuvable : il a peut-être déjà été déplacé ou supprimé.")
             return
-        if not self.confirmer_suppression(chemin, dossier, sum(avant.values()), nombre):
+        finally:
+            QApplication.restoreOverrideCursor()
+        if not self.confirmer_suppression(chemin, dossier, sum(avant.values()), nombre, categorie):
             return
         focus = QApplication.focusWidget()
         if focus and self.isAncestorOf(focus):
@@ -729,7 +734,7 @@ class PageStockage(QWidget):
         self._occuper(True)  # Windows peut montrer sa progression : rien d'autre ne se lance pendant ce temps
         try:
             fichiers.supprimer(chemin, int(self.window().winId()))
-            apres = stockage.contenu(chemin)[0] if os.path.lexists(chemin) else {}
+            apres = stockage.contenu(chemin, categorie)[0] if os.path.lexists(chemin) else {}
         except (OSError, ValueError):
             journal.exception("Impossible de supprimer %s", chemin)
             self.statut.emit(f"« {nom} » n'a pas pu être supprimé.")
@@ -755,7 +760,13 @@ class PageStockage(QWidget):
         else:
             self.statut.emit(f"« {nom} » supprimé : {libere} libérés.")
 
-    def confirmer_suppression(self, chemin: str, dossier: bool, taille: int, nombre: int) -> bool:
+    def _categorie(self, chemin: str) -> str | None:
+        """Catégorie où l'analyse a rangé cet élément ; None pour une copie en double (fichiers personnels)."""
+        return next((c["cle"] for c in self.resultat["categories"] for e in c["elements"] if e["chemin"] == chemin),
+                    None)
+
+    def confirmer_suppression(self, chemin: str, dossier: bool, taille: int, nombre: int,
+                              categorie: str | None = None) -> bool:
         """Demande confirmation avant de supprimer définitivement ; vrai si c'est confirmé."""
         nom = os.path.basename(chemin)
         if dossier:
@@ -763,10 +774,13 @@ class PageStockage(QWidget):
                     f"{taille_lisible(taille)})")
         else:
             quoi = f"le fichier « {nom} » ({taille_lisible(taille)})"
+        conseil = ("\n\nSi c'est un jeu ou un logiciel installé, mieux vaut le désinstaller (Paramètres ou son "
+                   "lanceur) : supprimer son dossier laisse des restes." if categorie in ("jeux", "applications")
+                   else "")
         boite = QMessageBox(QMessageBox.Icon.Warning, "Supprimer définitivement",
                             f"Supprimer définitivement {quoi} ?", parent=self)
         boite.setInformativeText(f"Emplacement : {os.path.dirname(chemin)}\n\nIl ne passera pas par la Corbeille : "
-                                 "impossible de le récupérer ensuite.")
+                                 f"impossible de le récupérer ensuite.{conseil}")
         confirmer = boite.addButton("Supprimer définitivement", QMessageBox.ButtonRole.DestructiveRole)
         boite.setDefaultButton(boite.addButton("Annuler", QMessageBox.ButtonRole.RejectRole))
         boite.exec()

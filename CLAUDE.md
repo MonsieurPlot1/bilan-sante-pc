@@ -6,9 +6,10 @@ App Windows grand public : scanne le PC et explique en français clair pourquoi 
 - LECTURE SEULE : l'app ne modifie, ne supprime, ne désactive rien sur le système.
   Seules exceptions, uniquement sur clic : le bouton « Vider la Corbeille » (module fichiers), avec la
   confirmation de Windows, et les boutons « Supprimer » de l'onglet Stockage, qui suppriment définitivement
-  (sans passer par la Corbeille, à ma demande) un fichier ou un dossier personnel après confirmation ; jamais
-  un logiciel, un jeu, un dossier de Windows ni le profil (`stockage.supprimable`). Aucune autre action ne
-  s'ajoute sans mon accord explicite.
+  (sans passer par la Corbeille, à ma demande) un fichier ou un dossier de l'analyse après confirmation, jeux
+  et logiciels compris ; jamais Windows, les dossiers de Windows et de Microsoft, les emplacements des
+  logiciels, le dossier temporaire ni le profil et ses dossiers (`stockage.supprimable`). Aucune autre action
+  ne s'ajoute sans mon accord explicite.
   Les boutons « Ouvrir » des conseils ne font qu'ouvrir une page des Paramètres, un dossier ou un outil de Windows.
 - 100 % local : aucune donnée n'est envoyée ailleurs, aucun réseau.
 - Un module = un fichier dans `modules/`, avec une fonction `scan()` qui renvoie un dict (mesures + constats ; le score est calculé dans `modules/score.py`).

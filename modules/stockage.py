@@ -8,9 +8,8 @@ s'il n'est dans aucun emplacement connu, selon son extension : une vidéo d'un j
 « Système » n'est pas parcouru : c'est l'espace utilisé du disque moins tout le reste (Windows,
 points de restauration, fichiers que l'application n'a pas le droit de lire).
 
-Seule action, sur un clic « Supprimer » de la page : supprimable() dit quels fichiers et dossiers
-personnels peuvent être supprimés définitivement (modules.fichiers.supprimer), retirer() met
-ensuite l'analyse à jour.
+Seule action, sur un clic « Supprimer » de la page : supprimable() dit quels éléments peuvent être
+supprimés définitivement (modules.fichiers.supprimer), retirer() met ensuite l'analyse à jour.
 """
 
 import ctypes
@@ -293,9 +292,10 @@ def _enfant(chemin: str, nom: str, categorie: str | None, element: str | None, r
 
 
 def parcourir(racine: str, comptage: _Comptage, regles: dict[str, Regle],
-              nouvelles: Callable[[], None], arret: Callable[[], bool]) -> bool:
-    """Parcourt le disque depuis `racine` ; faux si l'arrêt a été demandé."""
-    pile = [(racine, None, None, 0)]
+              nouvelles: Callable[[], None], arret: Callable[[], bool], categorie: str | None = None) -> bool:
+    """Parcourt le disque depuis `racine` (rangé dans `categorie`, None : à classer) ; faux si l'arrêt a été
+    demandé."""
+    pile = [(racine, categorie, racine if categorie else None, 0)]
     pile += [(dossier, "temporaires", dossier, 0) for dossier in dossiers_windows_temporaires()
              if os.path.normcase(dossier).startswith(os.path.normcase(racine))]
     while pile:
@@ -456,11 +456,28 @@ def dans(chemin: str, dossier: str) -> bool:
     return chemin == dossier or chemin.startswith(dossier.rstrip(os.sep) + os.sep)
 
 
+# Dossiers de Windows et de Microsoft rangés parmi les logiciels (Program Files, ProgramData, AppData…) :
+# les supprimer casse Windows. Aussi l'installateur des logiciels (Package Cache) et les anciens Windows.
+NOMS_WINDOWS = ("microsoft", "windows", "common files", "internet explorer", "package cache", "packages")
+ANCIENS_WINDOWS = {"windows.old", "$windows.~bt", "$windows.~ws"}  # Paramètres > Stockage les supprime
+
+
+def emplacements_logiciels() -> list[str]:
+    """Où Windows range les logiciels et leurs données. Clés : os.path.normcase."""
+    local = dossier_local()
+    dossiers = [str(local), str(local / "Packages"), str(local / "Programs"), str(local.parent / "LocalLow")]
+    dossiers += [os.environ[nom] for nom in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData",
+                                             "APPDATA") if os.environ.get(nom)]
+    return [os.path.normcase(os.path.abspath(dossier)) for dossier in dossiers]
+
+
 def dossiers_proteges() -> list[str]:
-    """Dossiers à ne jamais supprimer, ni rien qui les contienne : le profil, les dossiers
-    de Windows (Bureau, Documents, Téléchargements, AppData…) et OneDrive. Clés : os.path.normcase."""
+    """Dossiers à ne jamais supprimer, ni rien qui les contienne : Windows, les emplacements des logiciels,
+    les fichiers temporaires, le profil et ses dossiers (Bureau, Documents, Téléchargements…), OneDrive.
+    Clés : os.path.normcase."""
     dossiers = [str(Path.home())] + [str(Path.home() / nom) for nom in DOSSIERS_A_TRIER]
-    dossiers += [os.environ[nom] for nom in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial")
+    dossiers += [tempfile.gettempdir(), os.environ.get("SystemRoot", r"C:\Windows")]
+    dossiers += [os.environ[nom] for nom in ("PUBLIC", "OneDrive", "OneDriveConsumer", "OneDriveCommercial")
                  if os.environ.get(nom)]
     try:  # là où Windows les range vraiment (Bureau déplacé dans OneDrive, Documents sur D:…)
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CLE_DOSSIERS_WINDOWS) as cle:
@@ -468,66 +485,51 @@ def dossiers_proteges() -> list[str]:
         dossiers += [os.path.expandvars(valeur) for _, valeur, _ in valeurs if isinstance(valeur, str) and valeur]
     except OSError:
         pass
-    return [os.path.normcase(os.path.abspath(dossier)) for dossier in dossiers]
+    return [os.path.normcase(os.path.abspath(dossier)) for dossier in dossiers] + emplacements_logiciels()
 
 
-def supprimable(chemin: str | None, categorie: str | None = None) -> bool:
-    """Vrai si « Supprimer » est proposé pour cet élément (`categorie` : la sienne, None pour une copie en double).
+def supprimable(chemin: str | None) -> bool:
+    """Vrai si « Supprimer » est proposé pour un élément montré par l'analyse.
 
-    Seulement les fichiers et dossiers personnels : ceux des catégories classées par extension (Vidéos,
-    Archives…) et les copies en double. Un logiciel ou un jeu se désinstalle, Windows nettoie lui-même ses
-    caches et ses sauvegardes. Sur le disque de Windows, seulement dans le profil. Jamais un disque entier,
-    le profil, Bureau, Téléchargements… ni un dossier qui en contient un.
+    Tout, sauf ce qui casserait Windows ou le profil : un disque entier, ce qui est dans le dossier Windows,
+    les anciens Windows (Windows.old), les dossiers de Windows et de Microsoft rangés parmi les logiciels,
+    les emplacements des logiciels eux-mêmes, le dossier des fichiers temporaires, le profil, Bureau,
+    Documents, Téléchargements… ni un dossier qui en contient un.
     """
-    if not chemin or (categorie is not None and categorie not in PAR_EXTENSION):
+    if not chemin:
         return False
     cible = os.path.normcase(os.path.abspath(chemin))
-    if os.path.dirname(cible) == cible:
+    parent, nom = os.path.split(cible)
+    if parent == cible or nom in ANCIENS_WINDOWS:
         return False
-    if dans(cible, os.path.normcase(disque_systeme())) and not dans(cible, os.path.normcase(str(Path.home()))):
+    if dans(cible, os.path.normcase(os.environ.get("SystemRoot", r"C:\Windows"))):
+        return False
+    racine = os.path.splitdrive(cible)[0] + os.sep
+    if nom.startswith(NOMS_WINDOWS) and parent in [racine, *emplacements_logiciels()]:
         return False
     return not any(dans(protege, cible) for protege in dossiers_proteges())
 
 
-def contenu(chemin: str) -> tuple[dict[str, int], int]:
-    """Place prise par catégorie (classée comme pendant l'analyse) et nombre de fichiers, pour un fichier
-    ou un dossier personnel. Les fichiers de Windows (desktop.ini…) restent dans Système.
+def contenu(chemin: str, categorie: str | None = None) -> tuple[dict[str, int], int]:
+    """Place prise par catégorie et nombre de fichiers d'un fichier ou d'un dossier, classés comme pendant
+    l'analyse. `categorie` : celle où l'analyse l'a rangé (None, ou une catégorie classée par extension :
+    chaque fichier est classé selon son emplacement puis son extension).
 
     Mesuré avant la suppression (pour la confirmation), puis après (ce qui n'a pas pu partir).
     OSError s'il n'existe plus.
     """
-    tailles: dict[str, int] = {}
-    nombre = 0
-
-    def compter(nom: str, chemin_fichier: str, infos: os.stat_result) -> None:
-        nonlocal nombre
-        nombre += 1
-        if not infos.st_file_attributes & FICHIER_SYSTEME:
-            cle = CATEGORIE_EXTENSION.get(os.path.splitext(nom)[1].lower(), "autres")
-            tailles[cle] = tailles.get(cle, 0) + taille_sur_disque(chemin_fichier, infos)
-
+    contexte = None if categorie in PAR_EXTENSION else categorie
+    comptage = _Comptage()
     infos = os.stat(chemin, follow_symlinks=False)
-    if not stat.S_ISDIR(infos.st_mode):
-        compter(os.path.basename(chemin), chemin, infos)
-        return tailles, nombre
-    pile = [chemin]
-    while pile:
-        try:
-            with os.scandir(pile.pop()) as entrees:
-                entrees = list(entrees)
-        except OSError:  # sous-dossier protégé : pas compté
-            continue
-        for entree in entrees:
-            try:
-                if entree.is_symlink() or entree.is_junction():
-                    continue  # un lien part avec le dossier, sans ce vers quoi il pointe
-                if entree.is_dir(follow_symlinks=False):
-                    pile.append(entree.path)
-                else:
-                    compter(entree.name, entree.path, entree.stat(follow_symlinks=False))
-            except OSError:
-                continue
-    return tailles, nombre
+    if stat.S_ISDIR(infos.st_mode):
+        disque = os.path.splitdrive(chemin)[0] + os.sep
+        parcourir(chemin, comptage, regles_emplacements(disque), lambda: None, lambda: False, contexte)
+    elif contexte:
+        comptage.ajouter(contexte, taille_sur_disque(chemin, infos))
+    elif not infos.st_file_attributes & FICHIER_SYSTEME:  # un fichier de Windows reste dans Système
+        extension = os.path.splitext(chemin)[1].lower()
+        comptage.ajouter(CATEGORIE_EXTENSION.get(extension, "autres"), taille_sur_disque(chemin, infos))
+    return {cle: taille for cle, taille in comptage.tailles.items() if taille}, comptage.nombre
 
 
 def retirer(resultat: dict, chemin: str, dossier: bool, enleve: dict[str, int]) -> None:
