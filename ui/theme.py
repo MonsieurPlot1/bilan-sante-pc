@@ -69,11 +69,12 @@ def rgba(couleur: str, alpha: int | None = None) -> str:
 
 
 BLANC, NOIR = "#ffffff", "#000000"
+ENCRE = "#1d2440"  # bleu nuit : ombres, traits et remplis du mode clair, accordés au fond bleuté
 
 # --- Couleurs (sombre, clair) ---
 # Fond de la fenêtre, sous la lueur : FOND en haut (même couleur que la barre de titre), FOND_BAS en bas.
-FOND = _selon_mode("#12151f", "#eef0f6")
-FOND_BAS = _selon_mode("#0b0d14", "#e5e8f1")
+FOND = _selon_mode("#12151f", "#f4f5f9")
+FOND_BAS = _selon_mode("#0b0d14", "#e8ebf3")
 BORD_FENETRE = _selon_mode("#2c303c", "#c9ced9")  # liseré de la fenêtre dessiné par Windows 11
 # Texte en trois niveaux, tous lisibles sur le verre (contraste d'au moins 4,5:1).
 TEXTE = _selon_mode("#f5f5f7", "#1d1d1f")
@@ -86,28 +87,37 @@ ACCENT_APPUI = "#0064ca"
 ACCENT_CLAIR = _selon_mode("#2997ff", "#0066cc")  # liens, courbe du graphique
 
 # Verre dépoli des cartes : un voile blanc plus marqué en haut, et un filet de lumière sur le bord.
-VERRE_HAUT = _selon_mode(voile(BLANC, 0.085), voile(BLANC, 0.72))
-VERRE_BAS = _selon_mode(voile(BLANC, 0.045), voile(BLANC, 0.50))
+VERRE_HAUT = _selon_mode(voile(BLANC, 0.085), voile(BLANC, 0.86))
+VERRE_BAS = _selon_mode(voile(BLANC, 0.045), voile(BLANC, 0.68))
 REFLET_HAUT = _selon_mode(voile(BLANC, 0.20), voile(BLANC, 1.0))
 REFLET_BAS = _selon_mode(voile(BLANC, 0.05), voile(BLANC, 0.55))
-CONTOUR = _selon_mode(voile(NOIR, 0.30), voile("#1d2440", 0.07))  # trait extérieur, qui détache la carte
-SURFACE = _selon_mode("#232633", "#f6f7fa")  # couleur moyenne d'une carte : anneau autour des points du graphique
-OMBRE = _selon_mode(voile(NOIR, 0.30), voile("#26305a", 0.09))
+CONTOUR = _selon_mode(voile(NOIR, 0.30), voile(ENCRE, 0.09))  # trait extérieur, qui détache la carte
+SURFACE = _selon_mode("#232633", "#fbfbfd")  # couleur moyenne d'une carte : anneau autour des points du graphique
+OMBRE = _selon_mode(voile(NOIR, 0.30), voile(ENCRE, 0.16))
 # Verre des fenêtres de confirmation, des annonces et des infobulles, et de la barre du haut quand la page
 # défile dessous.
 VERRE_FEUILLE = _selon_mode(voile("#262a36", 0.92), voile("#fbfbfd", 0.94))
 VERRE_BARRE = _selon_mode(voile(FOND, 0.38), voile(FOND, 0.42))
-VOILE_FEUILLE = _selon_mode(voile(NOIR, 0.35), voile("#1d2440", 0.16))  # assombrit la fenêtre derrière
+VOILE_FEUILLE = _selon_mode(voile(NOIR, 0.35), voile(ENCRE, 0.16))  # assombrit la fenêtre derrière
 
 # Éléments posés sur le verre : boutons secondaires, pistes des barres, survol des lignes.
-REMPLI = _selon_mode(voile(BLANC, 0.09), voile(NOIR, 0.05))
-REMPLI_SURVOL = _selon_mode(voile(BLANC, 0.14), voile(NOIR, 0.08))
-REMPLI_APPUI = _selon_mode(voile(BLANC, 0.06), voile(NOIR, 0.11))
-SURVOL_LIGNE = _selon_mode(voile(BLANC, 0.055), voile(NOIR, 0.04))
-SEPARATEUR = _selon_mode(voile(BLANC, 0.08), voile(NOIR, 0.08))
+REMPLI = _selon_mode(voile(BLANC, 0.09), voile(ENCRE, 0.06))
+REMPLI_SURVOL = _selon_mode(voile(BLANC, 0.14), voile(ENCRE, 0.09))
+REMPLI_APPUI = _selon_mode(voile(BLANC, 0.06), voile(ENCRE, 0.13))
+SURVOL_LIGNE = _selon_mode(voile(BLANC, 0.055), voile(ENCRE, 0.045))
+SEPARATEUR = _selon_mode(voile(BLANC, 0.08), voile(ENCRE, 0.08))
 CURSEUR = _selon_mode(voile(BLANC, 0.17), BLANC)  # pastille qui glisse dans les sélecteurs
 POIGNEE = _selon_mode(voile(BLANC, 0.22), voile(NOIR, 0.22))  # barres de défilement
 POIGNEE_SURVOL = _selon_mode(voile(BLANC, 0.38), voile(NOIR, 0.38))
+# Boutons secondaires : en clair, blancs et cernés d'un trait fin, comme sur Mac (un rempli gris y paraissait
+# éteint) ; en sombre, le rempli léger. Les boutons « Ouvrir » des conseils sont teintés de bleu en clair.
+BOUTON = _selon_mode(rgba(REMPLI), rgba(BLANC, 235))
+BOUTON_SURVOL = _selon_mode(rgba(REMPLI_SURVOL), rgba(BLANC))
+BOUTON_APPUI = _selon_mode(rgba(REMPLI_APPUI), rgba(REMPLI_APPUI))
+BOUTON_INACTIF = _selon_mode(rgba(REMPLI_APPUI), rgba(BLANC, 110))
+BOUTON_BORD = _selon_mode("transparent", rgba(ENCRE, 34))
+TEINTE_ACTION = _selon_mode(rgba(REMPLI), rgba(ACCENT_CLAIR, 22))
+TEINTE_ACTION_SURVOL = _selon_mode(rgba(REMPLI_SURVOL), rgba(ACCENT_CLAIR, 36))
 
 # Couleurs d'état, réservées au niveau de santé (toujours accompagnées d'un texte).
 # NIVEAUX : pour le texte (lisible sur le verre) ; VIFS : pour l'anneau du score et les barres.
@@ -117,10 +127,10 @@ VIFS = {"vert": _selon_mode("#30d158", "#34c759"), "orange": _selon_mode("#ff9f0
         "rouge": _selon_mode("#ff453a", "#ff3b30"), "gris": TEXTE_3}
 
 # Lueur du fond : la teinte principale suit la santé du PC (bleu avant toute analyse).
-LUEURS = {"neutre": _selon_mode("#2f6bff", "#7aa7ff"),
+LUEURS = {"neutre": _selon_mode("#2f6bff", "#5f9bff"),
           **{niveau: VIFS[niveau] for niveau in ("vert", "orange", "rouge")}}
-LUEUR_2 = _selon_mode("#5e5ce6", "#a9a6ff")  # indigo, en haut à droite
-LUEUR_3 = _selon_mode("#40c8e0", "#8fe3f0")  # bleu-vert, discret, en bas
+LUEUR_2 = _selon_mode("#5e5ce6", "#ad9bff")  # indigo, en haut à droite
+LUEUR_3 = _selon_mode("#40c8e0", "#6fd6ec")  # bleu-vert, discret, en bas
 
 # Teintes des icônes et des catégories du stockage (jamais les couleurs d'état). Ordre et nuances vérifiés
 # pour rester distincts deux à deux, y compris pour les daltoniens.
@@ -256,6 +266,14 @@ QPushButton:hover {{ background: {rgba(REMPLI_SURVOL)}; }}
 QPushButton:pressed {{ background: {rgba(REMPLI_APPUI)}; }}
 QPushButton:disabled {{ color: {TEXTE_3}; background: {rgba(REMPLI_APPUI)}; }}
 QPushButton:focus {{ border-color: {ACCENT_CLAIR}; }}
+QPushButton#secondaire, QPushButton#rond {{ background: {BOUTON}; border-color: {BOUTON_BORD}; }}
+QPushButton#secondaire:hover, QPushButton#rond:hover {{ background: {BOUTON_SURVOL}; }}
+QPushButton#secondaire:pressed, QPushButton#rond:pressed {{ background: {BOUTON_APPUI}; }}
+QPushButton#secondaire:disabled {{ background: {BOUTON_INACTIF}; }}
+QPushButton#secondaire:focus, QPushButton#rond:focus {{ border-color: {ACCENT_CLAIR}; }}
+QPushButton#teinte {{ background: {TEINTE_ACTION}; color: {ACCENT_CLAIR}; }}
+QPushButton#teinte:hover {{ background: {TEINTE_ACTION_SURVOL}; }}
+QPushButton#teinte:pressed {{ background: {rgba(REMPLI_APPUI)}; }}
 QPushButton#principal {{ background: {ACCENT}; color: white; border-radius: 17px; padding: 9px 22px; min-height: 20px;
                          font-weight: 600; }}
 QPushButton#principal:hover {{ background: {ACCENT_SURVOL}; }}

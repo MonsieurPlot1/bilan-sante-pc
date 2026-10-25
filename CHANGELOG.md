@@ -1,5 +1,11 @@
 # Journal des versions
 
+## Prochaine version (pas encore publiée)
+
+- Mode clair revu : fond plus lumineux aux couleurs plus vives, cartes d'un blanc net avec une ombre bien
+  visible, boutons secondaires blancs cernés d'un trait fin (comme sur Mac) et boutons « Ouvrir » des
+  conseils teintés de bleu. Le mode sombre ne change pas.
+
 ## v0.3.7 - 2026-10-25
 
 - Nouvel onglet « Connexion » : la liaison du PC avec la box (Wi-Fi ou câble, force du signal, bande et

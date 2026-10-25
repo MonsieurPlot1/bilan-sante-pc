@@ -256,13 +256,13 @@ def _image_lueur(largeur: int, hauteur: int, vue: int, teinte: str, clair: bool)
     grand = max(largeur, vue * 1.3)
     # Lueur principale derrière le score (sa couleur dit l'état du PC), une autre en haut à droite, une en bas de
     # l'écran ; plus bas dans la page, d'autres plus discrètes : le verre des cartes garde des couleurs partout.
-    lueurs = [(0.20 * largeur, 150, 0.62 * grand, theme.LUEURS[teinte], 0.42 if clair else 0.30),
-              (0.92 * largeur, 40, 0.50 * grand, theme.LUEUR_2, 0.38 if clair else 0.22),
-              (0.35 * largeur, vue + 60, 0.55 * grand, theme.LUEUR_3, 0.24 if clair else 0.10)]
+    lueurs = [(0.20 * largeur, 150, 0.62 * grand, theme.LUEURS[teinte], 0.66 if clair else 0.30),
+              (0.92 * largeur, 40, 0.50 * grand, theme.LUEUR_2, 0.58 if clair else 0.22),
+              (0.35 * largeur, vue + 60, 0.55 * grand, theme.LUEUR_3, 0.42 if clair else 0.10)]
     y, cote = 1.8 * vue, 0
     while y < hauteur + 0.4 * grand:  # puis, en descendant, alternativement à droite et à gauche
         lueurs.append((0.85 * largeur if cote == 0 else 0.15 * largeur, y, 0.45 * grand,
-                       theme.LUEUR_2 if cote == 0 else theme.LUEUR_3, 0.26 if clair else 0.14))
+                       theme.LUEUR_2 if cote == 0 else theme.LUEUR_3, 0.40 if clair else 0.14))
         y, cote = y + 0.9 * vue, 1 - cote
     for x, y, rayon, couleur, opacite in lueurs:
         degrade = QRadialGradient(QPointF(x, y), rayon)

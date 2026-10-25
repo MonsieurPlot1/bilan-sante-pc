@@ -49,8 +49,12 @@ def repolir(widget: QWidget) -> None:
 
 def bouton(texte: str = "", style: str = "", icone: str | None = None, couleur: str | None = None,
            taille_icone: int = 14, **proprietes) -> QPushButton:
-    """Bouton du thème : main au survol ; le cadre de focus n'apparaît qu'au clavier, pas après un clic."""
-    resultat = QPushButton(texte, objectName=style, cursor=Qt.CursorShape.PointingHandCursor, **proprietes)
+    """Bouton du thème : main au survol ; le cadre de focus n'apparaît qu'au clavier, pas après un clic.
+
+    `style` : « principal », « teinte », « lien »… (voir la feuille de style) ; sans style, un bouton secondaire.
+    """
+    resultat = QPushButton(texte, objectName=style or "secondaire", cursor=Qt.CursorShape.PointingHandCursor,
+                           **proprietes)
     resultat.setFocusPolicy(Qt.FocusPolicy.TabFocus)
     if icone:
         resultat.setIcon(theme.icone(icone, couleur or theme.TEXTE, taille_icone))
@@ -478,8 +482,7 @@ class CarteConseil(Verre):
         self.bouton: QPushButton | None = None
         if lien and ouvrir:
             libelle, cible = lien
-            self.bouton = bouton(f" {libelle}", "", "ouvrir", theme.ACCENT_CLAIR, 12)
-            self.bouton.setStyleSheet(f"color: {theme.ACCENT_CLAIR};")
+            self.bouton = bouton(f" {libelle}", "teinte", "ouvrir", theme.ACCENT_CLAIR, 12)
             self.bouton.clicked.connect(lambda: ouvrir(cible))
             droite.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignLeft)
         disposition = QHBoxLayout(self)
@@ -817,7 +820,7 @@ class Segmente(QFrame):
         peintre.fillPath(arrondi(rect, rect.height() / 2), QColor(theme.REMPLI))
         if theme.CLAIR:
             dessiner_ombre(peintre, self.curseur, round(self.curseur.height() / 2), flou=3, decalage=1,
-                           couleur=theme.voile("#1d2440", 0.18))
+                           couleur=theme.voile(theme.ENCRE, 0.18))
         peintre.fillPath(arrondi(self.curseur, self.curseur.height() / 2), QColor(theme.CURSEUR))
 
 
