@@ -1,6 +1,6 @@
 # Journal des versions
 
-## Prochaine version (pas encore publiée)
+## v0.3.6.1 - 2026-10-25
 
 - Nouvelle partie « Jeux et affichage » (hors score) : un écran réglé nettement sous sa fréquence maximale
   (60 Hz sur un écran 144 Hz : tout est moins fluide), un pilote de carte graphique de plus de 6 mois (celui
