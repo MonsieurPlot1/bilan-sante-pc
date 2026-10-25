@@ -12,7 +12,7 @@ from PySide6.QtCore import (QEasingCurve, QPoint, QPointF, QRect, QRectF, QSeque
                             QVariantAnimation)
 from PySide6.QtGui import (QColor, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap,
                            QRadialGradient)
-from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLayout, QVBoxLayout, QWidget
 
 from ui import theme
 
@@ -152,15 +152,24 @@ class Verre(QFrame):
         self._ombre_a_jour(self.geometry())
 
     def _ombre_a_jour(self, ancienne: QRect) -> None:
-        page = self.parentWidget()
-        while page is not None and not isinstance(page, Page):
-            page = page.parentWidget()
-        if not self.ombre or page is None or self.parentWidget() is None:
+        if not self.ombre or self.parentWidget() is None:
+            return
+        page = self._page()
+        if page is None or not page.isVisible():  # onglet caché : il sera redessiné en entier à l'affichage
             return
         marge = 2 * FLOU_OMBRE + DECALAGE_OMBRE
         decalage = self.parentWidget().mapTo(page, QPoint(0, 0))
         for zone in (ancienne, self.geometry()):
             page.update(zone.translated(decalage).adjusted(-marge, -marge, marge, marge))
+
+    def _page(self) -> "Page | None":
+        """La Page qui dessine l'ombre, cherchée une fois (la carte ne change pas de page)."""
+        if getattr(self, "_page_trouvee", None) is None:
+            page = self.parentWidget()
+            while page is not None and not isinstance(page, Page):
+                page = page.parentWidget()
+            self._page_trouvee = page
+        return self._page_trouvee
 
 
 class Page(QWidget):
@@ -176,18 +185,18 @@ class Page(QWidget):
     def __init__(self) -> None:
         super().__init__(objectName="contenu")
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)  # la page couvre tout ce qu'elle occupe
-        self.disposition = QVBoxLayout(self)
+        # Colonne centrée par la mise en page elle-même : au redimensionnement, une seule mise en page par image
+        # (recalculer les marges à chaque pixel en refaisait une seconde).
+        colonne = QWidget(objectName="colonne", maximumWidth=self.LARGEUR_MAX)
+        self.disposition = QVBoxLayout(colonne)
+        self.disposition.setContentsMargins(0, 0, 0, 0)
         self.disposition.setSpacing(16)
-        self._marges(self.MARGE)
-
-    def _marges(self, cote: int) -> None:
-        self.disposition.setContentsMargins(cote, 14, cote, 28)
-
-    def resizeEvent(self, evenement) -> None:
-        cote = max(self.MARGE, (self.width() - self.LARGEUR_MAX) // 2)
-        if self.disposition.contentsMargins().left() != cote:
-            self._marges(cote)
-        super().resizeEvent(evenement)
+        cadre = QHBoxLayout(self)
+        cadre.setContentsMargins(self.MARGE, 14, self.MARGE, 28)
+        cadre.setSpacing(0)
+        cadre.addStretch(0)  # les marges ne grandissent qu'une fois la colonne à sa largeur maximale
+        cadre.addWidget(colonne, 1)
+        cadre.addStretch(0)
 
     def paintEvent(self, evenement) -> None:
         peintre = QPainter(self)
@@ -215,6 +224,7 @@ class Page(QWidget):
 
 REDUCTION = 4  # la lueur est calculée 4 fois plus petite puis agrandie : elle est si douce que ça ne se voit pas
 TRANCHE = 600  # hauteur calculée par tranches : une page qui s'allonge un peu ne fait pas tout recalculer
+PALIER = 64  # largeur et hauteur visible calculées par paliers (voir Ambiance.peindre_lueur)
 
 
 @cache
@@ -328,16 +338,20 @@ class Ambiance(QWidget):
 
     def peindre_lueur(self, peintre: QPainter, zone: QRectF, largeur: int) -> None:
         """Peint la lueur dans `zone` (coordonnées d'une page : 0 en haut de la page)."""
-        vue = max(400, self.height() - theme.HAUTEUR_BARRE)
+        # Largeur et hauteur visible arrondies par paliers, puis l'image étirée à la largeur exacte : pendant un
+        # redimensionnement, la lueur n'est pas recalculée à chaque pixel (l'écart ne se voit pas, elle est floue).
+        palier = -(-max(largeur, 1) // PALIER) * PALIER
+        vue = -(-max(400, self.height() - theme.HAUTEUR_BARRE) // PALIER) * PALIER
         hauteur = (int(zone.bottom()) // TRANCHE + 1) * TRANCHE
         peintre.save()
         peintre.setClipRect(zone)
         peintre.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        cible = QRectF(0, 0, (largeur // REDUCTION + 2) * REDUCTION, (hauteur // REDUCTION + 2) * REDUCTION)
+        cible = QRectF(0, 0, (palier // REDUCTION + 2) * REDUCTION * largeur / palier,
+                       (hauteur // REDUCTION + 2) * REDUCTION)
         if self.progres < 1:  # changement de teinte : l'ancienne s'efface sous la nouvelle
-            peintre.drawImage(cible, _image_lueur(largeur, hauteur, vue, self.ancienne, theme.CLAIR))
+            peintre.drawImage(cible, _image_lueur(palier, hauteur, vue, self.ancienne, theme.CLAIR))
             peintre.setOpacity(self.progres)
-        peintre.drawImage(cible, _image_lueur(largeur, hauteur, vue, self.teinte, theme.CLAIR))
+        peintre.drawImage(cible, _image_lueur(palier, hauteur, vue, self.teinte, theme.CLAIR))
         peintre.setOpacity(1.0)
         peintre.drawTiledPixmap(zone, _grain(), QPointF(zone.x() % 128, zone.y() % 128))  # grain fixé à la page
         peintre.restore()

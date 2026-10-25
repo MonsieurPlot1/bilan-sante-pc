@@ -19,9 +19,10 @@ App Windows grand public : scanne le PC et explique en français clair pourquoi 
 ## Stack
 Python 3.15, PySide6, psutil, winreg, PyInstaller. Windows 11, VS Code.
 Interface dans l'esprit Apple (verre dépoli sur une lueur douce) : matières dans `ui/verre.py`, composants dans
-`ui/widgets.py`, couleurs et échelle typographique dans `ui/theme.py`. Police Inter embarquée (`assets/polices`,
-licence OFL). Les pages restent opaques (elles peignent la lueur) : c'est ce qui rend le défilement fluide, ne pas
-leur donner de `background` dans la feuille de style (test `test_pages_opaques_pour_un_defilement_fluide`).
+`ui/widgets.py`, couleurs et échelle typographique dans `ui/theme.py` (police Segoe UI Variable : Inter, essayée,
+était moins nette et plus lente à dessiner). Les pages restent opaques (elles peignent la lueur) : c'est ce qui
+rend le défilement fluide, ne pas leur donner de `background` dans la feuille de style (test
+`test_pages_opaques_pour_un_defilement_fluide`).
 
 ## Modules
 - Dans le score : démarrage, disque, ressources (mémoire et processeur), redémarrage, batterie (PC portables).

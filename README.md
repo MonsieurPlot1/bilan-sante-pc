@@ -102,7 +102,3 @@ build.bat
 Le résultat est dans `dist\BilanSantePC\BilanSantePC.exe` : copie tout le dossier
 `dist\BilanSantePC` pour l'emporter sur un autre PC. L'icône vient de `assets\icon.ico`
 (ses sources : `icon.svg`, et `icon-simple.svg` pour les petites tailles, de 16 à 24 pixels).
-
-La police de l'interface est Inter (`assets\polices\InterVariable.ttf`), de The Inter Project Authors, sous
-licence SIL Open Font License 1.1 (`assets\polices\OFL.txt`) : elle est livrée avec l'application, rien n'est
-installé dans Windows. Si elle manque, l'interface utilise Segoe UI Variable.

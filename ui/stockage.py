@@ -101,9 +101,13 @@ class TexteCoupe(QLabel):
         self.setToolTip(texte)
         self.setMinimumWidth(60)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self._coupe = (-1, "")  # (largeur, texte coupé) : recalculé seulement quand la largeur change
 
     def paintEvent(self, _evenement) -> None:
-        coupe = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideMiddle, self.width())
+        if self._coupe[0] != self.width():
+            self._coupe = (self.width(), self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideMiddle,
+                                                                       self.width()))
+        coupe = self._coupe[1]
         # Dessiné par le style : la couleur de la feuille de style (objectName) est respectée.
         alignement = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         self.style().drawItemText(QPainter(self), self.rect(), alignement, self.palette(), self.isEnabled(), coupe,
@@ -199,8 +203,13 @@ class LigneDepliable(QFrame):
         disposition.addLayout(entete)
         disposition.addWidget(self.detail)
 
+    def preparer_detail(self) -> None:
+        """Remplit le détail au premier dépliage (ici, rien à faire : il est rempli dès la création)."""
+
     def basculer(self) -> None:
         self.ouvert = not self.ouvert
+        if self.ouvert:
+            self.preparer_detail()
         self.chevron.setPixmap(theme.pixmap_icone("replier" if self.ouvert else "deplier", theme.TEXTE_3, 12))
         depart = min(self.detail.maximumHeight(), self.detail.height())  # repart d'où il en est
         largeur = self.detail.width() or self.width()
@@ -217,6 +226,7 @@ class LigneDepliable(QFrame):
 
     def deplier(self) -> None:
         """Ouvre tout de suite, sans animation : la ligne remplace une ligne qui était ouverte."""
+        self.preparer_detail()
         self.ouvert = True
         self.chevron.setPixmap(theme.pixmap_icone("replier", theme.TEXTE_3, 12))
         self.detail.setMaximumHeight(HAUTEUR_LIBRE)
@@ -242,10 +252,15 @@ def detail_vide(marge_gauche: int) -> tuple[QWidget, QVBoxLayout]:
 
 
 class LigneCategorie(LigneDepliable):
-    """Une catégorie : tuile, nom, explication, taille et part du disque ; un clic déplie ce qu'elle contient."""
+    """Une catégorie : tuile, nom, explication, taille et part du disque ; un clic déplie ce qu'elle contient.
+
+    Ce qu'elle contient n'est créé qu'au premier dépliage : une centaine de lignes en moins à fabriquer à
+    l'arrivée des résultats, et à remettre en page à chaque dépliage ou redimensionnement.
+    `occupe` : vrai pendant une analyse, où les boutons « Supprimer » créés naissent désactivés.
+    """
 
     def __init__(self, categorie: dict, utilise: int, montrer: Action, ouvrir: Callable[[str], None],
-                 supprimer: Action) -> None:
+                 supprimer: Action, occupe: Callable[[], bool] = lambda: False) -> None:
         barre = BarreScore(5)
         textes = QVBoxLayout()
         textes.setSpacing(3)
@@ -262,10 +277,21 @@ class LigneCategorie(LigneDepliable):
         entete.addWidget(colonne_chiffres(taille_lisible(categorie["taille"]),
                                           part_lisible(categorie["taille"], utilise)))
 
-        detail, contenu = detail_vide(42)
+        detail, self.contenu = detail_vide(42)
+        super().__init__(entete, detail, f"{categorie['nom']} : {taille_lisible(categorie['taille'])}")
+        self.categorie, self.barre = categorie, barre
+        self.a_preparer: tuple | None = (montrer, ouvrir, supprimer, occupe)
+
+    def preparer_detail(self) -> None:
+        if self.a_preparer is None:
+            return
+        (montrer, ouvrir, supprimer, occupe), self.a_preparer = self.a_preparer, None
+        categorie, contenu = self.categorie, self.contenu
         for element in categorie["elements"][:NB_PAR_CATEGORIE]:
-            contenu.addWidget(LigneElement(element, montrer,
-                                           supprimer=si_supprimable(supprimer, element["chemin"])))
+            ligne = LigneElement(element, montrer, supprimer=si_supprimable(supprimer, element["chemin"]))
+            for effacer in ligne.findChildren(QPushButton, "supprimer"):
+                effacer.setEnabled(not occupe())
+            contenu.addWidget(ligne)
         if not categorie["elements"]:
             contenu.addWidget(QLabel("Rien à montrer ici.", objectName="secondaire"))
         if categorie["surtout_dans"]:
@@ -278,8 +304,6 @@ class LigneCategorie(LigneDepliable):
             lien = bouton(libelle, "lien", "ouvrir", theme.ACCENT_CLAIR, 12)
             lien.clicked.connect(lambda: ouvrir(cible))
             contenu.addWidget(lien, alignment=Qt.AlignmentFlag.AlignLeft)
-        super().__init__(entete, detail, f"{categorie['nom']} : {taille_lisible(categorie['taille'])}")
-        self.categorie, self.barre = categorie, barre
 
     def remplir(self, ratio: float, animer: bool) -> None:
         self.barre.definir(ratio, theme.TEINTES[TEINTE_CATEGORIE[self.categorie["cle"]]], animer)
@@ -550,7 +574,7 @@ class PageStockage(Page):
 
         vider(self.liste_categories)
         for categorie in sorted(resultat["categories"], key=lambda c: c["taille"], reverse=True):
-            ligne = LigneCategorie(categorie, utilise, self.montrer, self.ouvrir, self.supprimer)
+            ligne = LigneCategorie(categorie, utilise, self.montrer, self.ouvrir, self.supprimer, self.en_cours)
             self.liste_categories.addWidget(ligne)
             ligne.remplir(categorie["taille"] / utilise if utilise else 0, animer)
         self._afficher_doublons(animer)

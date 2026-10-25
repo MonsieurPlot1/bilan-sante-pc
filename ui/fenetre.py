@@ -35,7 +35,8 @@ DUREE_ONGLET = 180  # millisecondes : passage en douceur d'un onglet à l'autre
 ONGLETS = ["Bilan de santé", "Stockage"]
 ONGLET_STOCKAGE = 1
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # boutons de la barre de titre sombres
-DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 35, 36  # Windows 11 : fond et texte de la barre de titre
+DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 34, 35, 36  # Windows 11 : liseré, barre de titre
+WTA_NONCLIENT, WTNCA_NODRAWCAPTION, WTNCA_NODRAWICON = 1, 0x1, 0x2  # barre de titre sans titre ni icône
 
 # Mot court affiché au-dessus de la phrase d'interprétation (la couleur n'est jamais seule).
 ETATS = {"vert": "Bon état", "orange": "À surveiller", "rouge": "À améliorer", "gris": "Analyse incomplète"}
@@ -85,7 +86,8 @@ class Fenetre(QMainWindow):
         self.racine_stockage: str | None = None
         self.doublons_stockage: dict | None = None
         self.construire()
-        colorer_barre_titre(self, QColor(theme.FOND), QColor(theme.TEXTE))  # barre de titre fondue dans le fond
+        colorer_barre_titre(self, *couleurs_cadre())  # barre de titre fondue dans la barre du haut
+        epurer_barre_titre(self)
 
     def construire(self) -> None:
         """Crée le contenu de la fenêtre avec les couleurs du thème, et y remet les dernières analyses.
@@ -309,8 +311,9 @@ class Fenetre(QMainWindow):
             self.comparaison.setText(f"<span style='color:{theme.TEXTE_2}'>{''.join(lignes)}</span>")
             return
         tete, *reste = lignes
+        detail = f"color:{theme.TEXTE_2}; line-height:150%; margin-top:6px"
         self.comparaison.setText(f"<div style='font-size:13.5pt; font-weight:700'>{tete}</div>"
-                                 f"<div style='color:{theme.TEXTE_2}; line-height:140%'>{'<br>'.join(reste)}</div>")
+                                 f"<div style='{detail}'>{'<br>'.join(reste)}</div>")
 
     def lancer(self) -> None:
         self.bouton.setEnabled(False)
@@ -476,7 +479,7 @@ class Fenetre(QMainWindow):
 
     def _preparer_fondu(self, fondu: Fondu) -> None:
         """Recrée le contenu avec les nouvelles couleurs, sous l'image de l'ancien."""
-        ancien_fond, ancien_texte = QColor(theme.FOND), QColor(theme.TEXTE)
+        anciennes = couleurs_cadre()
         positions = [self.pages.widget(numero).verticalScrollBar().value() for numero in range(self.pages.count())]
         self.resultat_stockage, self.racine_stockage = self.stockage.resultat, self.stockage.racine
         self.doublons_stockage = self.stockage.doublons
@@ -488,21 +491,21 @@ class Fenetre(QMainWindow):
         self.construire()
         fondu.raise_()
         # Au tour suivant de Qt (tailles calculées) : même position, image du nouvel affichage, fondu.
-        QTimer.singleShot(0, lambda: self._fondre(fondu, positions, ancien_fond, ancien_texte))
+        QTimer.singleShot(0, lambda: self._fondre(fondu, positions, anciennes))
 
-    def _fondre(self, fondu: Fondu, positions: list[int], ancien_fond: QColor, ancien_texte: QColor) -> None:
-        """Lance le fondu ; la barre de titre suit le même mélange de couleurs, étape par étape."""
+    def _fondre(self, fondu: Fondu, positions: list[int], anciennes: tuple[QColor, QColor, QColor]) -> None:
+        """Lance le fondu ; la barre de titre et le liseré suivent le même mélange de couleurs, étape par étape."""
         for numero, position in enumerate(positions):  # chaque onglet reste au même endroit
             self.pages.widget(numero).verticalScrollBar().setValue(position)
         fondu.hide()
         nouvelle = self.grab()
         fondu.show()
-        nouveau_fond, nouveau_texte = QColor(theme.FOND), QColor(theme.TEXTE)
+        nouvelles = couleurs_cadre()
         bascule = [False]
 
         def avancer(progres: float) -> None:
-            colorer_barre_titre(self, melange(nouveau_fond, ancien_fond, progres),
-                                melange(nouveau_texte, ancien_texte, progres))
+            colorer_barre_titre(self, *(melange(nouvelle_, ancienne, progres)
+                                        for nouvelle_, ancienne in zip(nouvelles, anciennes)))
             if progres >= 0.5 and not bascule[0]:  # boutons réduire/fermer : ils ne savent que basculer
                 bascule[0] = True
                 boutons_barre_titre(self, sombres=not theme.CLAIR)
@@ -583,11 +586,31 @@ def _dwm_attribut():
     return fonction
 
 
-def colorer_barre_titre(fenetre: QWidget, fond: QColor, texte: QColor) -> None:
-    """Couleurs de la barre de titre dessinée par Windows 11 (sans effet sur Windows 10)."""
-    for attribut, couleur in ((DWMWA_CAPTION_COLOR, fond), (DWMWA_TEXT_COLOR, texte)):
+def couleurs_cadre() -> tuple[QColor, QColor, QColor]:
+    """Fond et texte de la barre de titre, et liseré de la fenêtre, aux couleurs du mode actuel."""
+    return QColor(theme.FOND), QColor(theme.TEXTE), QColor(theme.BORD_FENETRE)
+
+
+def colorer_barre_titre(fenetre: QWidget, fond: QColor, texte: QColor, bord: QColor) -> None:
+    """Couleurs de la barre de titre et du liseré dessinés par Windows 11 (sans effet sur Windows 10)."""
+    for attribut, couleur in ((DWMWA_CAPTION_COLOR, fond), (DWMWA_TEXT_COLOR, texte), (DWMWA_BORDER_COLOR, bord)):
         colorref = wintypes.DWORD(couleur.red() | couleur.green() << 8 | couleur.blue() << 16)  # 0x00BBGGRR
         _dwm_attribut()(int(fenetre.winId()), attribut, ctypes.byref(colorref), ctypes.sizeof(colorref))
+
+
+class _OptionsTheme(ctypes.Structure):
+    _fields_ = [("dwFlags", wintypes.DWORD), ("dwMask", wintypes.DWORD)]
+
+
+def epurer_barre_titre(fenetre: QWidget) -> None:
+    """Barre de titre de Windows sans titre ni icône : la barre du haut de l'application les montre déjà.
+
+    Elle se fond alors dans la barre du haut ; le nom reste dans la barre des tâches et pour les lecteurs d'écran.
+    """
+    sans = WTNCA_NODRAWCAPTION | WTNCA_NODRAWICON
+    options = _OptionsTheme(sans, sans)
+    ctypes.WinDLL("uxtheme").SetWindowThemeAttribute(wintypes.HWND(int(fenetre.winId())), WTA_NONCLIENT,
+                                                     ctypes.byref(options), ctypes.sizeof(options))
 
 
 def boutons_barre_titre(fenetre: QWidget, sombres: bool) -> None:
@@ -606,9 +629,8 @@ def mode_barre_titre(app: QApplication) -> None:
 
 
 def preparer_application(app: QApplication) -> None:
-    """Style Fusion, police Inter, palette et feuille de style du mode, et icône de l'application."""
+    """Style Fusion, police, palette et feuille de style du mode, et icône de l'application."""
     app.setStyle("Fusion")
-    theme.charger_polices()
     app.setFont(theme.police("corps"))
     app.setWindowIcon(QIcon(str(theme.ICONE_APPLICATION)))  # vaut pour toutes les fenêtres, dialogues compris
     appliquer_couleurs(app)

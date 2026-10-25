@@ -258,7 +258,23 @@ def test_supprimer_partout_sauf_windows(fenetre, disque):
     sans = [textes(ligne)[0] for ligne in page_stockage.lignes(page.liste_plus_gros) if not boutons_supprimer(ligne)]
     assert sans == ["Windows.old"]  # le jeu, les logiciels et les caches aussi ; pas l'ancien Windows
     temporaires = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "temporaires")
+    assert temporaires.detail.findChildren(LigneElement) == []  # créées au premier dépliage seulement
+    temporaires.deplier()
     assert [bool(boutons_supprimer(e)) for e in temporaires.detail.findChildren(LigneElement)] == [True, False, False]
+
+
+def test_categorie_depliee_pendant_une_analyse(fenetre, disque, monkeypatch):
+    """Lignes créées au dépliage pendant une recherche : leurs « Supprimer » naissent désactivés."""
+    monkeypatch.setattr(doublons, "chercher", lent_doublons)
+    page = fenetre.stockage
+    page.afficher(resultat_du_faux_disque(disque), animer=False)
+    page.chercher_doublons()
+    videos = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "videos")
+    videos.deplier()
+    assert boutons_supprimer(videos) and not any(bouton.isEnabled() for bouton in boutons_supprimer(videos))
+    page.chercher_doublons()  # arrête la recherche
+    attendre(lambda: not page.en_cours())
+    assert all(bouton.isEnabled() for bouton in boutons_supprimer(videos))
 
 
 def taille(page, cle: str) -> int:

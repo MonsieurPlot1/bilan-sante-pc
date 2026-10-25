@@ -326,10 +326,10 @@ def test_pages_opaques_pour_un_defilement_fluide(fenetre):
         assert page.testAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
 
 
-def test_police_inter(app):
+def test_echelle_typographique(app):
     from ui import theme
-    assert theme.famille(theme.CORPS) == "Inter Variable"  # livrée avec l'application, sans l'installer
-    assert app.font().family() == "Inter Variable"
+    assert app.font().family() == theme.famille(theme.CORPS)  # Segoe UI Variable Text, ou Segoe UI à défaut
+    assert theme.police("titre").family() == theme.famille(theme.TITRE)
     assert theme.police("chiffres").featureValue(QFont.Tag("tnum")) == 1  # chiffres de même largeur
     assert theme.police("score").pointSizeF() > theme.police("titre").pointSizeF() > theme.police("corps").pointSizeF()
 

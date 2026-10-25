@@ -227,12 +227,14 @@ class Legende(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.elements: list[tuple[str, str, str]] = []  # (couleur, nom, taille)
+        self._disposees: dict[float, tuple[list[QPointF], float]] = {}  # par largeur : calculé une fois
         politique = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         politique.setHeightForWidth(True)
         self.setSizePolicy(politique)
 
     def definir(self, elements: list[tuple[str, str, str]]) -> None:
         self.elements = elements
+        self._disposees.clear()
         self.setAccessibleDescription(", ".join(f"{nom} : {taille}" for _c, nom, taille in elements))
         self.updateGeometry()
         self.update()
@@ -241,6 +243,13 @@ class Legende(QWidget):
         return theme.police("legende"), theme.police("legende_forte")
 
     def _positions(self, largeur: float) -> tuple[list[QPointF], float]:
+        """Place de chaque élément, sur plusieurs lignes si besoin. La mise en page la demande plusieurs fois
+        par image (pendant un dépliage, un redimensionnement) : gardée par largeur."""
+        if largeur not in self._disposees:
+            self._disposees[largeur] = self._disposer(largeur)
+        return self._disposees[largeur]
+
+    def _disposer(self, largeur: float) -> tuple[list[QPointF], float]:
         nom, valeur = (QFontMetricsF(f) for f in self._polices())
         hauteur_ligne = nom.height() + 6
         positions, x, y = [], 0.0, 0.0
@@ -369,6 +378,7 @@ class Carte(Verre):
         self.titre = QLabel(titre, font=theme.police("carte"))
         self.points = pastille("–")
         self.barre = BarreScore()
+        self.barre.hide()  # avant l'analyse : une barre vide ferait croire à un 0
         self.resume = QLabel("Pas encore analysé.", objectName="secondaire", wordWrap=True,
                              textFormat=Qt.TextFormat.PlainText)
         self.bouton = bouton("Voir le détail", "lien", "deplier", theme.ACCENT_CLAIR, 11)
@@ -456,7 +466,8 @@ class Carte(Verre):
 
 
 class CarteConseil(Verre):
-    """Un conseil : son rang dans un rond, le texte, et à droite un bouton « Ouvrir » s'il y a un endroit où agir."""
+    """Un conseil : son rang dans un rond, le texte, et dessous un bouton « Ouvrir » s'il y a un endroit où agir
+    (sous le texte, il ne le serre jamais en colonne étroite, même quand la fenêtre est petite)."""
 
     def __init__(self, numero: int, texte: str, lien: tuple[str, str] | None = None,
                  ouvrir: Callable[[str], None] | None = None) -> None:
@@ -468,18 +479,21 @@ class CarteConseil(Verre):
                            "border-radius: 14px;")
         corps = QLabel(texte, wordWrap=True, textFormat=Qt.TextFormat.PlainText, font=theme.police("corps"),
                        textInteractionFlags=Qt.TextInteractionFlag.TextSelectableByMouse)
-        disposition = QHBoxLayout(self)
-        disposition.setContentsMargins(18, 16, 16, 16)
-        disposition.setSpacing(14)
-        disposition.addWidget(rond, alignment=Qt.AlignmentFlag.AlignTop)
-        disposition.addWidget(corps, 1)
+        droite = QVBoxLayout()
+        droite.setSpacing(10)
+        droite.addWidget(corps)
         self.bouton: QPushButton | None = None
         if lien and ouvrir:
             libelle, cible = lien
             self.bouton = bouton(f" {libelle}", "", "ouvrir", theme.ACCENT_CLAIR, 12)
             self.bouton.setStyleSheet(f"color: {theme.ACCENT_CLAIR};")
             self.bouton.clicked.connect(lambda: ouvrir(cible))
-            disposition.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignVCenter)
+            droite.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignLeft)
+        disposition = QHBoxLayout(self)
+        disposition.setContentsMargins(18, 16, 20, 16)
+        disposition.setSpacing(14)
+        disposition.addWidget(rond, alignment=Qt.AlignmentFlag.AlignTop)
+        disposition.addLayout(droite, 1)
 
 
 def apparaitre(widget: QWidget, delai: int = 0) -> None:

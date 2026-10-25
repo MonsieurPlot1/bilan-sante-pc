@@ -2,8 +2,9 @@
 
 Tout l'aspect visuel est réglé ici, dans l'esprit des applications d'Apple : du verre dépoli posé sur une
 lueur douce, du texte en trois niveaux de gris, une seule couleur d'action (le bleu).
-Police : Inter (libre, licence OFL), embarquée dans assets/polices ; repli sur Segoe UI Variable.
-Icônes : celles de Windows 11 (Segoe Fluent Icons), rien à installer en plus.
+Polices et icônes : celles de Windows 11 (Segoe UI Variable, Segoe Fluent Icons), rien à installer en plus.
+Segoe UI Variable plutôt qu'une police livrée avec l'application : plus nette sur un écran à 100 %, et plus
+rapide à dessiner (mesuré : des dépliages et des redimensionnements plus fluides).
 Couleurs claires ou sombres : celles choisies avec le bouton de la fenêtre, sinon celles de Windows.
 """
 
@@ -73,6 +74,7 @@ BLANC, NOIR = "#ffffff", "#000000"
 # Fond de la fenêtre, sous la lueur : FOND en haut (même couleur que la barre de titre), FOND_BAS en bas.
 FOND = _selon_mode("#12151f", "#eef0f6")
 FOND_BAS = _selon_mode("#0b0d14", "#e5e8f1")
+BORD_FENETRE = _selon_mode("#2c303c", "#c9ced9")  # liseré de la fenêtre dessiné par Windows 11
 # Texte en trois niveaux, tous lisibles sur le verre (contraste d'au moins 4,5:1).
 TEXTE = _selon_mode("#f5f5f7", "#1d1d1f")
 TEXTE_2 = _selon_mode("#ababb1", "#5e5e64")      # texte secondaire
@@ -131,13 +133,12 @@ def niveau_ratio(ratio: float) -> str:
 
 
 # --- Polices ---
-DOSSIER_POLICES = Path(__file__).parent.parent / "assets" / "polices"
-TITRE = ("Inter Variable", "Segoe UI Variable Display", "Segoe UI")
-CORPS = ("Inter Variable", "Segoe UI Variable Text", "Segoe UI")
+TITRE = ("Segoe UI Variable Display", "Segoe UI")  # dessin serré des grands textes
+CORPS = ("Segoe UI Variable Text", "Segoe UI")
 ICONES = ("Segoe Fluent Icons", "Segoe MDL2 Assets")  # Windows 11, sinon Windows 10
 
 # Icône de l'application (barre de titre, barre des tâches, boîtes de dialogue). build.bat la copie au même
-# endroit dans le .exe, avec les polices, donc ces chemins marchent aussi une fois compilé.
+# endroit dans le .exe, donc ce chemin marche aussi une fois compilé.
 ICONE_APPLICATION = Path(__file__).parent.parent / "assets" / "icon.ico"
 
 # Codes des icônes (communs à Segoe Fluent Icons et Segoe MDL2 Assets).
@@ -156,13 +157,6 @@ ICONE = {
 }
 
 
-def charger_polices() -> None:
-    """Rend la police Inter, livrée avec l'application, utilisable par Qt (sans l'installer dans Windows)."""
-    for fichier in sorted(DOSSIER_POLICES.glob("*.ttf")):
-        QFontDatabase.addApplicationFont(str(fichier))
-    famille.cache_clear()
-
-
 @cache
 def famille(choix: tuple[str, ...]) -> str:
     """Première police installée parmi `choix` (la dernière si aucune ne l'est).
@@ -175,8 +169,8 @@ def famille(choix: tuple[str, ...]) -> str:
 
 # Échelle typographique : peu de tailles et de graisses, toujours les mêmes, comme chez Apple. Elle rend
 # l'interface cohérente, et Qt a moins de polices à préparer (chacune coûte la première fois qu'elle sert).
-# Style : (taille en points, graisse, titre, chiffres). `titre` : dessin serré des grands textes (taille optique
-# d'Inter) ; `chiffres` : chiffres de même largeur, pour ceux qui s'alignent ou défilent.
+# Style : (taille en points, graisse, titre, chiffres). `titre` : dessin serré des grands textes (Segoe UI
+# Variable Display) ; `chiffres` : chiffres de même largeur, pour ceux qui s'alignent ou défilent.
 ECHELLE = {
     "score": (36, QFont.Weight.Bold, True, True),        # le score dans l'anneau
     "grand": (24, QFont.Weight.Bold, True, True),        # espace utilisé du disque
@@ -197,8 +191,6 @@ def police(style: str = "corps") -> QFont:
     resultat = QFont(famille(TITRE if titre else CORPS))
     resultat.setPointSizeF(taille)
     resultat.setWeight(poids)
-    if titre:  # taille optique d'Inter (14 à 32) : lettres plus serrées pour les grands textes
-        resultat.setVariableAxis(QFont.Tag("opsz"), min(32.0, taille * 4 / 3))
     if chiffres:
         resultat.setFeature(QFont.Tag("tnum"), 1)
     return resultat
@@ -227,7 +219,7 @@ def icone(nom: str, couleur: str = TEXTE, taille: int = 16) -> QIcon:
     return resultat
 
 
-HAUTEUR_BARRE = 60  # barre du haut (logo, onglets, mode)
+HAUTEUR_BARRE = 50  # barre du haut (logo, onglets, mode), sous la barre de titre de Windows
 
 STYLE = f"""
 QWidget {{ color: {TEXTE}; }}
