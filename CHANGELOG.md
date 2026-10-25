@@ -1,6 +1,6 @@
 # Journal des versions
 
-## Prochaine version (pas encore publiée)
+## v0.3.7 - 2026-10-25
 
 - Nouvel onglet « Connexion » : la liaison du PC avec la box (Wi-Fi ou câble, force du signal, bande et
   norme du Wi-Fi, vitesse de la liaison), et un test de la connexion internet sur clic (ping, vitesse de
