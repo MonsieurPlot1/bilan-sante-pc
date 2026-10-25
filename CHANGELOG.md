@@ -1,6 +1,6 @@
 # Journal des versions
 
-## Prochaine version (pas encore publiée)
+## v0.4.0 - 2026-10-25
 
 - Mises à jour dans l'application : à l'ouverture, elle regarde sur GitHub si une nouvelle version est publiée.
   Si oui, un bouton « Mettre à jour » apparaît en haut à droite, avec les nouveautés. Un clic télécharge la
