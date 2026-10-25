@@ -21,6 +21,9 @@ un score sur 100 et 3 conseils au maximum.
   suffit pas, à cause du démarrage rapide), et si une mise à jour attend un redémarrage.
 - **Alimentation** (hors score) : si Windows bride le PC pour économiser l'énergie (économiseur
   d'énergie, mode « Meilleure efficacité énergétique » ou « Économies d'énergie »), avec où le changer.
+- **Jeux et affichage** (hors score) : si un écran est réglé nettement sous sa fréquence maximale (60 Hz sur
+  un écran 144 Hz), la date du pilote de la carte graphique qui fait tourner les jeux (conseil au-delà de
+  6 mois) et si le Mode jeu de Windows est coupé.
 - **Batterie** (PC portables seulement) : le niveau de charge, le branchement et l'usure, lue auprès
   du pilote de batterie de Windows. Si le PC ne donne pas cette information, l'application l'écrit
   au lieu d'inventer un chiffre.

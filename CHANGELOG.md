@@ -1,5 +1,12 @@
 # Journal des versions
 
+## Prochaine version (pas encore publiée)
+
+- Nouvelle partie « Jeux et affichage » (hors score) : un écran réglé nettement sous sa fréquence maximale
+  (60 Hz sur un écran 144 Hz : tout est moins fluide), un pilote de carte graphique de plus de 6 mois (celui
+  de la carte qui fait tourner les jeux, sur un PC portable à deux cartes) et le Mode jeu de Windows coupé.
+  Chaque conseil dit où le régler.
+
 ## v0.3.6 - 2026-10-25
 
 - Bilan deux fois plus rapide : les parties de l'analyse se font en même temps (environ 3 s au lieu de 6 sur

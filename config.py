@@ -50,6 +50,19 @@ DISQUE_DUR_IMPACT = 15
 RAM_INSTALLEE_MIN = 8 * 1024**3
 RAM_INSTALLEE_IMPACT = 8
 
+# Jeux et affichage (hors score) : poids des conseils parmi les autres.
+# Écran utilisé nettement sous sa fréquence maximale : toute l'image est moins fluide (souris, défilement, jeux),
+# et ça se règle en deux clics. Conseil si la fréquence utilisée est sous cette part du maximum (60 Hz sur un
+# écran 75 Hz : oui ; 144 Hz sur un écran 165 Hz : non).
+ECRAN_FREQUENCE_IMPACT = 9
+ECRAN_FREQUENCE_PART_MIN = 0.85
+# Pilote de la carte des jeux plus vieux que ça (en jours) : moins de performances et plus de bugs dans les jeux
+# récents.
+PILOTE_GRAPHIQUE_AGE_MAX = 180
+PILOTE_GRAPHIQUE_IMPACT = 5
+# Mode jeu de Windows coupé : effet plus modeste, et seulement pendant une partie.
+MODE_JEU_IMPACT = 3
+
 # Conseils.
 NB_CONSEILS_MAX = 3
 GROS_DOSSIER_SEUIL = 5 * 1024**3  # un dossier personnel est signalé à partir de 5 Go

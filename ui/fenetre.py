@@ -29,7 +29,7 @@ journal = logging.getLogger(__name__)
 # Colonnes du détail dépliable de chaque carte (les cartes sans colonnes n'ont pas de détail).
 COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élément", "Taille", "Détail"],
             "fichiers": [], "ressources": ["Programme", "Mémoire"], "redemarrage": [], "alimentation": [],
-            "batterie": []}
+            "jeux": [], "batterie": []}
 
 DUREE_FONDU = 300  # millisecondes : passage en douceur entre le mode clair et le mode sombre
 DUREE_ONGLET = 180  # millisecondes : passage en douceur d'un onglet à l'autre

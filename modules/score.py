@@ -34,6 +34,12 @@ LIEN_ALIMENTATION: Lien = (PARAMETRES, "ms-settings:powersleep")
 LIEN_OPTIONS_ALIMENTATION: Lien = ("Ouvrir les options d'alimentation", "powercfg.cpl")
 LIEN_GESTIONNAIRE: Lien = ("Ouvrir le Gestionnaire des tâches", "taskmgr.exe")
 LIEN_MISES_A_JOUR: Lien = ("Ouvrir Windows Update", "ms-settings:windowsupdate")
+LIEN_ECRAN: Lien = (PARAMETRES, "ms-settings:display-advanced")
+LIEN_MODE_JEU: Lien = (PARAMETRES, "ms-settings:gaming-gamemode")
+
+# Application de chaque fabricant qui met à jour le pilote de la carte graphique.
+APPLIS_PILOTES = {"NVIDIA": "NVIDIA App", "AMD": "AMD Software: Adrenalin Edition",
+                  "Intel": "Intel Driver & Support Assistant"}
 
 
 def lineaire(valeur: float, ok: float, zero: float) -> float:
@@ -180,6 +186,29 @@ def conseil_alimentation(resultat: dict) -> tuple[str, Lien] | None:
     return None
 
 
+def conseil_ecran(ecran: dict, nom: str, sur_batterie: bool) -> str:
+    return (f"{nom} affiche {ecran['frequence']} images par seconde (Hz), alors qu'il peut aller jusqu'à "
+            f"{ecran['maximum']} Hz : la souris, le défilement et les jeux seraient bien plus fluides. Choisis la "
+            "fréquence la plus haute dans Paramètres > Système > Écran > Paramètres d'affichage avancés."
+            + (" Sur batterie, une fréquence plus basse économise de l'énergie : ce réglage compte surtout quand le "
+               "PC est branché." if sur_batterie else ""))
+
+
+def conseil_pilote(carte: dict) -> str:
+    mois = carte["age"] // 30
+    depuis = f"plus de {mois // 12} ans" if mois >= 24 else f"{mois} mois"
+    return (f"Le pilote de ta carte graphique ({carte['nom']}) date du {carte['date']:%d/%m/%Y}, il y a {depuis}. "
+            "Les pilotes récents corrigent des bugs et rendent les jeux récents plus fluides. Mets-le à jour avec "
+            f"l'application du fabricant ({APPLIS_PILOTES[carte['fabricant']]}) ; sur un PC portable, le site de "
+            "la marque du PC propose aussi le bon pilote.")
+
+
+def conseil_mode_jeu() -> str:
+    return ("Le Mode jeu de Windows est désactivé. Si tu joues sur ce PC, active-le dans Paramètres > Jeux > "
+            "Mode jeu : pendant une partie, Windows donne la priorité au jeu, et Windows Update n'installe pas de "
+            "pilote et ne demande pas de redémarrer.")
+
+
 def conseil_disque_dur() -> str:
     return ("Windows est installé sur un disque dur classique (HDD) : c'est souvent la première cause d'un PC lent "
             "(allumage, ouverture des programmes). Le remplacer par un SSD est l'amélioration la plus efficace, "
@@ -241,6 +270,24 @@ def conseils_batterie(resultat: dict, points: int) -> list[tuple[float, str, Lie
     return [(points * (1 - sante_batterie(resultat)), conseil_batterie(resultat["sante"]), None)]
 
 
+def conseils_jeux(resultat: dict) -> list[tuple[float, str, Lien]]:
+    """Hors score : chaque réglage a un poids fixe parmi les conseils (voir config), comme l'alimentation."""
+    conseils = []
+    ecrans = resultat["ecrans"]
+    for numero, ecran in enumerate(ecrans, start=1):
+        if ecran["frequence"] < ecran["maximum"] * config.ECRAN_FREQUENCE_PART_MIN:
+            nom = "Ton écran" if len(ecrans) == 1 else f"Ton écran {numero}"
+            conseils.append((config.ECRAN_FREQUENCE_IMPACT, conseil_ecran(ecran, nom, resultat["sur_batterie"]),
+                             LIEN_ECRAN))
+            break  # un seul conseil, même si plusieurs écrans sont concernés : le réglage se fait au même endroit
+    carte = resultat["carte_jeux"]
+    if carte and carte["age"] is not None and carte["age"] > config.PILOTE_GRAPHIQUE_AGE_MAX:
+        conseils.append((config.PILOTE_GRAPHIQUE_IMPACT, conseil_pilote(carte), None))
+    if not resultat["mode_jeu"]:
+        conseils.append((config.MODE_JEU_IMPACT, conseil_mode_jeu(), LIEN_MODE_JEU))
+    return conseils
+
+
 MODULES = {
     "demarrage": (sante_demarrage, conseils_demarrage),
     "disque": (sante_disque, conseils_disque),
@@ -280,6 +327,8 @@ def calculer(resultats: dict[str, dict | None]) -> dict:
                      if c[0] >= IMPACT_MIN]
     if resultats.get("alimentation") and (conseil := conseil_alimentation(resultats["alimentation"])):
         conseils.append((config.ALIMENTATION_IMPACT, *conseil))  # hors score : poids fixe
+    if resultats.get("jeux"):
+        conseils += conseils_jeux(resultats["jeux"])
     if (resultats.get("disque") or {}).get("systeme_hdd"):
         conseils.append((config.DISQUE_DUR_IMPACT, conseil_disque_dur(), None))
     installee = (resultats.get("ressources") or {}).get("installee")

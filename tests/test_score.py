@@ -2,6 +2,7 @@
 
 import os
 import unittest
+from datetime import date, timedelta
 
 import config
 from modules import score
@@ -46,6 +47,17 @@ def alimentation(mode: int | None = 2, plan_economies: bool = False) -> dict:
 
 def batterie(sante: float | None = 0.9) -> dict:
     return {"applicable": True, "niveau": 80, "branche": True, "sante": sante}
+
+
+def jeux(frequence: int = 144, maximum: int = 144, age: int | None = 30, mode_jeu: bool = True,
+         sur_batterie: bool = False, ecrans: list[dict] | None = None) -> dict:
+    """Par défaut : écran à sa fréquence maximale, pilote d'un mois, Mode jeu activé."""
+    carte = {"nom": "NVIDIA GeForce RTX 3060", "fabricant": "NVIDIA", "age": age, "memoire": 6 * GO,
+             "date": date(2026, 10, 25) - timedelta(days=age or 0) if age is not None else None}
+    if ecrans is None:
+        ecrans = [{"principal": True, "largeur": 1920, "hauteur": 1080, "frequence": frequence, "maximum": maximum}]
+    return {"ecrans": ecrans, "cartes": [carte], "carte_jeux": carte, "mode_jeu": mode_jeu,
+            "sur_batterie": sur_batterie}
 
 
 def pc(**modules) -> dict:
@@ -326,6 +338,59 @@ class TestConseils(unittest.TestCase):
     def test_disque_systeme_absent(self):
         resultat = score.calculer(pc(disque={"disques": [], "gros_dossiers": []}))
         self.assertEqual(resultat["scores"]["disque"], 30)
+
+
+class TestJeux(unittest.TestCase):
+    """Jeux et affichage : hors score, des conseils à poids fixe."""
+
+    def test_rien_a_regler(self):
+        resultat = score.calculer(pc(jeux=jeux()))
+        self.assertEqual((resultat["score"], resultat["conseils"]), (100, []))
+        self.assertNotIn("jeux", resultat["scores"])  # hors score
+
+    def test_ecran_sous_sa_frequence(self):
+        resultat = score.calculer(pc(jeux=jeux(frequence=60, maximum=144)))
+        self.assertEqual(resultat["score"], 100)  # le score ne bouge pas
+        self.assertIn("Ton écran affiche 60 images par seconde (Hz), alors qu'il peut aller jusqu'à 144 Hz",
+                      resultat["conseils"][0])
+        self.assertEqual(resultat["liens"], [score.LIEN_ECRAN])
+        self.assertNotIn("batterie", resultat["conseils"][0])
+
+    def test_ecran_presque_a_son_maximum(self):
+        for frequence, maximum in ((59, 60), (144, 165)):  # arrondi de 59,94 Hz ; écart trop faible
+            self.assertEqual(score.conseils_jeux(jeux(frequence=frequence, maximum=maximum)), [])
+
+    def test_ecran_sur_batterie(self):
+        conseil = score.conseils_jeux(jeux(frequence=60, maximum=165, sur_batterie=True))[0][1]
+        self.assertIn("Sur batterie, une fréquence plus basse économise de l'énergie", conseil)
+
+    def test_deuxieme_ecran(self):
+        ecrans = [{"principal": True, "largeur": 2560, "hauteur": 1440, "frequence": 165, "maximum": 165},
+                  {"principal": False, "largeur": 1920, "hauteur": 1080, "frequence": 60, "maximum": 144},
+                  {"principal": False, "largeur": 1920, "hauteur": 1080, "frequence": 60, "maximum": 75}]
+        conseils = score.conseils_jeux(jeux(ecrans=ecrans))
+        self.assertEqual(len(conseils), 1)  # un seul conseil d'écran
+        self.assertTrue(conseils[0][1].startswith("Ton écran 2 affiche 60"))
+
+    def test_vieux_pilote(self):
+        self.assertEqual(score.conseils_jeux(jeux(age=config.PILOTE_GRAPHIQUE_AGE_MAX)), [])
+        conseil = score.conseils_jeux(jeux(age=400))[0]
+        self.assertEqual(conseil[0], config.PILOTE_GRAPHIQUE_IMPACT)
+        self.assertIn("il y a 13 mois", conseil[1])
+        self.assertIn("NVIDIA App", conseil[1])
+        self.assertIn("il y a plus de 4 ans", score.conseils_jeux(jeux(age=1488))[0][1])
+        self.assertEqual(score.conseils_jeux(jeux(age=None)), [])  # date du pilote inconnue : rien à dire
+
+    def test_mode_jeu_coupe(self):
+        conseils = score.conseils_jeux(jeux(mode_jeu=False))
+        self.assertEqual([(impact, lien) for impact, _, lien in conseils],
+                         [(config.MODE_JEU_IMPACT, score.LIEN_MODE_JEU)])
+
+    def test_ordre_parmi_les_autres_conseils(self):
+        resultat = score.calculer(pc(jeux=jeux(frequence=60, maximum=144, age=400, mode_jeu=False),
+                                     alimentation=alimentation(mode=1)))
+        self.assertEqual(len(resultat["conseils"]), config.NB_CONSEILS_MAX)
+        self.assertEqual(resultat["liens"], [score.LIEN_ALIMENTATION, score.LIEN_ECRAN, None])  # 10, 9, puis 5
 
 
 if __name__ == "__main__":

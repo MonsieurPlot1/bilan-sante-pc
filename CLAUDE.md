@@ -30,7 +30,7 @@ affiche toutes dans le style de l'application, jamais la bulle grise de Qt.
 
 ## Modules
 - Dans le score : démarrage, disque, ressources (mémoire et processeur), redémarrage, batterie (PC portables).
-- Hors score : fichiers (Corbeille, fichiers temporaires, cache des navigateurs, Windows.old), alimentation (mode d'économie d'énergie).
+- Hors score : fichiers (Corbeille, fichiers temporaires, cache des navigateurs, Windows.old), alimentation (mode d'économie d'énergie), jeux (fréquence des écrans, pilote de la carte graphique des jeux, Mode jeu).
 - Onglet à part, hors du bilan : stockage (`modules/stockage.py`, page `ui/stockage.py`), ce qui occupe un disque en 12 catégories, et doublons (`modules/doublons.py`), fichiers et dossiers personnels au contenu identique.
 - Barème et seuils dans `config.py`, calcul du score et conseils dans `modules/score.py`.
 

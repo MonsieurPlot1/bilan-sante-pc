@@ -20,7 +20,7 @@ from ui.verre import Verre, arrondi, dessiner_ombre, flouter, peindre_verre
 
 # Teinte de la tuile d'icône de chaque partie du bilan (jamais une couleur d'état).
 TUILES = {"demarrage": "violet", "disque": "bleu", "fichiers": "aqua", "ressources": "magenta",
-          "redemarrage": "gris", "alimentation": "bleu", "batterie": "aqua", "historique": "bleu"}
+          "redemarrage": "gris", "alimentation": "bleu", "jeux": "magenta", "batterie": "aqua", "historique": "bleu"}
 
 
 def couleur_alpha(couleur: str, alpha: int) -> QColor:
