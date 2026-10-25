@@ -4,6 +4,7 @@ Lecture seule : on mesure, on ne ferme ni ne modifie aucun programme.
 """
 
 import ctypes
+import time
 from ctypes import wintypes
 
 import psutil
@@ -66,6 +67,26 @@ def memoire_installee() -> int | None:
     return kilo_octets.value * 1024
 
 
+def charge_processeur(duree: float) -> float:
+    """Charge moyenne du processeur pendant `duree` secondes (en %), sans compter l'application elle-même.
+
+    Les autres parties de l'analyse tournent pendant la mesure (lecture des dossiers) : leur travail n'est pas
+    ce qui ralentit le PC d'habitude, il fausserait le chiffre. Même calcul que psutil.cpu_percent(), moins
+    le temps de processeur pris par l'application.
+    """
+    application = psutil.Process()
+    avant, avant_application = psutil.cpu_times(), application.cpu_times()
+    time.sleep(duree)
+    apres, apres_application = psutil.cpu_times(), application.cpu_times()
+    total = sum(apres) - sum(avant)
+    if total <= 0:
+        return 0.0
+    occupe = total - (apres.idle - avant.idle)
+    application_seule = (apres_application.user + apres_application.system
+                         - avant_application.user - avant_application.system)
+    return max(0.0, min(100.0, 100 * (occupe - application_seule) / total))
+
+
 def plus_gourmands(processus: list[tuple[str, int]], nombre: int = NB_PROCESSUS) -> list[dict]:
     """Les `nombre` programmes qui occupent le plus de mémoire, regroupés par nom.
 
@@ -84,7 +105,7 @@ def plus_gourmands(processus: list[tuple[str, int]], nombre: int = NB_PROCESSUS)
 def scan() -> dict:
     """Point d'entrée du module : renvoie les mesures et les constats."""
     memoire = psutil.virtual_memory()
-    cpu = psutil.cpu_percent(interval=DUREE_MESURE_CPU)
+    cpu = charge_processeur(DUREE_MESURE_CPU)
     ram = {"total": memoire.total, "utilise": memoire.total - memoire.available, "pourcentage": memoire.percent}
     installee = memoire_installee()
     constats = [f"Mémoire vive : {taille_lisible(ram['utilise'])} utilisés sur "

@@ -227,7 +227,8 @@ def test_retirer_un_dossier(disque, monkeypatch):
     monkeypatch.setattr(stockage.psutil, "disk_usage", lambda _: Usage(20_000, UTILISE - 110, 10_110, 49.5))
     stockage.retirer(resultat, str(projet), True, {"videos": 100, "documents": 10})
     parties = categories(resultat)
-    assert (parties["videos"]["taille"], parties["documents"]["taille"], parties["corbeille"]["taille"]) == (300, 10, 25)
+    assert (parties["videos"]["taille"], parties["documents"]["taille"],
+            parties["corbeille"]["taille"]) == (300, 10, 25)
     assert parties["systeme"]["taille"] == systeme  # Système ne bouge pas
     assert (resultat["utilise"], resultat["libre"]) == (UTILISE - 110, 10_110)
     assert [e["nom"] for e in parties["videos"]["elements"]] == ["film.mkv"]

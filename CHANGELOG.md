@@ -1,5 +1,13 @@
 # Journal des versions
 
+## Prochaine version (pas encore publiée)
+
+- Bilan deux fois plus rapide : les parties de l'analyse se font en même temps (environ 3 s au lieu de 6 sur
+  un PC déjà analysé). La charge du processeur ne compte plus le travail de l'application elle-même.
+- Plus solide : une entrée abîmée de l'historique est écartée au lieu de bloquer le graphique ; un raccourci
+  illisible du dossier Démarrage n'empêche plus d'analyser les autres programmes ; une panne imprévue de
+  l'analyse ne laisse plus la fenêtre bloquée sur « Analyse en cours ».
+
 ## v0.3.5 - 2026-10-25
 
 - Nouvelle interface, dans l'esprit des applications d'Apple : cartes en verre dépoli posées sur une lueur

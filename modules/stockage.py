@@ -545,8 +545,8 @@ def retirer(resultat: dict, chemin: str, dossier: bool, enleve: dict[str, int]) 
         categories[cle]["taille"] = max(0, categories[cle]["taille"] - octets)
 
     for categorie in resultat["categories"]:
-        categorie["elements"] = [e for e in categorie["elements"]
-                                 if not (e["chemin"] and dans(e["chemin"], chemin) and not os.path.lexists(e["chemin"]))]
+        categorie["elements"] = [e for e in categorie["elements"] if not (
+            e["chemin"] and dans(e["chemin"], chemin) and not os.path.lexists(e["chemin"]))]
         lieux = []
         for lieu in categorie["surtout_dans"]:
             if dans(lieu["chemin"], chemin) and not os.path.lexists(lieu["chemin"]):

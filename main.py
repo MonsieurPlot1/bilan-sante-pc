@@ -30,7 +30,7 @@ def afficher_ressources(resultat: dict) -> None:
 
 
 def cli() -> None:
-    print("Analyse en cours, cela peut prendre une minute...\n")
+    print("Analyse en cours, cela prend moins d'une minute...\n")
     resultat = analyse.analyser()
     print(analyse.rapport_texte(resultat))
     entrees = historique.enregistrer(resultat)

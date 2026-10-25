@@ -1,6 +1,10 @@
 """Tests du module ressources. Lancer avec : python -m pytest"""
 
+from collections import namedtuple
+from types import SimpleNamespace
+
 import psutil
+import pytest
 
 from modules import ressources
 
@@ -45,3 +49,15 @@ def test_scan_reel(monkeypatch):
     assert 0 < len(resultat["processus"]) <= 5
     assert resultat["installee"] >= resultat["ram"]["total"]  # une part est réservée au matériel
     assert len(resultat["constats"]) == 3
+
+
+def test_charge_sans_l_application(monkeypatch):
+    """Le travail de l'application elle-même (analyse des dossiers en parallèle) n'est pas compté."""
+    Systeme = namedtuple("Systeme", "user system idle")
+    Application = namedtuple("Application", "user system")
+    systeme = iter([Systeme(10, 10, 80), Systeme(40, 20, 140)])  # 100 s de processeur, dont 40 occupées
+    application = iter([Application(1, 1), Application(9, 3)])  # dont 10 par l'application
+    monkeypatch.setattr(ressources.psutil, "cpu_times", lambda: next(systeme))
+    monkeypatch.setattr(ressources.psutil, "Process", lambda: SimpleNamespace(cpu_times=lambda: next(application)))
+    monkeypatch.setattr(ressources.time, "sleep", lambda _: None)
+    assert ressources.charge_processeur(3) == pytest.approx(30)

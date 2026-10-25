@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -117,4 +118,30 @@ def test_progression(monkeypatch):
     faux_modules(monkeypatch, demarrage=plante)  # un module qui plante n'arrête pas la progression
     etapes = []
     analyse.analyser(lambda *etape: etapes.append(etape))
-    assert etapes == [(numero, len(analyse.MODULES), nom) for numero, nom in enumerate(analyse.NOMS.values(), start=1)]
+    total = len(analyse.MODULES)
+    assert etapes[0] == (0, total, "Démarrage")  # au départ : aucune partie finie
+    assert [finies for finies, _, _ in etapes] == list(range(total))  # puis une de plus à chaque partie finie
+    assert all(nombre == total and nom in analyse.NOMS.values() for _, nombre, nom in etapes)
+
+
+def test_modules_lances_en_meme_temps(monkeypatch):
+    """La durée est celle du module le plus long, pas la somme ; les résultats restent dans l'ordre d'affichage."""
+    def lent(resultat):
+        def scan():
+            time.sleep(0.4)
+            return resultat()
+        return scan
+    faux_modules(monkeypatch, demarrage=lent(lambda: {"constats": [], **demarrage(5)}),
+                 disque=lent(lambda: {"constats": [], **disque(40)}),
+                 ressources=lent(lambda: {"constats": [], **ressources()}))
+    debut = time.perf_counter()
+    r = analyse.analyser()
+    assert time.perf_counter() - debut < 1.0  # trois modules de 0,4 s : 1,2 s l'un après l'autre
+    assert list(r["modules"]) == [cle for cle, _, _ in analyse.MODULES if cle != "batterie"]
+    assert analyse.score_global(r) == 100
+
+
+def test_resultat_d_une_analyse_en_echec():
+    r = analyse.echec()
+    assert analyse.score_global(r) is None and analyse.conseils(r) == []
+    assert "n'a pas pu aboutir" in analyse.rapport_texte(r)

@@ -103,3 +103,12 @@ def test_fichier_abime_mis_de_cote(tmp_path):
     assert historique.charger(tmp_path) == []
     assert (tmp_path / "historique.abime.json").exists()
     assert historique.enregistrer(resultat(70), tmp_path)[0]["score"] == 70
+
+
+def test_entrees_abimees_ecartees(tmp_path):
+    """Une entrée abîmée (modifiée à la main…) ferait planter le graphique : seules les bonnes sont gardées."""
+    bonne = historique.entree(resultat(70))
+    abimees = [{"date": "hier", "score": 50, "scores": {}}, {"date": bonne["date"], "score": "70", "scores": {}},
+               {"date": bonne["date"], "score": 70}, "texte", None]
+    historique.fichier(tmp_path).write_text(json.dumps([*abimees, bonne]), encoding="utf-8")
+    assert historique.charger(tmp_path) == [bonne]

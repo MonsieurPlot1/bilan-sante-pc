@@ -16,34 +16,39 @@ PLAN_ECONOMIES = uuid.UUID("a1841308-3541-4fab-bc81-f71556f20b4a")  # mode de ge
 EFFECTIVE_POWER_MODE_V2 = 2
 
 _Rappel = ctypes.WINFUNCTYPE(None, ctypes.c_int, ctypes.c_void_p)
+_recus: list[int] = []
+_arrive = threading.Event()
+
+
+# Défini une fois pour toutes, jamais libéré : Windows l'appelle depuis un autre thread, et pourrait encore le
+# faire juste après la désinscription. Un rappel déjà libéré ferait alors planter toute l'application.
+@_Rappel
+def _rappel(mode: int, _contexte) -> None:
+    _recus.append(mode)
+    _arrive.set()
 
 
 def mode_effectif() -> int | None:
     """Mode d'alimentation en vigueur (clé de MODES), ou None si Windows ne répond pas.
 
-    Windows envoie le mode à un rappel, depuis un autre thread, juste après l'inscription.
+    Windows envoie le mode au rappel, depuis un autre thread, juste après l'inscription.
     """
     powrprof = ctypes.WinDLL("powrprof")
     powrprof.PowerRegisterForEffectivePowerModeNotifications.restype = ctypes.c_long
     powrprof.PowerRegisterForEffectivePowerModeNotifications.argtypes = [
         wintypes.ULONG, _Rappel, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
     powrprof.PowerUnregisterFromEffectivePowerModeNotifications.argtypes = [ctypes.c_void_p]
-    recus, arrive = [], threading.Event()
-
-    @_Rappel
-    def rappel(mode: int, _contexte) -> None:
-        recus.append(mode)
-        arrive.set()
-
+    _recus.clear()
+    _arrive.clear()
     inscription = ctypes.c_void_p()
-    if powrprof.PowerRegisterForEffectivePowerModeNotifications(EFFECTIVE_POWER_MODE_V2, rappel, None,
+    if powrprof.PowerRegisterForEffectivePowerModeNotifications(EFFECTIVE_POWER_MODE_V2, _rappel, None,
                                                                  ctypes.byref(inscription)):
         return None
     try:
-        arrive.wait(1)
+        _arrive.wait(1)
     finally:
         powrprof.PowerUnregisterFromEffectivePowerModeNotifications(inscription)
-    return recus[-1] if recus else None
+    return _recus[-1] if _recus else None
 
 
 def plan_economies() -> bool:

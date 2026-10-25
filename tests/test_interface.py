@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QFont, QHelpEvent, QWheelEvent
-from PySide6.QtWidgets import QApplication, QDialog, QToolTip, QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QToolTip, QTreeWidget, QTreeWidgetItem
 
 import historique
 from modules import fichiers as module_fichiers
@@ -168,8 +168,18 @@ def test_progression_affichee(fenetre):
     fenetre.avancer(2, 6, "Disque")
     assert fenetre.progression.maximum() == 600  # en centièmes de partie : la barre glisse
     assert fini.wait(3000)  # attend la vraie fin du glissement : un délai fixe échouait sur un PC chargé
-    assert fenetre.progression.value() == 100  # une partie finie
-    assert fenetre.info.text() == "Analyse en cours : Disque (2 sur 6)…"
+    assert fenetre.progression.value() == 200  # deux parties finies
+    assert fenetre.info.text() == "Analyse en cours : Disque (2 sur 6 finies)…"
+
+
+def test_panne_imprevue_de_l_analyse(fenetre, app, monkeypatch):
+    """Même si l'analyse plante en dehors des modules, la fenêtre reçoit un résultat et ne reste pas bloquée."""
+    monkeypatch.setattr(analyse, "analyser", lambda *_: plante())
+    fenetre.lancer()
+    fenetre.analyse.wait()
+    app.processEvents()  # livre le signal de fin envoyé depuis le thread
+    assert fenetre.bouton.isEnabled() and fenetre.jauge.note is None
+    assert "n'a pas pu aboutir" in fenetre.liste_conseils.itemAt(0).widget().findChild(QLabel).text()
 
 
 def test_analyse_en_arriere_plan(fenetre, app, monkeypatch):

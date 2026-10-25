@@ -15,7 +15,7 @@ un score sur 100 et 3 conseils au maximum.
   n'apparaît que si les vider ferait vraiment de la place sur un disque presque plein. Un bouton
   permet de vider la Corbeille, après confirmation.
 - **Mémoire et processeur** : la mémoire vive utilisée, la charge du processeur mesurée pendant
-  3 secondes, les 5 programmes qui prennent le plus de mémoire et la mémoire vive installée
+  3 secondes (sans compter l'application elle-même), les 5 programmes qui prennent le plus de mémoire et la mémoire vive installée
   (conseil hors score sous 8 Go).
 - **Redémarrage** : depuis combien de jours Windows n'a pas vraiment redémarré (« Arrêter » ne
   suffit pas, à cause du démarrage rapide), et si une mise à jour attend un redémarrage.
@@ -64,8 +64,8 @@ Téléchargements eux-mêmes.
 Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` :
 - `bilan.log` : un journal, utile en cas de problème ;
 - `historique.json` : les chiffres de chaque analyse (date, scores, espace disque utilisé), pour
-  l'encadré « Depuis la dernière fois » (avec l'évolution du disque sur le dernier mois) et le graphique. Aucun nom de programme ni de fichier.
-  Le bouton « Effacer l'historique » le supprime.
+  l'encadré « Depuis la dernière fois » (avec l'évolution du disque sur le dernier mois) et le graphique.
+  Aucun nom de programme ni de fichier. Le bouton « Effacer l'historique » le supprime.
 - `reglages.json` : le mode clair ou sombre choisi avec le bouton en haut de la fenêtre (sans ce
   fichier, l'application suit le mode de Windows).
 

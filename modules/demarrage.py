@@ -145,12 +145,19 @@ def lister_programmes() -> list[dict]:
         if not dossier.is_dir():
             continue
         coupes = desactives(racine, "StartupFolder")  # noms de fichiers, extension comprise
-        for fichier in sorted(dossier.iterdir()):
+        try:
+            contenu = sorted(dossier.iterdir())
+        except OSError:  # dossier illisible : les autres sources sont quand même listées
+            continue
+        for fichier in contenu:
             if not fichier.is_file() or fichier.name.lower() == "desktop.ini":
                 continue
             chemin = str(fichier)
             if fichier.suffix.lower() == ".lnk":
-                chemin = cible_raccourci(fichier.read_bytes()) or chemin
+                try:
+                    chemin = cible_raccourci(fichier.read_bytes()) or chemin
+                except OSError:  # raccourci illisible (accès refusé) : on montre le raccourci lui-même
+                    pass
             programmes.append({"nom": fichier.stem, "chemin": chemin, "editeur": editeur(chemin), "source": source,
                                "actif": fichier.name.lower() not in coupes})
     return programmes

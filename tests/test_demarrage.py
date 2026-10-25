@@ -2,8 +2,11 @@
 
 import os
 import struct
+import tempfile
 import unittest
 import unittest.mock
+import winreg
+from pathlib import Path
 
 from modules import demarrage
 
@@ -76,6 +79,21 @@ class TestScan(unittest.TestCase):
         self.assertEqual(resultat["nb_desactives"], 2)
         self.assertEqual(resultat["constats"],
                          ["1 programme se lance au démarrage de Windows (2 autres désactivés dans les Paramètres)."])
+
+
+class TestDossierDemarrage(unittest.TestCase):
+    def test_raccourci_illisible(self):
+        """Un raccourci illisible (accès refusé) ne fait pas échouer toute la partie Démarrage."""
+        with tempfile.TemporaryDirectory() as dossier:
+            Path(dossier, "Outil.lnk").write_bytes(faux_raccourci(r"C:\Outil\outil.exe", True))
+            def refus(_chemin):
+                raise PermissionError("Accès refusé")
+            with (unittest.mock.patch.object(demarrage, "SOURCES_REGISTRE", []),
+                  unittest.mock.patch.object(demarrage, "DOSSIERS_DEMARRAGE",
+                                             [(dossier, "Dossier Démarrage", winreg.HKEY_CURRENT_USER)]),
+                  unittest.mock.patch.object(Path, "read_bytes", refus)):
+                programmes = demarrage.lister_programmes()
+        self.assertEqual([(p["nom"], p["chemin"]) for p in programmes], [("Outil", str(Path(dossier, "Outil.lnk")))])
 
 
 class TestDesactive(unittest.TestCase):

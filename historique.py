@@ -29,8 +29,19 @@ def fichier(dossier: Path | None = None) -> Path:
     return (dossier or dossier_par_defaut()) / "historique.json"
 
 
+def lisible(entree: object) -> bool:
+    """Vrai si l'entrée a les champs dont se servent la comparaison et le graphique, au bon format."""
+    try:
+        datetime.fromisoformat(entree["date"])
+        return (isinstance(entree["score"], int | float) and isinstance(entree["scores"], dict)
+                and all(isinstance(points, int | float) for points in entree["scores"].values())
+                and isinstance(entree.get("disque_utilise"), int | float | None))
+    except (TypeError, KeyError, ValueError, AttributeError):
+        return False
+
+
 def charger(dossier: Path | None = None) -> list[dict]:
-    """Entrées de l'historique, de la plus ancienne à la plus récente."""
+    """Entrées de l'historique, de la plus ancienne à la plus récente (sans celles qui sont abîmées)."""
     chemin = fichier(dossier)
     try:
         entrees = json.loads(chemin.read_text(encoding="utf-8"))
@@ -44,7 +55,12 @@ def charger(dossier: Path | None = None) -> list[dict]:
         except OSError:
             pass
         return []
-    return entrees if isinstance(entrees, list) else []
+    if not isinstance(entrees, list):
+        return []
+    lisibles = [e for e in entrees if lisible(e)]
+    if len(lisibles) < len(entrees):  # une entrée abîmée ferait planter le graphique : elle est écartée
+        journal.warning("%d entrée(s) abîmée(s) écartée(s) de l'historique", len(entrees) - len(lisibles))
+    return lisibles
 
 
 def entree(resultat: dict) -> dict | None:

@@ -8,6 +8,7 @@ import html
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from ctypes import wintypes
 from datetime import datetime
@@ -53,27 +54,39 @@ def arriere_plan():
             kernel32.SetThreadPriority(kernel32.GetCurrentThread(), THREAD_MODE_BACKGROUND_END)
 
 
-def analyser(progression: Callable[[int, int, str], None] = lambda *_: None) -> dict:
-    """Lance chaque module ; un module qui plante n'empêche pas les autres.
+def _en_arriere_plan(scan: Callable[[], dict]) -> dict:
+    with arriere_plan():
+        return scan()
 
-    Dans "modules" : le résultat de chaque module, None s'il a planté ;
+
+def analyser(progression: Callable[[int, int, str], None] = lambda *_: None) -> dict:
+    """Lance les modules en même temps ; un module qui plante n'empêche pas les autres.
+
+    En même temps : la mesure du processeur (3 s d'attente) et les petites parties se font pendant la
+    mesure des dossiers, la plus longue, qui fixe seule la durée de l'analyse.
+    Dans "modules" : le résultat de chaque module (dans l'ordre de MODULES), None s'il a planté ;
     un module « non applicable » (batterie d'un PC fixe) n'y figure pas.
-    `progression(numéro, total, nom)` est appelée avant chaque module.
+    `progression(finies, total, nom)` : au départ puis à chaque partie finie, le nombre de parties finies et
+    le nom d'une partie encore en cours.
     """
     debut = time.perf_counter()
-    modules, erreurs = {}, {}
-    with arriere_plan():
-        for numero, (cle, nom, scan) in enumerate(MODULES, start=1):
-            progression(numero, len(MODULES), nom)
+    resultats, erreurs = {}, {}
+    restants = [nom for _, nom, _ in MODULES]
+    progression(0, len(MODULES), restants[0])
+    with ThreadPoolExecutor(max_workers=len(MODULES), thread_name_prefix="analyse") as executeur:
+        taches = {executeur.submit(_en_arriere_plan, scan): (cle, nom) for cle, nom, scan in MODULES}
+        for tache in as_completed(taches):
+            cle, nom = taches[tache]
             try:
-                resultat = scan()
+                resultats[cle] = tache.result()
             except Exception:  # on veut isoler n'importe quelle panne du module
                 journal.exception("Échec du module %s", nom)
                 erreurs[cle] = f"L'analyse « {nom} » n'a pas pu aboutir. {AIDE}"
-                modules[cle] = None
-                continue
-            if resultat.get("applicable", True):
-                modules[cle] = resultat
+            restants.remove(nom)
+            if restants:
+                progression(len(MODULES) - len(restants), len(MODULES), restants[0])
+    modules = {cle: resultats.get(cle) for cle, _, _ in MODULES
+               if cle in erreurs or resultats[cle].get("applicable", True)}
 
     try:
         bilan = score.calculer(modules)
@@ -85,6 +98,12 @@ def analyser(progression: Callable[[int, int, str], None] = lambda *_: None) -> 
     duree = time.perf_counter() - debut
     journal.info("Analyse terminée en %.1f s (erreurs : %s)", duree, list(erreurs) or "aucune")
     return {"modules": modules, "bilan": bilan, "erreurs": erreurs, "duree": duree, "date": datetime.now()}
+
+
+def echec() -> dict:
+    """Résultat d'une analyse qui n'a pas pu aller au bout (panne imprévue en dehors des modules)."""
+    return {"modules": {}, "bilan": None, "erreurs": {"score": f"L'analyse n'a pas pu aboutir. {AIDE}"},
+            "duree": 0.0, "date": datetime.now()}
 
 
 def score_global(resultat: dict) -> int | None:

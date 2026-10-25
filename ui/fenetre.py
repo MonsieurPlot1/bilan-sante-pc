@@ -46,11 +46,15 @@ ETATS = {"vert": "Bon état", "orange": "À surveiller", "rouge": "À améliorer
 class Analyse(QThread):
     """Lance l'analyse hors du thread de l'interface pour que la fenêtre ne gèle pas."""
 
-    etape = Signal(int, int, str)  # numéro, total, nom de la partie en cours
+    etape = Signal(int, int, str)  # parties finies, total, nom d'une partie encore en cours
     termine = Signal(object)
 
     def run(self) -> None:
-        resultat = analyse.analyser(self.etape.emit)
+        try:
+            resultat = analyse.analyser(self.etape.emit)
+        except Exception:  # panne imprévue : la fenêtre ne doit pas rester bloquée sur « Analyse en cours »
+            journal.exception("Échec de l'analyse")
+            resultat = analyse.echec()
         try:  # l'historique est un plus : s'il échoue, l'analyse s'affiche quand même
             resultat["historique"] = historique.enregistrer(resultat)
             resultat["comparaison"] = historique.comparer(resultat["historique"], analyse.NOMS)
@@ -196,7 +200,7 @@ class Fenetre(QMainWindow):
         self.etat = pastille("Pas encore analysé")
         self.phrase = QLabel("Clique sur « Analyser mon PC » pour commencer.", wordWrap=True,
                              font=theme.police("titre"))
-        self.info = QLabel("L'analyse prend environ une minute. Elle lit ton PC sans rien changer.",
+        self.info = QLabel("L'analyse prend moins d'une minute. Elle lit ton PC sans rien changer.",
                            objectName="secondaire", wordWrap=True)
         self.bouton = bouton("  Analyser mon PC", "principal", "analyser", "white", 15,
                              font=theme.police("fort"))
@@ -334,13 +338,14 @@ class Fenetre(QMainWindow):
         self.analyse.termine.connect(self.afficher)
         self.analyse.start()
 
-    def avancer(self, numero: int, total: int, nom: str) -> None:
-        """Pendant l'analyse : la partie en cours et les parties déjà faites."""
+    def avancer(self, finies: int, total: int, nom: str) -> None:
+        """Pendant l'analyse : les parties déjà finies, et l'une de celles encore en cours."""
         self.progression.setMaximum(total * 100)
         self.glissement.stop()
-        self.glissement.setEndValue((numero - 1) * 100)  # depuis la position du moment
+        self.glissement.setEndValue(finies * 100)  # depuis la position du moment
         self.glissement.start()
-        self.info.setText(f"Analyse en cours : {nom} ({numero} sur {total})…")
+        self.info.setText(f"Analyse en cours : {nom} ({finies} sur {total} finies)…" if finies
+                          else f"Analyse en cours : {nom}…")
 
     def afficher(self, resultat: dict, animer: bool = True) -> None:
         self.resultat = resultat
