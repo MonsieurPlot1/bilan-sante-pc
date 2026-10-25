@@ -1,7 +1,9 @@
-"""Thème de l'interface : couleurs, polices, icônes et feuille de style.
+"""Thème de l'interface : couleurs, matières (verre dépoli), polices, icônes et feuille de style.
 
-Tout l'aspect visuel est réglé ici. Polices et icônes sont celles de Windows 11
-(Segoe UI Variable, Segoe Fluent Icons) : rien à installer en plus.
+Tout l'aspect visuel est réglé ici, dans l'esprit des applications d'Apple : du verre dépoli posé sur une
+lueur douce, du texte en trois niveaux de gris, une seule couleur d'action (le bleu).
+Police : Inter (libre, licence OFL), embarquée dans assets/polices ; repli sur Segoe UI Variable.
+Icônes : celles de Windows 11 (Segoe Fluent Icons), rien à installer en plus.
 Couleurs claires ou sombres : celles choisies avec le bouton de la fenêtre, sinon celles de Windows.
 """
 
@@ -53,47 +55,89 @@ def _selon_mode(sombre: str, clair: str) -> str:
     return clair if CLAIR else sombre
 
 
+def voile(couleur: str, opacite: float) -> str:
+    """La couleur avec cette opacité (0 à 1), au format « #AARRGGBB » que QColor comprend."""
+    c = QColor(couleur)
+    return f"#{round(opacite * 255):02x}{c.red():02x}{c.green():02x}{c.blue():02x}"
+
+
+def rgba(couleur: str, alpha: int | None = None) -> str:
+    """Couleur pour la feuille de style : `alpha` de 0 à 255, sinon celle de la couleur (« #AARRGGBB »)."""
+    c = QColor(couleur)
+    return f"rgba({c.red()}, {c.green()}, {c.blue()}, {c.alpha() if alpha is None else alpha})"
+
+
+BLANC, NOIR = "#ffffff", "#000000"
+
 # --- Couleurs (sombre, clair) ---
-FOND = _selon_mode("#0f1117", "#f3f4f7")
-SURFACE = _selon_mode("#171a21", "#ffffff")
-SURFACE_2 = _selon_mode("#1e222b", "#eef0f4")   # éléments posés sur une carte (tableaux, survol)
-BORDURE = _selon_mode("#262b36", "#dcdfe6")
-TEXTE = _selon_mode("#e8eaf0", "#1b1f27")
-TEXTE_2 = _selon_mode("#a3abba", "#4b5363")     # texte secondaire
-TEXTE_3 = _selon_mode("#6f7789", "#5f6777")     # légendes, repères
-ACCENT = _selon_mode("#3b6cf6", "#2f5fe0")      # bouton principal : contraste suffisant avec le texte blanc
-ACCENT_SURVOL = _selon_mode("#5080f7", "#2752c9")
-ACCENT_APPUI = _selon_mode("#315ddb", "#2148b0")
-ACCENT_CLAIR = _selon_mode("#7aa2ff", "#2f5fe0")  # liens, courbe du graphique
-HEROS = _selon_mode("#1b2030", "#e8eefc")       # début du dégradé de la zone du score
-SURVOL = _selon_mode("#262b36", "#e4e7ed")
-SURVOL_BORDURE = _selon_mode("#323846", "#c9ced8")
-PRINCIPAL_INACTIF = _selon_mode("#253463", "#b9c8f2")
-PRINCIPAL_INACTIF_TEXTE = _selon_mode("#a9b8e8", "#f5f7ff")
-LIGNE_ALTERNEE = _selon_mode("#1b1f27", "#f6f7f9")
-SELECTION = _selon_mode("#2a3550", "#dbe5ff")
-POIGNEE = _selon_mode("#2c3240", "#c9ced8")      # barres de défilement
-POIGNEE_SURVOL = _selon_mode("#3a4152", "#aeb4c0")
-ONGLETS_FOND = _selon_mode("#171a21", "#eef0f4")  # bande des onglets
-ONGLET_ACTIF = _selon_mode("#2a303d", "#ffffff")  # onglet choisi, en relief sur la bande
+# Fond de la fenêtre, sous la lueur : FOND en haut (même couleur que la barre de titre), FOND_BAS en bas.
+FOND = _selon_mode("#12151f", "#eef0f6")
+FOND_BAS = _selon_mode("#0b0d14", "#e5e8f1")
+# Texte en trois niveaux, tous lisibles sur le verre (contraste d'au moins 4,5:1).
+TEXTE = _selon_mode("#f5f5f7", "#1d1d1f")
+TEXTE_2 = _selon_mode("#ababb1", "#5e5e64")      # texte secondaire
+TEXTE_3 = _selon_mode("#98989e", "#6e6e73")      # légendes, repères
+# Une seule couleur d'action, comme chez Apple. Bouton principal : texte blanc, contraste 4,7:1.
+ACCENT = "#0071e3"
+ACCENT_SURVOL = "#0a7cf0"
+ACCENT_APPUI = "#0064ca"
+ACCENT_CLAIR = _selon_mode("#2997ff", "#0066cc")  # liens, courbe du graphique
+
+# Verre dépoli des cartes : un voile blanc plus marqué en haut, et un filet de lumière sur le bord.
+VERRE_HAUT = _selon_mode(voile(BLANC, 0.085), voile(BLANC, 0.72))
+VERRE_BAS = _selon_mode(voile(BLANC, 0.045), voile(BLANC, 0.50))
+REFLET_HAUT = _selon_mode(voile(BLANC, 0.20), voile(BLANC, 1.0))
+REFLET_BAS = _selon_mode(voile(BLANC, 0.05), voile(BLANC, 0.55))
+CONTOUR = _selon_mode(voile(NOIR, 0.30), voile("#1d2440", 0.07))  # trait extérieur, qui détache la carte
+SURFACE = _selon_mode("#232633", "#f6f7fa")  # couleur moyenne d'une carte : anneau autour des points du graphique
+OMBRE = _selon_mode(voile(NOIR, 0.30), voile("#26305a", 0.09))
+# Verre des fenêtres de confirmation et des annonces.
+VERRE_FEUILLE = _selon_mode(voile("#262a36", 0.92), voile("#fbfbfd", 0.94))
+VOILE_FEUILLE = _selon_mode(voile(NOIR, 0.35), voile("#1d2440", 0.16))  # assombrit la fenêtre derrière
+
+# Éléments posés sur le verre : boutons secondaires, pistes des barres, survol des lignes.
+REMPLI = _selon_mode(voile(BLANC, 0.09), voile(NOIR, 0.05))
+REMPLI_SURVOL = _selon_mode(voile(BLANC, 0.14), voile(NOIR, 0.08))
+REMPLI_APPUI = _selon_mode(voile(BLANC, 0.06), voile(NOIR, 0.11))
+SURVOL_LIGNE = _selon_mode(voile(BLANC, 0.055), voile(NOIR, 0.04))
+SEPARATEUR = _selon_mode(voile(BLANC, 0.08), voile(NOIR, 0.08))
+CURSEUR = _selon_mode(voile(BLANC, 0.17), BLANC)  # pastille qui glisse dans les sélecteurs
+POIGNEE = _selon_mode(voile(BLANC, 0.22), voile(NOIR, 0.22))  # barres de défilement
+POIGNEE_SURVOL = _selon_mode(voile(BLANC, 0.38), voile(NOIR, 0.38))
 
 # Couleurs d'état, réservées au niveau de santé (toujours accompagnées d'un texte).
-NIVEAUX = {"vert": _selon_mode("#34d399", "#15803d"), "orange": _selon_mode("#fbbf24", "#b45309"),
-           "rouge": _selon_mode("#f87171", "#dc2626"), "gris": TEXTE_3}
+# NIVEAUX : pour le texte (lisible sur le verre) ; VIFS : pour l'anneau du score et les barres.
+NIVEAUX = {"vert": _selon_mode("#30d158", "#1e7b34"), "orange": _selon_mode("#ff9f0a", "#c93400"),
+           "rouge": _selon_mode("#ff6961", "#d70015"), "gris": TEXTE_3}
+VIFS = {"vert": _selon_mode("#30d158", "#34c759"), "orange": _selon_mode("#ff9f0a", "#ff9500"),
+        "rouge": _selon_mode("#ff453a", "#ff3b30"), "gris": TEXTE_3}
+
+# Lueur du fond : la teinte principale suit la santé du PC (bleu avant toute analyse).
+LUEURS = {"neutre": _selon_mode("#2f6bff", "#7aa7ff"),
+          **{niveau: VIFS[niveau] for niveau in ("vert", "orange", "rouge")}}
+LUEUR_2 = _selon_mode("#5e5ce6", "#a9a6ff")  # indigo, en haut à droite
+LUEUR_3 = _selon_mode("#40c8e0", "#8fe3f0")  # bleu-vert, discret, en bas
+
+# Teintes des icônes et des catégories du stockage (jamais les couleurs d'état). Ordre et nuances vérifiés
+# pour rester distincts deux à deux, y compris pour les daltoniens.
+TEINTES = {"bleu": _selon_mode("#3987e5", "#2a78d6"), "magenta": _selon_mode("#d55181", "#e0679a"),
+           "violet": _selon_mode("#9085e9", "#6250d6"), "aqua": _selon_mode("#199e70", "#18a473"),
+           "gris": _selon_mode("#7c7c84", "#8e8e93"), "gris_clair": _selon_mode("#5c5c66", "#a8a8ae")}
 
 
-def rgba(couleur: str, alpha: int) -> str:
-    """Couleur semi-transparente pour la feuille de style (alpha de 0 à 255)."""
-    c = QColor(couleur)
-    return f"rgba({c.red()}, {c.green()}, {c.blue()}, {alpha})"
+def niveau_ratio(ratio: float) -> str:
+    """Niveau de couleur d'une partie selon la part de points gardés."""
+    return "vert" if ratio >= 0.8 else "orange" if ratio >= 0.5 else "rouge"
+
 
 # --- Polices ---
-TITRE = ("Segoe UI Variable Display", "Segoe UI")
-CORPS = ("Segoe UI Variable Text", "Segoe UI")
+DOSSIER_POLICES = Path(__file__).parent.parent / "assets" / "polices"
+TITRE = ("Inter Variable", "Segoe UI Variable Display", "Segoe UI")
+CORPS = ("Inter Variable", "Segoe UI Variable Text", "Segoe UI")
 ICONES = ("Segoe Fluent Icons", "Segoe MDL2 Assets")  # Windows 11, sinon Windows 10
 
 # Icône de l'application (barre de titre, barre des tâches, boîtes de dialogue). build.bat la copie au même
-# endroit dans le .exe, donc ce chemin marche aussi une fois compilé.
+# endroit dans le .exe, avec les polices, donc ces chemins marchent aussi une fois compilé.
 ICONE_APPLICATION = Path(__file__).parent.parent / "assets" / "icon.ico"
 
 # Codes des icônes (communs à Segoe Fluent Icons et Segoe MDL2 Assets).
@@ -101,13 +145,22 @@ ICONE = {
     "demarrage": "", "disque": "", "ressources": "",
     "fichiers": "", "redemarrage": "", "batterie": "", "alimentation": "",
     "bouclier": "", "conseil": "", "historique": "",
-    "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "", "valide": "", "soleil": "", "lune": "",
-    "deplier": "", "replier": "", "erreur": "",
+    "analyser": "", "copier": "", "enregistrer": "", "effacer": "", "ouvrir": "",
+    "valide": "", "soleil": "", "lune": "", "deplier": "", "replier": "",
+    "erreur": "", "info": "", "avertissement": "",
     # Onglets, éléments et catégories de la page Stockage.
     "bilan": "", "stockage": "", "dossier": "", "fichier": "",
-    "systeme": "", "applications": "", "jeux": "", "videos": "", "photos": "", "musique": "",
-    "documents": "", "archives": "", "temporaires": "", "corbeille": "", "sauvegardes": "", "autres": "",
+    "systeme": "", "applications": "", "jeux": "", "videos": "", "photos": "",
+    "musique": "", "documents": "", "archives": "", "temporaires": "",
+    "corbeille": "", "sauvegardes": "", "autres": "",
 }
+
+
+def charger_polices() -> None:
+    """Rend la police Inter, livrée avec l'application, utilisable par Qt (sans l'installer dans Windows)."""
+    for fichier in sorted(DOSSIER_POLICES.glob("*.ttf")):
+        QFontDatabase.addApplicationFont(str(fichier))
+    famille.cache_clear()
 
 
 @cache
@@ -120,17 +173,35 @@ def famille(choix: tuple[str, ...]) -> str:
     return next((nom for nom in choix if QFontDatabase.hasFamily(nom)), choix[-1])
 
 
-def police(taille: float, poids: QFont.Weight = QFont.Weight.Normal, titre: bool = False) -> QFont:
-    """Police du thème, avec repli sur Segoe UI si Segoe UI Variable manque."""
+# Échelle typographique : peu de tailles et de graisses, toujours les mêmes, comme chez Apple. Elle rend
+# l'interface cohérente, et Qt a moins de polices à préparer (chacune coûte la première fois qu'elle sert).
+# Style : (taille en points, graisse, titre, chiffres). `titre` : dessin serré des grands textes (taille optique
+# d'Inter) ; `chiffres` : chiffres de même largeur, pour ceux qui s'alignent ou défilent.
+ECHELLE = {
+    "score": (36, QFont.Weight.Bold, True, True),        # le score dans l'anneau
+    "grand": (24, QFont.Weight.Bold, True, True),        # espace utilisé du disque
+    "titre": (17, QFont.Weight.Bold, True, False),       # phrase sous le score
+    "section": (13.5, QFont.Weight.Bold, True, False),   # titres de section
+    "carte": (11.5, QFont.Weight.DemiBold, True, False), # titres de carte, de confirmation, nom de l'application
+    "corps": (10, QFont.Weight.Normal, False, False),    # texte courant
+    "fort": (10, QFont.Weight.DemiBold, False, False),   # noms des éléments, bouton principal
+    "chiffres": (10, QFont.Weight.DemiBold, False, True),  # tailles en colonne
+    "legende": (9, QFont.Weight.Normal, False, False),   # chemins, explications, repères
+    "legende_forte": (9, QFont.Weight.DemiBold, False, False),  # pastilles, valeurs des légendes
+}
+
+
+def police(style: str = "corps") -> QFont:
+    """Police d'un style de l'échelle typographique."""
+    taille, poids, titre, chiffres = ECHELLE[style]
     resultat = QFont(famille(TITRE if titre else CORPS))
     resultat.setPointSizeF(taille)
     resultat.setWeight(poids)
+    if titre:  # taille optique d'Inter (14 à 32) : lettres plus serrées pour les grands textes
+        resultat.setVariableAxis(QFont.Tag("opsz"), min(32.0, taille * 4 / 3))
+    if chiffres:
+        resultat.setFeature(QFont.Tag("tnum"), 1)
     return resultat
-
-
-def niveau_ratio(ratio: float) -> str:
-    """Niveau de couleur d'une partie selon la part de points gardés."""
-    return "vert" if ratio >= 0.8 else "orange" if ratio >= 0.5 else "rouge"
 
 
 @cache  # gardée en mémoire : redessinée à chaque défilement de la fenêtre, sinon
@@ -156,90 +227,77 @@ def icone(nom: str, couleur: str = TEXTE, taille: int = 16) -> QIcon:
     return resultat
 
 
+HAUTEUR_BARRE = 60  # barre du haut (logo, onglets, mode)
+
 STYLE = f"""
-QMainWindow, QScrollArea, QWidget#contenu, QWidget#racine {{ background: {FOND}; }}
 QWidget {{ color: {TEXTE}; }}
+QMainWindow, QStackedWidget, QScrollArea, QWidget#qt_scrollarea_viewport {{
+    background: transparent; border: none; }}
 QLabel {{ background: transparent; }}
 QLabel#secondaire {{ color: {TEXTE_2}; }}
 QLabel#discret {{ color: {TEXTE_3}; }}
-QLabel#section {{ color: {TEXTE_2}; font-weight: 600; letter-spacing: 1px; }}
-QLabel#version {{ color: {TEXTE_2}; background: {SURFACE_2}; border: 1px solid {BORDURE};
-                  border-radius: 9px; padding: 1px 8px; }}
 QLabel#erreur {{ color: {NIVEAUX["rouge"]}; }}
 
-QFrame#carte {{ background: {SURFACE}; border: 1px solid {BORDURE}; border-radius: 14px; }}
-QFrame#heros {{ border: 1px solid {BORDURE}; border-radius: 18px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {HEROS}, stop:1 {SURFACE}); }}
-QFrame#conseil {{ background: {SURFACE}; border: 1px solid {BORDURE}; border-radius: 12px; }}
-QFrame#carte:hover, QFrame#conseil:hover {{ border-color: {SURVOL_BORDURE}; }}
-QFrame#ligne {{ background: transparent; border-radius: 10px; }}
-QFrame#ligne:hover {{ background: {SURFACE_2}; }}
-QFrame#ligne:focus {{ background: {SURFACE_2}; }}
+QLabel#pastille {{ border-radius: 9px; padding: 3px 10px; font-weight: 600; }}
+QLabel#pastille[niveau="vert"] {{ color: {NIVEAUX["vert"]}; background: {rgba(VIFS["vert"], 38)}; }}
+QLabel#pastille[niveau="orange"] {{ color: {NIVEAUX["orange"]}; background: {rgba(VIFS["orange"], 38)}; }}
+QLabel#pastille[niveau="rouge"] {{ color: {NIVEAUX["rouge"]}; background: {rgba(VIFS["rouge"], 38)}; }}
+QLabel#pastille[niveau="gris"] {{ color: {TEXTE_2}; background: {rgba(REMPLI)}; }}
 
-QFrame#onglets {{ background: {ONGLETS_FOND}; border: 1px solid {BORDURE}; border-radius: 12px; }}
-QPushButton#onglet {{ background: transparent; color: {TEXTE_2}; border: 1px solid transparent; border-radius: 9px;
-                      padding: 6px 16px; font-weight: 600; }}
-QPushButton#onglet:hover {{ color: {TEXTE}; }}
-QPushButton#onglet:checked {{ background: {ONGLET_ACTIF}; color: {TEXTE}; border-color: {BORDURE}; }}
-QPushButton#onglet:focus {{ border-color: {ACCENT_CLAIR}; }}
+QFrame#ligne {{ background: transparent; border-radius: 12px; }}
+QFrame#ligne:hover, QFrame#ligne:focus {{ background: {rgba(SURVOL_LIGNE)}; }}
 
-QLabel#pastille {{ border-radius: 10px; padding: 2px 10px; font-weight: 600; }}
-QLabel#pastille[niveau="vert"] {{ color: {NIVEAUX["vert"]}; background: {rgba(NIVEAUX["vert"], 31)}; }}
-QLabel#pastille[niveau="orange"] {{ color: {NIVEAUX["orange"]}; background: {rgba(NIVEAUX["orange"], 31)}; }}
-QLabel#pastille[niveau="rouge"] {{ color: {NIVEAUX["rouge"]}; background: {rgba(NIVEAUX["rouge"], 31)}; }}
-QLabel#pastille[niveau="gris"] {{ color: {TEXTE_2}; background: {SURFACE_2}; }}
-
-QPushButton {{ background: {SURFACE_2}; color: {TEXTE}; border: 1px solid {BORDURE}; border-radius: 9px;
-               padding: 8px 16px; }}
-QPushButton:hover {{ background: {SURVOL}; border-color: {SURVOL_BORDURE}; }}
-QPushButton:pressed {{ background: {SURFACE}; }}
-QPushButton:disabled {{ color: {TEXTE_3}; background: {SURFACE}; border-color: {SURFACE_2}; }}
+QPushButton {{ background: {rgba(REMPLI)}; color: {TEXTE}; border: 1px solid transparent; border-radius: 14px;
+               padding: 7px 16px; min-height: 18px; font-weight: 500; }}
+QPushButton:hover {{ background: {rgba(REMPLI_SURVOL)}; }}
+QPushButton:pressed {{ background: {rgba(REMPLI_APPUI)}; }}
+QPushButton:disabled {{ color: {TEXTE_3}; background: {rgba(REMPLI_APPUI)}; }}
 QPushButton:focus {{ border-color: {ACCENT_CLAIR}; }}
-QPushButton#principal {{ background: {ACCENT}; color: white; border: none; border-radius: 12px;
-                         padding: 13px 28px; font-weight: 600; }}
+QPushButton#principal {{ background: {ACCENT}; color: white; border-radius: 17px; padding: 9px 22px; min-height: 20px;
+                         font-weight: 600; }}
 QPushButton#principal:hover {{ background: {ACCENT_SURVOL}; }}
 QPushButton#principal:pressed {{ background: {ACCENT_APPUI}; }}
-QPushButton#principal:disabled {{ background: {PRINCIPAL_INACTIF}; color: {PRINCIPAL_INACTIF_TEXTE}; }}
-QPushButton#principal:focus {{ border: 2px solid {ACCENT_CLAIR}; }}
-QPushButton#lien, QPushButton#discret {{ background: transparent; border: none; padding: 4px 6px; }}
+QPushButton#principal:disabled {{ background: {rgba(ACCENT, 110)}; color: {rgba(BLANC, 200)}; }}
+QPushButton#principal:focus {{ border-color: {rgba(BLANC, 200)}; }}
+QPushButton#destructif {{ background: {VIFS["rouge"]}; color: white; font-weight: 600; }}
+QPushButton#destructif:hover {{ background: {QColor(VIFS["rouge"]).lighter(110).name()}; }}
+QPushButton#destructif:pressed {{ background: {QColor(VIFS["rouge"]).darker(110).name()}; }}
+QPushButton#destructif:focus {{ border-color: {rgba(BLANC, 200)}; }}
+QPushButton#lien, QPushButton#discret, QPushButton#supprimer {{ background: transparent; border-radius: 9px;
+                                                               padding: 4px 8px; font-weight: 500; }}
 QPushButton#lien {{ color: {ACCENT_CLAIR}; text-align: left; }}
-QPushButton#discret {{ color: {TEXTE_2}; }}
-QPushButton#lien:hover, QPushButton#discret:hover {{ color: {TEXTE}; background: {SURFACE_2}; border-radius: 7px; }}
-QPushButton#supprimer {{ background: transparent; border: none; padding: 4px 6px; color: {TEXTE_2}; }}
+QPushButton#discret, QPushButton#supprimer {{ color: {TEXTE_2}; }}
+QPushButton#lien:hover, QPushButton#discret:hover {{ background: {rgba(SURVOL_LIGNE)}; }}
+QPushButton#discret:hover {{ color: {TEXTE}; }}
 QPushButton#supprimer:hover, QPushButton#supprimer:focus {{ color: {NIVEAUX["rouge"]};
-                                                            background: {rgba(NIVEAUX["rouge"], 31)}; border-radius: 7px; }}
-QPushButton#supprimer:disabled {{ color: {TEXTE_3}; background: transparent; }}
+                                                            background: {rgba(VIFS["rouge"], 30)}; }}
+QPushButton#lien:disabled, QPushButton#discret:disabled, QPushButton#supprimer:disabled {{
+    color: {TEXTE_3}; background: transparent; }}
+QPushButton#rond {{ border-radius: 17px; padding: 0; min-width: 34px; max-width: 34px; min-height: 34px;
+                    max-height: 34px; }}
+QPushButton#segment {{ background: transparent; color: {TEXTE_2}; border-radius: 12px; padding: 6px 18px;
+                       font-weight: 600; }}
+QPushButton#segment:hover {{ color: {TEXTE}; }}
+QPushButton#segment:checked {{ color: {TEXTE}; }}
+QPushButton#segment:disabled {{ color: {TEXTE_3}; }}
 
-QTreeWidget {{ background: {SURFACE_2}; border: none; border-radius: 10px; padding: 4px;
-               alternate-background-color: {LIGNE_ALTERNEE}; outline: 0; }}
-QTreeWidget::item {{ padding: 4px 2px; border: none; }}
-QTreeWidget::item:selected {{ background: {SELECTION}; color: {TEXTE}; }}
+QTreeWidget {{ background: transparent; border: none; outline: 0; }}
+QTreeWidget::item {{ padding: 6px 2px; border: none; border-bottom: 1px solid {rgba(SEPARATEUR)}; }}
+QTreeWidget::item:selected {{ background: {rgba(SURVOL_LIGNE)}; color: {TEXTE}; }}
 QHeaderView {{ background: transparent; }}
-QHeaderView::section {{ background: {SURFACE_2}; color: {TEXTE_3}; border: none;
-                        border-bottom: 1px solid {BORDURE}; padding: 6px 4px; font-weight: 600; }}
+QHeaderView::section {{ background: transparent; color: {TEXTE_3}; border: none;
+                        border-bottom: 1px solid {rgba(SEPARATEUR)}; padding: 4px 2px 6px 2px; font-weight: 600; }}
 
-QComboBox {{ background: {SURFACE_2}; color: {TEXTE}; border: 1px solid {BORDURE}; border-radius: 9px;
-             padding: 6px 32px 6px 12px; }}
-QComboBox:hover {{ background: {SURVOL}; border-color: {SURVOL_BORDURE}; }}
-QComboBox:focus {{ border-color: {ACCENT_CLAIR}; }}
-QComboBox::drop-down {{ border: none; width: 22px; }}
-QComboBox QAbstractItemView {{ background: {SURFACE_2}; color: {TEXTE}; border: 1px solid {BORDURE};
-                               selection-background-color: {SELECTION}; selection-color: {TEXTE}; outline: 0; }}
+QProgressBar {{ border: none; background: {rgba(REMPLI)}; max-height: 6px; min-height: 6px; border-radius: 3px; }}
+QProgressBar::chunk {{ background: {ACCENT_CLAIR}; border-radius: 3px; }}
 
-QProgressBar {{ border: none; background: {SURFACE_2}; max-height: 4px; border-radius: 2px; }}
-QProgressBar::chunk {{ background: {ACCENT_CLAIR}; border-radius: 2px; }}
-
-QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
-QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 2px; }}
-QScrollBar::handle {{ background: {POIGNEE}; border-radius: 3px; min-height: 24px; min-width: 24px; }}
-QScrollBar::handle:hover {{ background: {POIGNEE_SURVOL}; }}
+QScrollBar:vertical {{ background: transparent; width: 12px; margin: 4px 2px 6px 2px; }}
+QScrollBar:horizontal {{ background: transparent; height: 12px; margin: 2px; }}
+QScrollBar::handle {{ background: {rgba(POIGNEE)}; border-radius: 4px; min-height: 32px; min-width: 32px; }}
+QScrollBar::handle:hover {{ background: {rgba(POIGNEE_SURVOL)}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
 
-QStatusBar {{ background: {FOND}; color: {TEXTE_3}; border-top: 1px solid {BORDURE}; }}
-QStatusBar::item {{ border: none; }}
-QToolTip {{ background: {SURFACE_2}; color: {TEXTE}; border: 1px solid {BORDURE}; border-radius: 6px;
-            padding: 4px 8px; }}
-QMessageBox {{ background: {SURFACE}; }}
-QMessageBox QLabel {{ color: {TEXTE}; }}
+QToolTip {{ background: {_selon_mode("#2c2f3a", "#ffffff")}; color: {TEXTE}; border: 1px solid {rgba(SEPARATEUR)};
+            border-radius: 8px; padding: 5px 9px; }}
 """

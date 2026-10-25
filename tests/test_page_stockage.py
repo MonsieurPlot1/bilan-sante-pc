@@ -6,6 +6,7 @@ import shutil
 import time
 from datetime import datetime
 
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPushButton
@@ -112,7 +113,7 @@ def test_emplacement_introuvable(fenetre, monkeypatch):
         raise OSError("introuvable")
     monkeypatch.setattr(os, "startfile", refuse)
     fenetre.stockage.montrer(r"C:\nulle\part", dossier=True)
-    assert fenetre.statusBar().currentMessage() == "Cet emplacement n'a pas pu s'ouvrir."
+    assert fenetre.annonce.texte() == "Cet emplacement n'a pas pu s'ouvrir."
 
 
 def test_analyse_en_arriere_plan(fenetre, app, disque):
@@ -124,7 +125,7 @@ def test_analyse_en_arriere_plan(fenetre, app, disque):
     attendre(lambda: page.resultat is not None, 5000)
     assert not page.en_cours() and fenetre.mode.isEnabled()
     assert page.resultat["utilise"] == UTILISE and page.progression.isHidden()
-    assert fenetre.statusBar().currentMessage().startswith("Stockage analysé en")
+    assert page.info.text().startswith("Analyse du")
 
 
 def test_arreter_l_analyse(fenetre, disque, monkeypatch):
@@ -136,7 +137,7 @@ def test_arreter_l_analyse(fenetre, disque, monkeypatch):
     attendre(lambda: not page.en_cours() and page.bouton.isEnabled(), 5000)
     QTest.qWait(50)
     assert page.resultat is None and page.bouton.text().strip() == "Analyser le stockage"
-    assert fenetre.statusBar().currentMessage() == "Analyse du stockage arrêtée."
+    assert fenetre.annonce.texte() == "Analyse du stockage arrêtée."
 
 
 def test_analyse_en_erreur(fenetre, monkeypatch):
@@ -217,7 +218,7 @@ def test_arreter_la_recherche_des_doublons(fenetre, disque, monkeypatch):
     attendre(lambda: not page.en_cours() and page.bouton_doublons.isEnabled())
     QTest.qWait(50)
     assert page.doublons is None and page.bouton_doublons.text().strip() == "Chercher les doublons"
-    assert fenetre.statusBar().currentMessage() == "Recherche des doublons arrêtée."
+    assert fenetre.annonce.texte() == "Recherche des doublons arrêtée."
 
 
 def test_recherche_des_doublons_en_erreur(fenetre, disque, monkeypatch):
@@ -283,7 +284,7 @@ def test_supprimer(fenetre, disque, monkeypatch):
     assert taille(page, "corbeille") == 25 and taille(page, "systeme") == systeme  # rien ne passe par la Corbeille
     assert page.utilise.text() == "9,5 Ko utilisés"  # 9 700 octets : la place est libérée
     assert "film.mkv" not in [textes(ligne)[0] for ligne in page_stockage.lignes(page.liste_plus_gros)]
-    assert fenetre.statusBar().currentMessage() == "« film.mkv » supprimé : 300 octets libérés."
+    assert fenetre.annonce.texte() == "« film.mkv » supprimé : 300 octets libérés."
 
 
 def test_supprimer_un_jeu(fenetre, disque, monkeypatch):
@@ -299,7 +300,7 @@ def test_supprimer_un_jeu(fenetre, disque, monkeypatch):
     assert confirmations == [(str(jeu), True, 550, 2, "jeux")] and not jeu.exists()
     assert taille(page, "jeux") == 0 and taille(page, "videos") == 300  # sa vidéo comptait dans Jeux
     assert taille(page, "systeme") == systeme
-    assert fenetre.statusBar().currentMessage() == "« Jeu » supprimé : 550 octets libérés."
+    assert fenetre.annonce.texte() == "« Jeu » supprimé : 550 octets libérés."
 
 
 def test_suppression_annulee(fenetre, disque, monkeypatch):
@@ -318,8 +319,8 @@ def test_suppression_refusee_par_windows(fenetre, disque, monkeypatch):
     monkeypatch.setattr(page, "confirmer_suppression", lambda *_: True)
     monkeypatch.setattr(module_fichiers, "supprimer", lambda *_: None)
     page.supprimer(str(disque / "Users" / "moi" / "Videos" / "film.mkv"), False)
-    assert fenetre.statusBar().currentMessage() == ("« film.mkv » n'a pas été supprimé : il est peut-être ouvert "
-                                                    "dans un programme.")
+    assert fenetre.annonce.texte() == ("« film.mkv » n'a pas été supprimé : il est peut-être ouvert "
+                                       "dans un programme.")
     assert taille(page, "videos") == 300
 
 
@@ -354,17 +355,19 @@ def test_pas_de_suppression_pendant_une_analyse(fenetre, disque, monkeypatch):
 
 
 def test_confirmation(fenetre, monkeypatch):
-    boites = []
-    monkeypatch.setattr(page_stockage.QMessageBox, "exec", lambda boite: boites.append(boite) or 0)
+    feuilles = []
+    monkeypatch.setattr(page_stockage.Feuille, "exec", lambda feuille: feuilles.append(feuille) or 0)
     confirme = fenetre.stockage.confirmer_suppression(r"C:\Users\moi\Pictures\Vacances", True, 3 * 1024**3, 124)
-    (boite,) = boites
-    assert not confirme  # fermée sans cliquer : rien n'est supprimé
-    assert boite.text() == "Supprimer définitivement le dossier « Vacances » (124 fichiers, 3,0 Go) ?"
-    assert boite.informativeText().startswith("Emplacement : C:\\Users\\moi\\Pictures")
-    assert "impossible de le récupérer" in boite.informativeText() and "désinstaller" not in boite.informativeText()
-    assert boite.defaultButton().text() == "Annuler"
+    (feuille,) = feuilles
+    assert not confirme  # fermée sans confirmer : rien n'est supprimé
+    assert feuille.windowTitle() == "Supprimer « Vacances » ?"
+    assert feuille.texte() == ("Le dossier et tout son contenu (124 fichiers, 3,0 Go) sera supprimé définitivement, "
+                               "sans passer par la Corbeille : impossible de le récupérer ensuite.")
+    assert feuille.details().startswith("Emplacement : C:\\Users\\moi\\Pictures")
+    assert "désinstaller" not in feuille.details()
+    assert feuille.bouton_defaut().text() == "Annuler"  # Entrée ne supprime jamais
     fenetre.stockage.confirmer_suppression(r"C:\Riot Games\VALORANT", True, 30 * 1024**3, 9000, "jeux")
-    assert "mieux vaut le désinstaller" in boites[-1].informativeText()
+    assert "mieux vaut le désinstaller" in feuilles[-1].details()
 
 
 def test_progression_des_doublons(fenetre):
@@ -375,3 +378,16 @@ def test_progression_des_doublons(fenetre):
     page.avancer_doublons(("contenu", 512, 1024))
     assert page.info_doublons.text() == "Lecture du contenu : 512 octets sur 1,0 Ko…"
     assert page.glissement_doublons.endValue() == 550
+
+
+def test_barre_du_disque_par_categorie(fenetre, disque):
+    """Avant l'analyse : une seule part (l'espace utilisé). Après : une part par groupe, dans un ordre fixe."""
+    page = fenetre.stockage
+    assert len(page.jauge.parts) == 1 and page.legende.isHidden()
+    resultat = resultat_du_faux_disque(disque)
+    page.afficher(resultat, animer=False)
+    noms = [nom for nom, _teinte, _taille in page_stockage.parts_du_disque(resultat)]
+    assert noms == [nom for nom, _t, _c in page_stockage.GROUPES if nom in noms]  # toujours le même ordre
+    assert sum(part for part, _c, _t in page.jauge.parts) == pytest.approx(resultat["utilise"] / resultat["total"])
+    assert [nom for _c, nom, _t in page.legende.elements][-1] == "Libre" and not page.legende.isHidden()
+    assert all(cle in page_stockage.TEINTE_CATEGORIE for cle in stockage.NOMS)  # chaque catégorie a sa teinte

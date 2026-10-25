@@ -7,9 +7,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # avant d'importer Qt : a
 
 import pytest
 from PySide6.QtTest import QSignalSpy, QTest
-from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
+from PySide6.QtGui import QFont, QWheelEvent
+from PySide6.QtWidgets import QApplication, QDialog
 
 import historique
 from modules import fichiers as module_fichiers
@@ -17,7 +17,7 @@ from tests.test_analyse import faux_modules, plante
 from tests.test_score import GO, batterie, demarrage, disque, fichiers
 from ui import analyse
 from ui.fenetre import Fenetre, preparer_application
-from ui.widgets import Carte, Fondu, Graphique, Logo
+from ui.widgets import Carte, Feuille, Fondu, Graphique, Logo
 from ui import fenetre as fenetre_module
 
 
@@ -82,7 +82,7 @@ def test_analyse_complete(fenetre, tmp_path, monkeypatch):
     assert fenetre.cartes["batterie"].isHidden()  # PC fixe
     assert fenetre.liste_conseils.count() == len(analyse.conseils(resultat)) == 2
     assert fenetre.copier.isEnabled() and fenetre.enregistrer.isEnabled()
-    assert fenetre.statusBar().currentMessage().startswith("Terminé en")
+    assert fenetre.info.text().startswith("Analyse du")
 
     fenetre.afficher(resultat)  # relancer ne doit pas empiler les conseils
     assert fenetre.liste_conseils.count() == 2
@@ -143,7 +143,7 @@ def test_vider_la_corbeille(fenetre, tmp_path, monkeypatch):
     # Confirmation de Windows rattachée à notre fenêtre, puis temporaires repris sans les remesurer.
     assert appels[0] == ("vider", int(fenetre.winId()))
     assert appels[1][0] == "scan" and appels[1][1]["temporaires"] == 1 * GO
-    assert "2,0 Go libérés" in fenetre.statusBar().currentMessage()
+    assert "2,0 Go libérés" in fenetre.annonce.texte()
     assert fenetre.cartes["fichiers"].resume.text() == "apres"
     assert not fenetre.vider.isEnabled()  # Corbeille vide
 
@@ -153,7 +153,7 @@ def test_vidage_refuse(fenetre, tmp_path, monkeypatch):
     fenetre.afficher(analyse_faite(tmp_path))
     corbeille_simulee(monkeypatch, avant=2, apres=2)
     fenetre.vider.click()
-    assert fenetre.statusBar().currentMessage() == "La Corbeille n'a pas été vidée."
+    assert fenetre.annonce.texte() == "La Corbeille n'a pas été vidée."
     assert fenetre.cartes["fichiers"].resume.text() == "c" and fenetre.vider.isEnabled()
 
 
@@ -189,7 +189,7 @@ def test_bouton_ouvrir_d_un_conseil(fenetre, tmp_path, monkeypatch):
     faux_modules(monkeypatch, demarrage=lambda: {"constats": ["c"], **demarrage(40)})
     fenetre.afficher(analyse_faite(tmp_path))
     carte = fenetre.liste_conseils.itemAt(0).widget()
-    assert carte.bouton.text() == "Ouvrir les Paramètres"
+    assert carte.bouton.text().strip() == "Ouvrir les Paramètres"
     carte.bouton.click()
     assert ouvertures == ["ms-settings:startupapps"]
 
@@ -199,7 +199,7 @@ def test_ouverture_impossible(fenetre, monkeypatch):
         raise OSError("introuvable")
     monkeypatch.setattr(os, "startfile", echec)
     fenetre.ouvrir("ms-settings:inexistant")
-    assert fenetre.statusBar().currentMessage() == "Cette page n'a pas pu s'ouvrir sur ce PC."
+    assert fenetre.annonce.texte() == "Cette page n'a pas pu s'ouvrir sur ce PC."
 
 
 def test_couleurs_du_theme():
@@ -230,7 +230,7 @@ def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
         QTest.qWait(50)  # le changement se fait juste après le clic, sous le fondu
         assert theme.CLAIR is not depart
         assert theme.mode_choisi() is theme.CLAIR  # choix retenu pour les prochains lancements
-        assert fenetre.mode.text().strip() == ("Mode sombre" if theme.CLAIR else "Mode clair")
+        assert fenetre.mode.toolTip() == ("Passer en mode sombre" if theme.CLAIR else "Passer en mode clair")
         assert fenetre.jauge.note == 100 and fenetre.jauge.valeur == 100  # affichée, sans se re-remplir
         assert fenetre.findChild(Fondu, "fondu").isVisible()  # fondu en cours
         QTest.qWait(fenetre_module.DUREE_FONDU + 200)
@@ -313,4 +313,71 @@ def test_molette_qui_glisse(fenetre, tmp_path, monkeypatch):
     assert zone.glissement.endValue() == attendu
     QTest.qWait(400)
     assert barre.value() == attendu
+
+
+def test_pages_opaques_pour_un_defilement_fluide(fenetre):
+    """Une page opaque permet à Qt de décaler l'image au défilement au lieu de tout redessiner (60 images/s
+    en plein écran). Une règle `background` de la feuille de style retirerait cet attribut sans prévenir."""
+    fenetre.show()
+    QTest.qWait(10)
+    for numero in range(fenetre.pages.count()):
+        page = fenetre.pages.widget(numero).widget()
+        page.ensurePolished()
+        assert page.testAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+
+
+def test_police_inter(app):
+    from ui import theme
+    assert theme.famille(theme.CORPS) == "Inter Variable"  # livrée avec l'application, sans l'installer
+    assert app.font().family() == "Inter Variable"
+    assert theme.police("chiffres").featureValue(QFont.Tag("tnum")) == 1  # chiffres de même largeur
+    assert theme.police("score").pointSizeF() > theme.police("titre").pointSizeF() > theme.police("corps").pointSizeF()
+
+
+def test_la_lueur_suit_la_sante_du_pc(fenetre, tmp_path, monkeypatch):
+    assert fenetre.ambiance.teinte == "neutre"  # avant toute analyse
+    faux_modules(monkeypatch)
+    fenetre.afficher(analyse_faite(tmp_path))
+    assert fenetre.ambiance.teinte == "vert"
+    faux_modules(monkeypatch, demarrage=plante)
+    fenetre.afficher(analyse_faite(tmp_path))
+    assert fenetre.ambiance.teinte == "neutre"  # analyse incomplète : pas de couleur d'état
+
+
+def test_annonce(fenetre):
+    fenetre.annonce.montrer("Rapport enregistré.", "valide", duree=100)
+    assert fenetre.annonce.texte() == "Rapport enregistré." and not fenetre.annonce.isHidden()
+    QTest.qWait(500)
+    assert fenetre.annonce.isHidden()  # s'efface seule
+    assert fenetre.annonce.texte() == "Rapport enregistré."  # le dernier message reste lisible
+
+
+def test_feuille_de_confirmation(fenetre):
+    destructive = Feuille(fenetre, "Effacer ?", "Texte", "Détails", confirmer="Effacer", destructif=True)
+    assert destructive.bouton_defaut() is destructive.bouton_annuler  # Entrée n'efface jamais
+    assert destructive.windowTitle() == "Effacer ?" and destructive.details() == "Détails"
+    simple = Feuille(fenetre, "Info", "Texte", confirmer="OK", annuler=None)
+    assert simple.bouton_annuler is None and simple.bouton_defaut() is simple.bouton_confirmer
+
+
+@pytest.mark.parametrize("reponse, efface", [(QDialog.DialogCode.Accepted, True), (QDialog.DialogCode.Rejected, False)])
+def test_effacer_l_historique(fenetre, tmp_path, monkeypatch, reponse, efface):
+    faux_modules(monkeypatch)
+    resultat = analyse.analyser()
+    historique.enregistrer(resultat)  # dans le LOCALAPPDATA du test
+    monkeypatch.setattr(fenetre_module.Feuille, "exec", lambda _feuille: reponse)
+    fenetre.effacer_historique()
+    assert (historique.charger() == []) is efface
+    assert (fenetre.annonce.texte() == "Historique effacé.") is efface
+
+
+def test_onglets_a_segments(fenetre):
+    fenetre.show()
+    QTest.qWait(10)
+    segments = fenetre.onglets
+    segments.groupe.button(1).click()
+    assert fenetre.pages.currentIndex() == 1
+    assert segments.glissement.endValue() == QRectF(segments.groupe.button(1).geometry())  # la pastille glisse
+    QTest.qWait(400)
+    assert segments.curseur == QRectF(segments.groupe.button(1).geometry())
 

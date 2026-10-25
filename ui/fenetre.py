@@ -10,18 +10,18 @@ from ctypes import wintypes
 from functools import cache
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QStandardPaths, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPalette
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
-                               QMessageBox, QProgressBar, QPushButton, QStackedWidget, QVBoxLayout, QWidget)
+from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPalette
+from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
+                               QMainWindow, QProgressBar, QStackedWidget, QVBoxLayout, QWidget)
 
-import config
 import historique
 from modules import fichiers
 from modules.disque import taille_lisible
 from ui import analyse, theme
 from ui.stockage import PageStockage
-from ui.widgets import (Carte, CarteConseil, DefilementDoux, Fondu, Graphique, Jauge, Logo, PastilleIcone,
-                        apparaitre, pastille, repolir, titre_section)
+from ui.verre import Ambiance, Page, Verre
+from ui.widgets import (Annonce, BarreHaut, Carte, CarteConseil, DefilementDoux, Feuille, Fondu, Graphique, Jauge, Logo,
+                        Segmente, apparaitre, bouton, melange, pastille, pied_de_page, repolir, titre_section)
 
 journal = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élém
 
 DUREE_FONDU = 300  # millisecondes : passage en douceur entre le mode clair et le mode sombre
 DUREE_ONGLET = 180  # millisecondes : passage en douceur d'un onglet à l'autre
-ONGLETS = [("Bilan de santé", "bilan"), ("Stockage", "stockage")]  # (texte, icône)
+ONGLETS = ["Bilan de santé", "Stockage"]
 ONGLET_STOCKAGE = 1
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # boutons de la barre de titre sombres
 DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 35, 36  # Windows 11 : fond et texte de la barre de titre
@@ -58,21 +58,14 @@ class Analyse(QThread):
         self.termine.emit(resultat)
 
 
-def carte_vide(marges: tuple[int, int, int, int] = (22, 18, 22, 18)) -> tuple[QFrame, QVBoxLayout]:
-    cadre = QFrame(objectName="carte")
-    cadre.setAttribute(Qt.WidgetAttribute.WA_Hover)  # bordure éclairée au survol
-    disposition = QVBoxLayout(cadre)
-    disposition.setContentsMargins(*marges)
-    disposition.setSpacing(12)
-    return cadre, disposition
-
-
-def entete_carte(icone: str, titre: str) -> QHBoxLayout:
+def entete_section(titre: str, *droite: QWidget) -> QHBoxLayout:
+    """Titre d'une section, avec ses éventuels boutons à droite."""
     ligne = QHBoxLayout()
-    ligne.setSpacing(12)
-    ligne.addWidget(PastilleIcone(icone, taille=32))
-    ligne.addWidget(QLabel(titre, font=theme.police(12.5, QFont.Weight.DemiBold, titre=True)))
+    ligne.setContentsMargins(4, 10, 0, 0)
+    ligne.addWidget(titre_section(titre))
     ligne.addStretch()
+    for widget in droite:
+        ligne.addWidget(widget)
     return ligne
 
 
@@ -80,8 +73,9 @@ class Fenetre(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Bilan santé PC")
-        self.resize(980, 760)
-        self.setMinimumSize(760, 560)
+        self.setMinimumSize(780, 580)
+        ecran = QGuiApplication.primaryScreen().availableGeometry()
+        self.resize(min(1060, round(ecran.width() * 0.9)), min(800, round(ecran.height() * 0.9)))
         self.resultat: dict | None = None
         self.analyse: Analyse | None = None
         self.bilan_en_cours = False
@@ -90,136 +84,119 @@ class Fenetre(QMainWindow):
         self.resultat_stockage: dict | None = None
         self.racine_stockage: str | None = None
         self.doublons_stockage: dict | None = None
-        self.statusBar().showMessage("Prêt")
         self.construire()
         colorer_barre_titre(self, QColor(theme.FOND), QColor(theme.TEXTE))  # barre de titre fondue dans le fond
 
     def construire(self) -> None:
         """Crée le contenu de la fenêtre avec les couleurs du thème, et y remet les dernières analyses.
 
-        En haut, l'en-tête et les onglets restent en place ; dessous, chaque onglet défile à part.
+        En haut, la barre (application, onglets, mode) reste en place ; dessous, chaque onglet défile à part.
         Appelée aussi au changement de mode clair/sombre : l'ancien contenu est remplacé.
         """
-        haut = QVBoxLayout()
-        haut.setContentsMargins(32, 22, 32, 8)
-        haut.setSpacing(16)
-        haut.addLayout(self._entete())
-        haut.addWidget(self._onglets(), alignment=Qt.AlignmentFlag.AlignLeft)
+        self.ambiance = Ambiance()
         self.pages = QStackedWidget()
         self.pages.addWidget(self._page_bilan())
         self.pages.addWidget(self._page_stockage())
         self.pages.setCurrentIndex(self.onglet)
-
-        racine = QWidget(objectName="racine")
-        disposition = QVBoxLayout(racine)
+        disposition = QVBoxLayout(self.ambiance)
         disposition.setContentsMargins(0, 0, 0, 0)
         disposition.setSpacing(0)
-        disposition.addLayout(haut)
+        disposition.addWidget(self._barre())
         disposition.addWidget(self.pages, 1)
-        self.setCentralWidget(racine)  # Qt supprime l'ancien contenu
+        self.annonce = Annonce(self.ambiance)
+        self.setCentralWidget(self.ambiance)  # Qt supprime l'ancien contenu
+        # Focus de départ sur le fond : le cadre de focus n'apparaît qu'en naviguant au clavier (Tab).
+        self.ambiance.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.ambiance.setFocus()
+        self._suivre_page()
         if self.resultat:
-            self.afficher(self.resultat, animer=False)  # même analyse : la jauge ne se re-remplit pas
+            self.afficher(self.resultat, animer=False)  # même analyse : l'anneau ne se re-remplit pas
         else:
             self.afficher_historique_existant()
 
     # --- Construction des zones de la fenêtre ---
 
-    def _onglets(self) -> QFrame:
-        cadre = QFrame(objectName="onglets")
-        ligne = QHBoxLayout(cadre)
-        ligne.setContentsMargins(3, 3, 3, 3)
-        ligne.setSpacing(2)
-        self.groupe_onglets = QButtonGroup(cadre)  # un seul onglet coché à la fois
-        for numero, (texte, icone) in enumerate(ONGLETS):
-            symbole = theme.icone(icone, theme.TEXTE_2, 14)
-            symbole.addPixmap(theme.pixmap_icone(icone, theme.ACCENT_CLAIR, 14), QIcon.Mode.Normal, QIcon.State.On)
-            bouton = QPushButton(f" {texte}", objectName="onglet", checkable=True,
-                                 cursor=Qt.CursorShape.PointingHandCursor, icon=symbole)
-            self.groupe_onglets.addButton(bouton, numero)
-            ligne.addWidget(bouton)
-        self.groupe_onglets.button(self.onglet).setChecked(True)
-        self.groupe_onglets.idClicked.connect(self.changer_page)
-        return cadre
+    def _barre(self) -> BarreHaut:
+        """Barre du haut : l'application à gauche, les onglets au milieu, le mode clair/sombre à droite."""
+        self.barre = barre = BarreHaut()
+        gauche = QWidget()
+        identite = QHBoxLayout(gauche)
+        identite.setContentsMargins(0, 0, 0, 0)
+        identite.setSpacing(10)
+        identite.addWidget(Logo(28))
+        identite.addWidget(QLabel("Bilan santé PC", font=theme.police("carte")))
+        identite.addStretch()
+
+        self.onglets = Segmente(ONGLETS, self.onglet)
+        self.groupe_onglets = self.onglets.groupe
+        self.onglets.choisi.connect(self.changer_page)
+
+        texte, icone = ("Passer en mode sombre", "lune") if theme.CLAIR else ("Passer en mode clair", "soleil")
+        self.mode = bouton("", "rond", icone, theme.TEXTE_2, 15, toolTip=texte, accessibleName=texte)
+        self.mode.clicked.connect(self.changer_mode)
+        droite = QWidget()
+        reglages = QHBoxLayout(droite)
+        reglages.setContentsMargins(0, 0, 0, 0)
+        reglages.addStretch()
+        reglages.addWidget(self.mode)
+
+        # Côtés de même largeur : les onglets restent pile au milieu de la fenêtre.
+        cote = gauche.sizeHint().width()
+        for widget in (gauche, droite):
+            widget.setFixedWidth(cote)
+        grille = QGridLayout(barre)
+        grille.setContentsMargins(22, 0, 18, 0)
+        grille.addWidget(gauche, 0, 0, Qt.AlignmentFlag.AlignVCenter)
+        grille.addWidget(self.onglets, 0, 1, Qt.AlignmentFlag.AlignCenter)
+        grille.addWidget(droite, 0, 2, Qt.AlignmentFlag.AlignVCenter)
+        grille.setColumnStretch(1, 1)
+        return barre
+
+    def _suivre_page(self) -> None:
+        """La barre du haut et le fond suivent le défilement de l'onglet affiché."""
+        zone = self.pages.currentWidget()
+        self.barre.suivre(zone)
+        self.ambiance.defilement = zone
 
     @staticmethod
     def _defilement(contenu: QWidget) -> DefilementDoux:
-        defilement = DefilementDoux(widgetResizable=True, frameShape=QFrame.Shape.NoFrame)
+        defilement = DefilementDoux(widgetResizable=True, frameShape=QFrame.Shape.NoFrame,
+                                    horizontalScrollBarPolicy=Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         defilement.setWidget(contenu)
         return defilement
 
     def _page_stockage(self) -> DefilementDoux:
         self.stockage = PageStockage(self.ouvrir, self.resultat_stockage, self.racine_stockage,
                                      self.doublons_stockage)
-        self.stockage.statut.connect(self.statusBar().showMessage)
+        self.stockage.statut.connect(lambda texte, nature: self.annonce.montrer(texte, nature))
         self.stockage.occupee.connect(self._autoriser_mode)
         return self._defilement(self.stockage)
 
     def _page_bilan(self) -> DefilementDoux:
-        contenu = QWidget(objectName="contenu")
-        disposition = QVBoxLayout(contenu)
-        disposition.setContentsMargins(32, 10, 32, 26)
-        disposition.setSpacing(16)
+        contenu = Page()
+        disposition = contenu.disposition
         disposition.addWidget(self._heros())
         # Les conseils juste sous le score : ce qu'il y a à faire se voit sans faire défiler.
-        disposition.addSpacing(6)
-        disposition.addWidget(titre_section("Conseils"))
+        disposition.addLayout(entete_section("Conseils"))
         disposition.addLayout(self._conseils())
-        disposition.addSpacing(6)
-        disposition.addWidget(self._historique())
-        disposition.addSpacing(6)
-        disposition.addWidget(titre_section("Détail par partie"))
+        disposition.addLayout(self._historique())
+        disposition.addLayout(entete_section("Détail par partie"))
         disposition.addLayout(self._cartes())
         disposition.addLayout(self._actions())
+        disposition.addWidget(pied_de_page())
         disposition.addStretch()
         return self._defilement(contenu)
 
-    def _entete(self) -> QHBoxLayout:
-        titre = QLabel("Bilan santé PC", font=theme.police(18, QFont.Weight.DemiBold, titre=True))
-        version = QLabel(f"v{config.VERSION}", objectName="version", font=theme.police(8.5))
-        ligne_titre = QHBoxLayout()
-        ligne_titre.setSpacing(10)
-        ligne_titre.addWidget(titre)
-        ligne_titre.addWidget(version, alignment=Qt.AlignmentFlag.AlignVCenter)
-        ligne_titre.addStretch()
-
-        bouclier = QLabel()
-        bouclier.setPixmap(theme.pixmap_icone("bouclier", theme.NIVEAUX["vert"], 14))
-        rassurant = QLabel("Tout reste sur ton PC. L'application ne modifie rien sans ton accord.",
-                           objectName="secondaire")
-        ligne_rassurante = QHBoxLayout()
-        ligne_rassurante.setSpacing(6)
-        ligne_rassurante.addWidget(bouclier)
-        ligne_rassurante.addWidget(rassurant)
-        ligne_rassurante.addStretch()
-
-        textes = QVBoxLayout()
-        textes.setSpacing(2)
-        textes.addLayout(ligne_titre)
-        textes.addLayout(ligne_rassurante)
-        # Bouton clair/sombre : propose l'autre mode.
-        texte, icone = ("Mode sombre", "lune") if theme.CLAIR else ("Mode clair", "soleil")
-        self.mode = QPushButton(f" {texte}", objectName="discret", cursor=Qt.CursorShape.PointingHandCursor,
-                                icon=theme.icone(icone, theme.TEXTE_2, 14))
-        self.mode.clicked.connect(self.changer_mode)
-
-        entete = QHBoxLayout()
-        entete.setSpacing(14)
-        entete.addWidget(Logo())
-        entete.addLayout(textes, 1)
-        entete.addWidget(self.mode, alignment=Qt.AlignmentFlag.AlignTop)
-        return entete
-
-    def _heros(self) -> QFrame:
-        """Zone principale : la jauge du score, son interprétation et le bouton d'analyse."""
+    def _heros(self) -> Verre:
+        """Zone principale : l'anneau du score, son interprétation et le bouton d'analyse."""
         self.jauge = Jauge()
         self.etat = pastille("Pas encore analysé")
         self.phrase = QLabel("Clique sur « Analyser mon PC » pour commencer.", wordWrap=True,
-                             font=theme.police(17, QFont.Weight.DemiBold, titre=True))
+                             font=theme.police("titre"))
         self.info = QLabel("L'analyse prend environ une minute. Elle lit ton PC sans rien changer.",
                            objectName="secondaire", wordWrap=True)
-        self.bouton = QPushButton("  Analyser mon PC", objectName="principal",
-                                  cursor=Qt.CursorShape.PointingHandCursor,
-                                  icon=theme.icone("analyser", "white", 16), font=theme.police(11.5, QFont.Weight.DemiBold))
+        self.bouton = bouton("  Analyser mon PC", "principal", "analyser", "white", 15,
+                             font=theme.police("fort"))
         self.bouton.clicked.connect(self.lancer)
         # Graduée en centièmes de partie : la barre glisse d'une partie à l'autre au lieu de sauter.
         self.progression = QProgressBar(textVisible=False, maximum=len(analyse.MODULES) * 100)
@@ -228,51 +205,50 @@ class Fenetre(QMainWindow):
                                              duration=450, easingCurve=QEasingCurve.Type.OutCubic)
 
         droite = QVBoxLayout()
-        droite.setSpacing(10)
+        droite.setSpacing(8)
         droite.addStretch()
         droite.addWidget(self.etat, alignment=Qt.AlignmentFlag.AlignLeft)
+        droite.addSpacing(2)
         droite.addWidget(self.phrase)
         droite.addWidget(self.info)
-        droite.addSpacing(8)
+        droite.addSpacing(12)
         droite.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignLeft)
         droite.addWidget(self.progression)
         droite.addStretch()
 
-        cadre = QFrame(objectName="heros")
+        cadre = Verre(rayon=26)
         ligne = QHBoxLayout(cadre)
-        ligne.setContentsMargins(28, 22, 32, 22)
-        ligne.setSpacing(32)
+        ligne.setContentsMargins(26, 24, 32, 24)
+        ligne.setSpacing(30)
         ligne.addWidget(self.jauge)
         ligne.addLayout(droite, 1)
         return cadre
 
-    def _historique(self) -> QFrame:
-        cadre, disposition = carte_vide()
-        entete = entete_carte("historique", "Depuis la dernière fois")
-        effacer = QPushButton(" Effacer l'historique", objectName="discret", cursor=Qt.CursorShape.PointingHandCursor,
-                              icon=theme.icone("effacer", theme.TEXTE_2, 14))
+    def _historique(self) -> QVBoxLayout:
+        effacer = bouton(" Effacer l'historique", "discret", "effacer", theme.TEXTE_2, 13)
         effacer.clicked.connect(self.effacer_historique)
-        entete.addWidget(effacer)
-        self.comparaison = QLabel(wordWrap=True, textFormat=Qt.TextFormat.RichText, minimumWidth=270)
+        self.comparaison = QLabel(wordWrap=True, textFormat=Qt.TextFormat.RichText, minimumWidth=260)
         self.graphique = Graphique()
-        corps = QHBoxLayout()
+        cadre = Verre()
+        corps = QHBoxLayout(cadre)
+        corps.setContentsMargins(22, 18, 18, 14)
         corps.setSpacing(24)
         corps.addWidget(self.comparaison, 0, Qt.AlignmentFlag.AlignTop)
         corps.addWidget(self.graphique, 1)
-        disposition.addLayout(entete)
-        disposition.addLayout(corps)
-        return cadre
+        section = QVBoxLayout()
+        section.setSpacing(16)
+        section.addLayout(entete_section("Depuis la dernière fois", effacer))
+        section.addWidget(cadre)
+        return section
 
     def _cartes(self) -> QHBoxLayout:
         """Deux colonnes indépendantes : chaque carte garde la hauteur de son contenu."""
         self.cartes = {cle: Carte(cle, nom, COLONNES[cle]) for cle, nom, _ in analyse.MODULES}
         self.cartes["batterie"].hide()  # affichée seulement si une batterie est détectée
-        self.vider = QPushButton(" Vider la Corbeille", enabled=False, cursor=Qt.CursorShape.PointingHandCursor,
-                                 icon=theme.icone("effacer", theme.TEXTE_2, 14))
+        self.vider = bouton(" Vider la Corbeille", "", "effacer", theme.TEXTE, 13, enabled=False)
         self.vider.clicked.connect(self.vider_corbeille)
         self.cartes["fichiers"].layout().addWidget(self.vider, alignment=Qt.AlignmentFlag.AlignLeft)
-        voir = QPushButton("Voir ce qui prend de la place", objectName="lien", cursor=Qt.CursorShape.PointingHandCursor,
-                           icon=theme.icone("stockage", theme.ACCENT_CLAIR, 12))
+        voir = bouton("Voir ce qui prend de la place", "lien", "stockage", theme.ACCENT_CLAIR, 12)
         voir.clicked.connect(lambda: self.changer_page(ONGLET_STOCKAGE))
         self.cartes["disque"].layout().addWidget(voir, alignment=Qt.AlignmentFlag.AlignLeft)
         colonnes = [QVBoxLayout(), QVBoxLayout()]
@@ -293,13 +269,12 @@ class Fenetre(QMainWindow):
         return self.liste_conseils
 
     def _actions(self) -> QHBoxLayout:
-        self.copier = QPushButton(" Copier le rapport", enabled=False, icon=theme.icone("copier"),
-                                  cursor=Qt.CursorShape.PointingHandCursor)
+        self.copier = bouton(" Copier le rapport", "", "copier", theme.TEXTE, 14, enabled=False)
         self.copier.clicked.connect(self.copier_rapport)
-        self.enregistrer = QPushButton(" Enregistrer le rapport", enabled=False, icon=theme.icone("enregistrer"),
-                                       cursor=Qt.CursorShape.PointingHandCursor)
+        self.enregistrer = bouton(" Enregistrer le rapport", "", "enregistrer", theme.TEXTE, 14, enabled=False)
         self.enregistrer.clicked.connect(self.enregistrer_rapport)
         ligne = QHBoxLayout()
+        ligne.setContentsMargins(0, 4, 0, 0)
         ligne.setSpacing(10)
         ligne.addStretch()
         ligne.addWidget(self.copier)
@@ -318,7 +293,9 @@ class Fenetre(QMainWindow):
         for numero, (conseil, lien) in enumerate(zip(conseils, liens or [None] * len(conseils)), start=1):
             self.liste_conseils.addWidget(CarteConseil(numero, conseil, lien, self.ouvrir))
         if message:
-            cadre, disposition = carte_vide((20, 16, 20, 16))
+            cadre = Verre(rayon=18)
+            disposition = QVBoxLayout(cadre)
+            disposition.setContentsMargins(20, 16, 20, 16)
             disposition.addWidget(QLabel(message, objectName="secondaire", wordWrap=True))
             self.liste_conseils.addWidget(cadre)
         if animer:
@@ -332,8 +309,8 @@ class Fenetre(QMainWindow):
             self.comparaison.setText(f"<span style='color:{theme.TEXTE_2}'>{''.join(lignes)}</span>")
             return
         tete, *reste = lignes
-        self.comparaison.setText(f"<div style='font-size:13pt; font-weight:600'>{tete}</div>"
-                                 f"<div style='color:{theme.TEXTE_2}'>{'<br>'.join(reste)}</div>")
+        self.comparaison.setText(f"<div style='font-size:13.5pt; font-weight:700'>{tete}</div>"
+                                 f"<div style='color:{theme.TEXTE_2}; line-height:140%'>{'<br>'.join(reste)}</div>")
 
     def lancer(self) -> None:
         self.bouton.setEnabled(False)
@@ -347,7 +324,7 @@ class Fenetre(QMainWindow):
         self.glissement.stop()
         self.progression.setValue(0)
         self.progression.show()
-        self.statusBar().showMessage("Analyse en cours... (la mesure des dossiers peut prendre une minute)")
+        self.info.setText("Analyse en cours… (la mesure des dossiers peut prendre une minute)")
         self.analyse = Analyse()
         self.analyse.etape.connect(self.avancer)
         self.analyse.termine.connect(self.afficher)
@@ -365,7 +342,9 @@ class Fenetre(QMainWindow):
         self.resultat = resultat
         note = analyse.score_global(resultat)
         niveau, phrase = analyse.interpretation(note)
-        self.jauge.definir(note, theme.NIVEAUX[niveau], animer)
+        # La lueur prend la couleur de l'état du PC, une fois l'anneau rempli.
+        self.ambiance.definir_teinte("neutre" if note is None else niveau, animer, self.jauge.animation.duration())
+        self.jauge.definir(note, theme.VIFS[niveau], animer)
         self.etat.setText(ETATS[niveau])
         self.etat.setProperty("niveau", niveau)
         repolir(self.etat)
@@ -412,7 +391,6 @@ class Fenetre(QMainWindow):
         self._autoriser_mode()
         self.copier.setEnabled(True)
         self.enregistrer.setEnabled(True)
-        self.statusBar().showMessage(f"Terminé en {resultat['duree']:.0f} s")
 
     def afficher_historique_existant(self) -> None:
         """Au lancement : le graphique des analyses précédentes, s'il y en a."""
@@ -428,22 +406,19 @@ class Fenetre(QMainWindow):
     # --- Actions ---
 
     def effacer_historique(self) -> None:
-        boite = QMessageBox(QMessageBox.Icon.Question, "Effacer l'historique",
-                            "Effacer toutes les analyses enregistrées ? Cette action est définitive.", parent=self)
-        confirmer = boite.addButton("Effacer", QMessageBox.ButtonRole.DestructiveRole)
-        boite.setDefaultButton(boite.addButton("Annuler", QMessageBox.ButtonRole.RejectRole))
-        boite.exec()
-        if boite.clickedButton() is not confirmer:
+        feuille = Feuille(self, "Effacer l'historique ?", "Toutes les analyses enregistrées seront effacées.",
+                          "Cette action est définitive.", confirmer="Effacer", destructif=True, icone="effacer")
+        if feuille.exec() != QDialog.DialogCode.Accepted:
             return
         try:
             historique.effacer()
         except OSError:
             journal.exception("Impossible d'effacer l'historique")
-            self.statusBar().showMessage("L'historique n'a pas pu être effacé.", 6000)
+            self.annonce.montrer("L'historique n'a pas pu être effacé.", "erreur")
             return
         self.graphique.afficher([])
         self._texte_comparaison(["Historique effacé."])
-        self.statusBar().showMessage("Historique effacé.", 4000)
+        self.annonce.montrer("Historique effacé.", "valide")
 
     def vider_corbeille(self) -> None:
         """Une des deux seules actions qui modifient le PC (avec « Supprimer » de l'onglet Stockage), et
@@ -455,18 +430,18 @@ class Fenetre(QMainWindow):
             module = fichiers.scan(self.resultat["modules"]["fichiers"])
         except Exception:
             journal.exception("Impossible de vider la Corbeille")
-            self.statusBar().showMessage("La Corbeille n'a pas pu être vidée.", 6000)
+            self.annonce.montrer("La Corbeille n'a pas pu être vidée.", "erreur")
             return
         libere = avant - module["corbeille"]
         if libere <= 0:  # confirmation refusée
-            self.statusBar().showMessage("La Corbeille n'a pas été vidée.", 4000)
+            self.annonce.montrer("La Corbeille n'a pas été vidée.")
             return
         self.resultat["modules"]["fichiers"] = module
         self.cartes["fichiers"].remplir(analyse.points_module(self.resultat, "fichiers"), None, module["constats"],
                                         [], None)
         self.vider.setEnabled(bool(module["corbeille"]))
-        self.statusBar().showMessage(f"Corbeille vidée : {taille_lisible(libere)} libérés. "
-                                     "Relance l'analyse pour mettre le score à jour.")
+        self.annonce.montrer(f"Corbeille vidée : {taille_lisible(libere)} libérés. "
+                             "Relance l'analyse pour mettre le score à jour.", "valide", 6000)
 
     def _autoriser_mode(self) -> None:
         """Le changement de mode recrée tout le contenu : pas pendant une analyse, qui perdrait son affichage."""
@@ -480,6 +455,7 @@ class Fenetre(QMainWindow):
         fondu = Fondu(self, self.grab(), DUREE_ONGLET)
         self.onglet = numero
         self.pages.setCurrentIndex(numero)
+        self._suivre_page()
         fondu.hide()  # l'image de la nouvelle page, sans le fondu par-dessus
         nouvelle = self.grab()
         fondu.show()
@@ -491,7 +467,7 @@ class Fenetre(QMainWindow):
             theme.enregistrer_mode(not theme.CLAIR)
         except OSError:
             journal.exception("Impossible d'enregistrer le mode d'affichage")
-            self.statusBar().showMessage("Le mode d'affichage n'a pas pu être changé.", 6000)
+            self.annonce.montrer("Le mode d'affichage n'a pas pu être changé.", "erreur")
             return
         # L'image de l'affichage actuel couvre la fenêtre : la suite se prépare dessous, sans rien montrer.
         fondu = Fondu(self, self.grab(), DUREE_FONDU)
@@ -541,20 +517,19 @@ class Fenetre(QMainWindow):
             os.startfile(cible)  # comme un double-clic
         except OSError:
             journal.exception("Impossible d'ouvrir %s", cible)
-            self.statusBar().showMessage("Cette page n'a pas pu s'ouvrir sur ce PC.", 6000)
+            self.annonce.montrer("Cette page n'a pas pu s'ouvrir sur ce PC.", "erreur")
 
     def copier_rapport(self) -> None:
         if not self.resultat:
             return
         QGuiApplication.clipboard().setText(analyse.rapport_texte(self.resultat))
-        self.statusBar().showMessage("Rapport copié dans le presse-papiers.", 4000)
         # Confirmation sur le bouton lui-même, le temps d'un coup d'œil (même largeur : rien ne bouge autour).
-        bouton = self.copier
-        bouton.setMinimumWidth(bouton.width())
-        bouton.setText(" Rapport copié")
-        bouton.setIcon(theme.icone("valide", theme.NIVEAUX["vert"]))
-        QTimer.singleShot(1600, bouton, lambda: (bouton.setText(" Copier le rapport"),
-                                                 bouton.setIcon(theme.icone("copier"))))
+        bouton_copier = self.copier
+        bouton_copier.setMinimumWidth(bouton_copier.width())
+        bouton_copier.setText(" Rapport copié")
+        bouton_copier.setIcon(theme.icone("valide", theme.NIVEAUX["vert"]))
+        QTimer.singleShot(1600, bouton_copier, lambda: (bouton_copier.setText(" Copier le rapport"),
+                                                        bouton_copier.setIcon(theme.icone("copier"))))
 
     def enregistrer_rapport(self) -> None:
         """Écrit le rapport HTML uniquement à l'endroit choisi dans la boîte de dialogue."""
@@ -571,10 +546,10 @@ class Fenetre(QMainWindow):
                 fichier.write(page)
         except Exception:
             journal.exception("Impossible d'enregistrer le rapport")
-            QMessageBox.warning(self, "Rapport non enregistré",
-                                "Le rapport n'a pas pu être enregistré à cet endroit. Essaie un autre dossier.")
+            Feuille(self, "Rapport non enregistré", "Le rapport n'a pas pu être enregistré à cet endroit.",
+                    "Essaie un autre dossier.", confirmer="OK", annuler=None, icone="avertissement").exec()
             return
-        self.statusBar().showMessage("Rapport enregistré.", 4000)
+        self.annonce.montrer("Rapport enregistré.", "valide")
 
     def closeEvent(self, evenement) -> None:
         # Fermer pendant une analyse : on cache la fenêtre puis on attend la fin des threads,
@@ -599,12 +574,6 @@ def lignes_detail(cle: str, module: dict) -> list[list[str]]:
     if cle == "ressources":
         return [[p["nom"], taille_lisible(p["octets"])] for p in module["processus"]]
     return []
-
-
-def melange(a: QColor, b: QColor, part_de_a: float) -> QColor:
-    """Couleur entre `b` (0) et `a` (1), comme deux images superposées en transparence."""
-    return QColor(*(round(x * part_de_a + y * (1 - part_de_a))
-                    for x, y in ((a.red(), b.red()), (a.green(), b.green()), (a.blue(), b.blue()))))
 
 
 @cache  # chargée une fois : appelée à chaque étape du fondu
@@ -637,9 +606,10 @@ def mode_barre_titre(app: QApplication) -> None:
 
 
 def preparer_application(app: QApplication) -> None:
-    """Thème clair ou sombre : style Fusion, police, palette et feuille de style, et icône de l'application."""
+    """Style Fusion, police Inter, palette et feuille de style du mode, et icône de l'application."""
     app.setStyle("Fusion")
-    app.setFont(theme.police(10))
+    theme.charger_polices()
+    app.setFont(theme.police("corps"))
     app.setWindowIcon(QIcon(str(theme.ICONE_APPLICATION)))  # vaut pour toutes les fenêtres, dialogues compris
     appliquer_couleurs(app)
 
@@ -647,13 +617,16 @@ def preparer_application(app: QApplication) -> None:
 def appliquer_couleurs(app: QApplication) -> None:
     """Palette et feuille de style du mode actuel (seules à changer entre clair et sombre)."""
     palette = QPalette()
-    for role, couleur in ((QPalette.ColorRole.Window, theme.SURFACE), (QPalette.ColorRole.WindowText, theme.TEXTE),
-                          (QPalette.ColorRole.Base, theme.SURFACE_2), (QPalette.ColorRole.Text, theme.TEXTE),
-                          (QPalette.ColorRole.Button, theme.SURFACE_2), (QPalette.ColorRole.ButtonText, theme.TEXTE),
-                          (QPalette.ColorRole.ToolTipBase, theme.SURFACE_2), (QPalette.ColorRole.ToolTipText, theme.TEXTE),
-                          (QPalette.ColorRole.Highlight, theme.ACCENT), (QPalette.ColorRole.HighlightedText, "white")):
+    for role, couleur in ((QPalette.ColorRole.Window, theme.FOND), (QPalette.ColorRole.WindowText, theme.TEXTE),
+                          (QPalette.ColorRole.Base, theme.SURFACE), (QPalette.ColorRole.Text, theme.TEXTE),
+                          (QPalette.ColorRole.Button, theme.SURFACE), (QPalette.ColorRole.ButtonText, theme.TEXTE),
+                          (QPalette.ColorRole.ToolTipBase, theme.SURFACE),
+                          (QPalette.ColorRole.ToolTipText, theme.TEXTE),
+                          (QPalette.ColorRole.Highlight, theme.ACCENT), (QPalette.ColorRole.HighlightedText, "white"),
+                          (QPalette.ColorRole.PlaceholderText, theme.TEXTE_3)):
         palette.setColor(role, QColor(couleur))
     app.setPalette(palette)
+    app.setFont(theme.police("corps"))  # après un changement de mode, le module du thème est relu
     app.setStyleSheet(theme.STYLE)
 
 
