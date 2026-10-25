@@ -1,6 +1,6 @@
 # Journal des versions
 
-## Prochaine version (pas encore publiée)
+## v0.3.6 - 2026-10-25
 
 - Bilan deux fois plus rapide : les parties de l'analyse se font en même temps (environ 3 s au lieu de 6 sur
   un PC déjà analysé). La charge du processeur ne compte plus le travail de l'application elle-même.
