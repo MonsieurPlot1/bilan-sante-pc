@@ -1,12 +1,22 @@
 # Journal des versions
 
-## Prochaine version (pas encore publiée)
+## v0.3.5 - 2026-10-25
 
+- Nouvelle interface, dans l'esprit des applications d'Apple : cartes en verre dépoli posées sur une lueur
+  douce dont la couleur suit la santé du PC (bleue avant l'analyse, puis verte, orange ou rouge), score dans
+  un anneau, onglets à segments, tuiles d'icônes de couleur, en mode clair comme en sombre. Barre de titre
+  de Windows aux couleurs du thème.
+- Quand la page défile, la barre du haut devient du verre dépoli : le contenu qui passe dessous s'y devine,
+  flouté. Défilement fluide, plein écran compris.
+- Stockage : la barre du disque est découpée par catégorie, avec sa légende, et chaque ligne porte la
+  couleur de sa catégorie. La part utilisée du disque est écrite en clair (« 75 % utilisés »).
+- Les confirmations (supprimer un élément, effacer l'historique) s'affichent en verre sur la fenêtre
+  floutée, et Entrée ne confirme jamais une suppression. Les messages apparaissent en bas de la fenêtre et
+  s'effacent seuls.
 - Infobulles revues : celles qui répétaient ce qui est déjà écrit disparaissent (barre du disque, boutons
-  « Afficher » et « Supprimer »), et la part utilisée du disque est écrite en clair (« 75 % utilisés »). Celles
-  qui restent (bouton clair/sombre, points du graphique, noms et chemins coupés) prennent le style de
-  l'application : verre arrondi, clair ou sombre ; un nom coupé s'affiche en entier par-dessus lui-même, sans
-  cacher la ligne voisine.
+  « Afficher » et « Supprimer »). Celles qui restent (bouton clair/sombre, points du graphique, noms et
+  chemins coupés) prennent le style de l'application ; un nom coupé s'affiche en entier par-dessus
+  lui-même, sans cacher la ligne voisine.
 
 ## v0.3.0 - 2026-10-24
 
