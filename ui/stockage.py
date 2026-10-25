@@ -9,6 +9,7 @@ import logging
 import os
 import subprocess
 import threading
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Callable
 
@@ -51,19 +52,24 @@ TEXTE_DOUBLONS = ("Cherche les fichiers et les dossiers en double dans tes fichi
 
 
 class Travail(QThread):
-    """Analyse longue (stockage ou doublons) hors du thread de l'interface, en priorité basse ; arrêtable."""
+    """Analyse longue (stockage, doublons, test de connexion) hors du thread de l'interface ; arrêtable.
+
+    `discret` : en priorité basse, pour ne pas ralentir ce que l'utilisateur fait à côté (sauf une mesure du réseau,
+    qu'un thread freiné fausserait).
+    """
 
     avance = Signal(object)  # valeurs de la progression, telles que la fonction les donne
     termine = Signal(object)  # résultat, None si l'analyse a été arrêtée, ou {"erreur": texte}
 
-    def __init__(self, fonction: Callable[[Callable, Callable[[], bool]], dict | None], erreur: str) -> None:
+    def __init__(self, fonction: Callable[[Callable, Callable[[], bool]], dict | None], erreur: str,
+                 discret: bool = True) -> None:
         super().__init__()
-        self.fonction, self.erreur = fonction, erreur
+        self.fonction, self.erreur, self.discret = fonction, erreur, discret
         self.arret = threading.Event()
 
     def run(self) -> None:
         try:
-            with arriere_plan():
+            with arriere_plan() if self.discret else nullcontext():
                 resultat = self.fonction(lambda *valeurs: self.avance.emit(valeurs), self.arret.is_set)
         except Exception:  # n'importe quelle panne : la page l'annonce au lieu de rester bloquée
             journal.exception(self.erreur)

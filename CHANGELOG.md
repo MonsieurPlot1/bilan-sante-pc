@@ -1,5 +1,13 @@
 # Journal des versions
 
+## Prochaine version (pas encore publiée)
+
+- Nouvel onglet « Connexion » : la liaison du PC avec la box (Wi-Fi ou câble, force du signal, bande et
+  norme du Wi-Fi, vitesse de la liaison), et un test de la connexion internet sur clic (ping, vitesse de
+  téléchargement et d'envoi). Le résultat dit ce que la connexion permet (vidéo en 4K, appels vidéo, jeux
+  en ligne…) et ce qui la freine, avec des conseils. Le test est le seul moment où l'application utilise
+  le réseau : il échange des données de test avec les serveurs de Cloudflare, rien d'autre.
+
 ## v0.3.6.1 - 2026-10-25
 
 - Nouvelle partie « Jeux et affichage » (hors score) : un écran réglé nettement sous sa fréquence maximale

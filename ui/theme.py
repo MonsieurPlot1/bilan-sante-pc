@@ -156,6 +156,8 @@ ICONE = {
     "systeme": "", "applications": "", "jeux": "", "videos": "", "photos": "",
     "musique": "", "documents": "", "archives": "", "temporaires": "",
     "corbeille": "", "sauvegardes": "", "autres": "",
+    # Page Connexion : compteur de vitesse, téléchargement, envoi, chronomètre (ping).
+    "connexion": "", "telechargement": "", "envoi": "", "ping": "",
 }
 
 

@@ -11,7 +11,10 @@ App Windows grand public : scanne le PC et explique en français clair pourquoi 
   logiciels, le dossier temporaire ni le profil et ses dossiers (`stockage.supprimable`). Aucune autre action
   ne s'ajoute sans mon accord explicite.
   Les boutons « Ouvrir » des conseils ne font qu'ouvrir une page des Paramètres, un dossier ou un outil de Windows.
-- 100 % local : aucune donnée n'est envoyée ailleurs, aucun réseau.
+- 100 % local : aucune donnée n'est envoyée ailleurs, aucun réseau. Seule exception, à ma demande et
+  uniquement sur clic : le test de l'onglet Connexion (`modules/connexion.py`), qui échange des données de test
+  tirées au hasard avec les serveurs de Cloudflare (speed.cloudflare.com). Rien sur le PC ni sur l'utilisateur
+  ne part, et aucun autre accès au réseau ne s'ajoute sans mon accord explicite.
 - Un module = un fichier dans `modules/`, avec une fonction `scan()` qui renvoie un dict (mesures + constats ; le score est calculé dans `modules/score.py`).
 - La logique (modules/) est séparée de l'interface (ui/) : les modules doivent tourner sans PySide6.
 - Textes affichés en français simple, sans jargon. Jamais "désactive X" sans préciser que certains programmes sont légitimes.
@@ -32,6 +35,7 @@ affiche toutes dans le style de l'application, jamais la bulle grise de Qt.
 - Dans le score : démarrage, disque, ressources (mémoire et processeur), redémarrage, batterie (PC portables).
 - Hors score : fichiers (Corbeille, fichiers temporaires, cache des navigateurs, Windows.old), alimentation (mode d'économie d'énergie), jeux (fréquence des écrans, pilote de la carte graphique des jeux, Mode jeu).
 - Onglet à part, hors du bilan : stockage (`modules/stockage.py`, page `ui/stockage.py`), ce qui occupe un disque en 12 catégories, et doublons (`modules/doublons.py`), fichiers et dossiers personnels au contenu identique.
+- Onglet à part, hors du bilan : connexion (`modules/connexion.py`, page `ui/connexion.py`), la liaison avec la box (lue auprès de Windows) et le test de débit sur clic. Les tests n'utilisent jamais le réseau (fixture `reseau_interdit`).
 - Barème et seuils dans `config.py`, calcul du score et conseils dans `modules/score.py`.
 
 ## Style

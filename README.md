@@ -51,6 +51,20 @@ l'ancien Windows (Windows.old), les dossiers de Windows et de Microsoft dans Pro
 AppData, le dossier des fichiers temporaires, ni ton dossier personnel, Bureau, Documents ou
 Téléchargements eux-mêmes.
 
+## L'onglet Connexion
+
+Il montre la liaison du PC avec la box, telle que Windows la connaît : Wi-Fi ou câble, force du signal,
+bande (2,4, 5 ou 6 GHz) et norme du Wi-Fi, vitesse de la liaison. Rien n'est envoyé pour ça.
+
+Le bouton « Lancer le test » mesure la vraie connexion internet : le ping (temps de réaction), puis la
+vitesse de téléchargement et d'envoi, avec le serveur de test de Cloudflare le plus proche
+(`speed.cloudflare.com`, sans compte). C'est le seul moment où l'application utilise le réseau, et
+seulement sur ce clic : elle échange des données de test tirées au hasard (au plus 350 Mo, sur la fibre)
+et rien d'autre. Le résultat dit ce que la connexion permet (vidéo en 4K, appels vidéo, jeux en ligne…) et,
+s'il y en a, ce qui la freine (signal Wi-Fi faible, Wi-Fi en 2,4 GHz, liaison avec la box qui plafonne,
+ping élevé). Il n'est pas enregistré et n'entre pas dans le score. Le serveur de Cloudflare refuse les
+tests trop rapprochés depuis une même connexion : l'application dit alors combien de temps attendre.
+
 ## Ce qu'elle ne fait jamais
 
 - Elle ne modifie, ne supprime et ne désactive rien : elle se contente de lire.
@@ -62,7 +76,8 @@ Téléchargements eux-mêmes.
 - Les boutons « Ouvrir » sous les conseils affichent seulement la bonne page des Paramètres, le dossier
   concerné ou le Gestionnaire des tâches : c'est toi qui décides ensuite quoi changer. Dans l'onglet
   Stockage, « Afficher » ouvre seulement l'Explorateur à l'emplacement d'un dossier ou d'un fichier.
-- Elle n'envoie aucune donnée : tout reste sur ton PC, sans aucun accès au réseau.
+- Elle n'envoie aucune donnée sur toi ni sur ton PC : tout reste sur ton PC. Elle n'utilise le réseau
+  que pour le test de l'onglet Connexion, quand tu le lances, avec des données de test.
 
 Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` :
 - `bilan.log` : un journal, utile en cas de problème ;

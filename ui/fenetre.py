@@ -18,6 +18,7 @@ import historique
 from modules import fichiers
 from modules.disque import taille_lisible
 from ui import analyse, theme
+from ui.connexion import PageConnexion
 from ui.stockage import PageStockage
 from ui.verre import Ambiance, Page, Verre
 from ui.widgets import (Annonce, BarreHaut, Carte, CarteConseil, DefilementDoux, Feuille, Fondu, Graphique, Infobulle,
@@ -33,8 +34,8 @@ COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élém
 
 DUREE_FONDU = 300  # millisecondes : passage en douceur entre le mode clair et le mode sombre
 DUREE_ONGLET = 180  # millisecondes : passage en douceur d'un onglet à l'autre
-ONGLETS = ["Bilan de santé", "Stockage"]
-ONGLET_STOCKAGE = 1
+ONGLETS = ["Bilan de santé", "Stockage", "Connexion"]
+ONGLET_STOCKAGE, ONGLET_CONNEXION = 1, 2
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # boutons de la barre de titre sombres
 DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 34, 35, 36  # Windows 11 : liseré, barre de titre
 WTA_NONCLIENT, WTNCA_NODRAWCAPTION, WTNCA_NODRAWICON = 1, 0x1, 0x2  # barre de titre sans titre ni icône
@@ -90,6 +91,7 @@ class Fenetre(QMainWindow):
         self.resultat_stockage: dict | None = None
         self.racine_stockage: str | None = None
         self.doublons_stockage: dict | None = None
+        self.resultat_connexion: dict | None = None  # page Connexion : dernier test, pour la même raison
         self.construire()
         colorer_barre_titre(self, *couleurs_cadre())  # barre de titre fondue dans la barre du haut
         epurer_barre_titre(self)
@@ -104,6 +106,7 @@ class Fenetre(QMainWindow):
         self.pages = QStackedWidget()
         self.pages.addWidget(self._page_bilan())
         self.pages.addWidget(self._page_stockage())
+        self.pages.addWidget(self._page_connexion())
         self.pages.setCurrentIndex(self.onglet)
         disposition = QVBoxLayout(self.ambiance)
         disposition.setContentsMargins(0, 0, 0, 0)
@@ -178,6 +181,12 @@ class Fenetre(QMainWindow):
         self.stockage.statut.connect(lambda texte, nature: self.annonce.montrer(texte, nature))
         self.stockage.occupee.connect(self._autoriser_mode)
         return self._defilement(self.stockage)
+
+    def _page_connexion(self) -> DefilementDoux:
+        self.connexion = PageConnexion(self.ouvrir, self.resultat_connexion)
+        self.connexion.statut.connect(lambda texte, nature: self.annonce.montrer(texte, nature))
+        self.connexion.occupee.connect(self._autoriser_mode)
+        return self._defilement(self.connexion)
 
     def _page_bilan(self) -> DefilementDoux:
         contenu = Page()
@@ -454,7 +463,8 @@ class Fenetre(QMainWindow):
 
     def _autoriser_mode(self) -> None:
         """Le changement de mode recrée tout le contenu : pas pendant une analyse, qui perdrait son affichage."""
-        self.mode.setEnabled(not self.bilan_en_cours and not self.stockage.en_cours())
+        self.mode.setEnabled(not self.bilan_en_cours and not self.stockage.en_cours()
+                             and not self.connexion.en_cours())
 
     def changer_page(self, numero: int) -> None:
         """Onglets : la nouvelle page apparaît en fondu rapide sur l'ancienne."""
@@ -489,7 +499,9 @@ class Fenetre(QMainWindow):
         positions = [self.pages.widget(numero).verticalScrollBar().value() for numero in range(self.pages.count())]
         self.resultat_stockage, self.racine_stockage = self.stockage.resultat, self.stockage.racine
         self.doublons_stockage = self.stockage.doublons
+        self.resultat_connexion = self.connexion.resultat
         self.stockage.arreter()  # analyse finie, mais son thread peut vivre encore un instant
+        self.connexion.arreter()
         # Ancien contenu supprimé tout de suite : la nouvelle feuille de style n'a pas à le restyler.
         self.takeCentralWidget()
         importlib.reload(theme)  # les couleurs sont des constantes du module : on le relit pour les recalculer
@@ -562,10 +574,11 @@ class Fenetre(QMainWindow):
 
     def closeEvent(self, evenement) -> None:
         # Fermer pendant une analyse : on cache la fenêtre puis on attend la fin des threads,
-        # sinon Qt plante en détruisant un thread encore actif. L'analyse du stockage s'arrête en route.
-        if (self.analyse and self.analyse.isRunning()) or self.stockage.en_cours():
+        # sinon Qt plante en détruisant un thread encore actif. Le stockage et le test de connexion s'arrêtent en route.
+        if (self.analyse and self.analyse.isRunning()) or self.stockage.en_cours() or self.connexion.en_cours():
             self.hide()
         self.stockage.arreter()
+        self.connexion.arreter()
         if self.analyse:
             self.analyse.wait()
         super().closeEvent(evenement)

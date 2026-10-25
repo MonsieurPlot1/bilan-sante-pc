@@ -354,7 +354,7 @@ def pied_de_page() -> QWidget:
     ligne.setContentsMargins(4, 10, 4, 0)
     ligne.setSpacing(8)
     ligne.addWidget(bouclier)
-    ligne.addWidget(QLabel("Tout reste sur ton PC. L'application ne modifie rien sans ton accord.",
+    ligne.addWidget(QLabel("Tes données restent sur ton PC. L'application ne modifie rien sans ton accord.",
                            objectName="discret", font=theme.police("legende")))
     ligne.addStretch()
     ligne.addWidget(QLabel(f"Version {config.VERSION}", objectName="discret", font=theme.police("legende")))

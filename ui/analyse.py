@@ -216,7 +216,8 @@ def rapport_html(resultat: dict) -> str:
     if "score" in resultat["erreurs"]:
         parties.append(f"<p>{e(anonymiser(resultat['erreurs']['score']))}</p>")
     parties.append("<p class='discret'>Rapport créé sur ce PC par Bilan santé PC. "
-                   "L'application ne modifie rien sans l'accord de l'utilisateur et n'envoie aucune donnée.</p>")
+                   "L'application ne modifie rien sans l'accord de l'utilisateur et n'envoie aucune donnée "
+                   "personnelle.</p>")
     return ("<!doctype html>\n<html lang='fr'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width, initial-scale=1'>"
             f"<title>Bilan santé PC - {resultat['date']:%d/%m/%Y}</title><style>{STYLE_HTML}</style></head>"
