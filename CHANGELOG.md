@@ -1,6 +1,6 @@
 # Journal des versions
 
-## Prochaine version (pas encore publiée)
+## v0.3.8 - 2026-10-25
 
 - Mode clair revu : fond plus lumineux aux couleurs plus vives, cartes d'un blanc net avec une ombre bien
   visible, boutons secondaires blancs cernés d'un trait fin (comme sur Mac) et boutons « Ouvrir » des
