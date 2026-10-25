@@ -52,7 +52,7 @@ TEXTE_DOUBLONS = ("Cherche les fichiers et les dossiers en double dans tes fichi
 
 
 class Travail(QThread):
-    """Analyse longue (stockage, doublons, test de connexion) hors du thread de l'interface ; arrêtable.
+    """Analyse longue (stockage, doublons, test de connexion, mise à jour) hors du thread de l'interface ; arrêtable.
 
     `discret` : en priorité basse, pour ne pas ralentir ce que l'utilisateur fait à côté (sauf une mesure du réseau,
     qu'un thread freiné fausserait).

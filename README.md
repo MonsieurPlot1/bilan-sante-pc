@@ -65,21 +65,38 @@ s'il y en a, ce qui la freine (signal Wi-Fi faible, Wi-Fi en 2,4 GHz, liaison av
 ping élevé). Il n'est pas enregistré et n'entre pas dans le score. Le serveur de Cloudflare refuse les
 tests trop rapprochés depuis une même connexion : l'application dit alors combien de temps attendre.
 
+## Les mises à jour
+
+Quelques secondes après l'ouverture, l'application demande à GitHub la liste de ses versions publiées
+(une seule requête, qui ne contient que son nom et sa version). Si une version plus récente existe, un
+bouton « Mettre à jour » apparaît en haut à droite. Il montre les nouveautés et, si tu confirmes, il télécharge
+le zip de la nouvelle version depuis GitHub, vérifie qu'il est bien celui publié (taille et empreinte SHA-256
+données par GitHub), puis l'application se ferme : la nouvelle version remplace l'ancienne et se rouvre
+toute seule. En cas d'échec, l'ancienne version est remise en place. Ton historique et tes réglages sont
+gardés : ils ne sont pas dans le dossier de l'application.
+
+Si l'application est dans un dossier où elle n'a pas le droit d'écrire (Program Files, par exemple), le
+bouton ouvre seulement la page de la nouvelle version sur GitHub, pour la télécharger toi-même.
+
 ## Ce qu'elle ne fait jamais
 
 - Elle ne modifie, ne supprime et ne désactive rien : elle se contente de lire.
-  Deux exceptions, qui n'agissent que si tu cliques dessus et que tu confirmes :
+  Trois exceptions, qui n'agissent que si tu cliques dessus et que tu confirmes :
   - le bouton « Vider la Corbeille » (confirmation dans la fenêtre de Windows). Pense à vérifier
     la Corbeille avant : c'est définitif ;
   - les boutons « Supprimer » de l'onglet Stockage, qui effacent définitivement un fichier ou un
-    dossier, sans passer par la Corbeille : vérifie avec « Afficher » avant de confirmer.
+    dossier, sans passer par la Corbeille : vérifie avec « Afficher » avant de confirmer ;
+  - le bouton « Mettre à jour », qui remplace seulement les fichiers de l'application elle-même.
 - Les boutons « Ouvrir » sous les conseils affichent seulement la bonne page des Paramètres, le dossier
   concerné ou le Gestionnaire des tâches : c'est toi qui décides ensuite quoi changer. Dans l'onglet
   Stockage, « Afficher » ouvre seulement l'Explorateur à l'emplacement d'un dossier ou d'un fichier.
 - Elle n'envoie aucune donnée sur toi ni sur ton PC : tout reste sur ton PC. Elle n'utilise le réseau
-  que pour le test de l'onglet Connexion, quand tu le lances, avec des données de test.
+  que pour le test de l'onglet Connexion, quand tu le lances, avec des données de test, et pour les
+  mises à jour : la liste des versions à l'ouverture, puis le téléchargement si tu cliques sur
+  « Mettre à jour ».
 
-Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` :
+Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` (et, le temps d'une mise à jour, dans son propre
+dossier) :
 - `bilan.log` : un journal, utile en cas de problème ;
 - `historique.json` : les chiffres de chaque analyse (date, scores, espace disque utilisé), pour
   l'encadré « Depuis la dernière fois » (avec l'évolution du disque sur le dernier mois) et le graphique.
@@ -118,5 +135,7 @@ build.bat
 ```
 
 Le résultat est dans `dist\BilanSantePC\BilanSantePC.exe` : copie tout le dossier
-`dist\BilanSantePC` pour l'emporter sur un autre PC. L'icône vient de `assets\icon.ico`
+`dist\BilanSantePC` pour l'emporter sur un autre PC. Pour une version publiée, joins à la release
+GitHub le zip de ce dossier, nommé `BilanSantePC-vX.Y.Z-windows.zip`, avec le dossier `BilanSantePC` à
+sa racine : c'est lui que les mises à jour installent. L'icône vient de `assets\icon.ico`
 (ses sources : `icon.svg`, et `icon-simple.svg` pour les petites tailles, de 16 à 24 pixels).

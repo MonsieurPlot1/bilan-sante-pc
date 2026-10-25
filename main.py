@@ -1,10 +1,13 @@
-"""Bilan santé PC : lance l'interface, ou le mode terminal avec `python main.py --cli`."""
+"""Bilan santé PC : lance l'interface, ou le mode terminal avec `python main.py --cli`.
+
+Après le clic sur « Mettre à jour », la nouvelle version est lancée en mode installation (voir modules/mise_a_jour.py).
+"""
 
 import sys
 
 import historique
 import journal
-from modules import disque
+from modules import disque, mise_a_jour
 from ui import analyse
 
 
@@ -50,6 +53,8 @@ def main() -> int:
     if "--cli" in sys.argv:
         cli()
         return 0
+    if mise_a_jour.ARGUMENT_INSTALLER in sys.argv:
+        return mise_a_jour.installer_depuis(sys.argv)
     from ui.fenetre import lancer_interface  # importé ici : le mode terminal se passe de PySide6
     return lancer_interface()
 

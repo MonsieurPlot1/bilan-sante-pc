@@ -1,5 +1,13 @@
 # Journal des versions
 
+## Prochaine version (pas encore publiée)
+
+- Mises à jour dans l'application : à l'ouverture, elle regarde sur GitHub si une nouvelle version est publiée.
+  Si oui, un bouton « Mettre à jour » apparaît en haut à droite, avec les nouveautés. Un clic télécharge la
+  nouvelle version, vérifie qu'elle est bien celle publiée, puis l'application se ferme, se remplace et se
+  rouvre toute seule (l'ancienne version est remise en place en cas d'échec). L'historique et les réglages sont
+  gardés. Cette version-ci s'installe encore à la main ; les suivantes s'installeront depuis l'application.
+
 ## v0.3.8 - 2026-10-25
 
 - Mode clair revu : fond plus lumineux aux couleurs plus vives, cartes d'un blanc net avec une ombre bien

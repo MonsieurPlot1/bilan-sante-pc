@@ -14,12 +14,13 @@ from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPalette
 from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QMainWindow, QProgressBar, QStackedWidget, QVBoxLayout, QWidget)
 
+import config
 import historique
-from modules import fichiers
+from modules import fichiers, mise_a_jour
 from modules.disque import taille_lisible
 from ui import analyse, theme
 from ui.connexion import PageConnexion
-from ui.stockage import PageStockage
+from ui.stockage import PageStockage, Travail
 from ui.verre import Ambiance, Page, Verre
 from ui.widgets import (Annonce, BarreHaut, Carte, CarteConseil, DefilementDoux, Feuille, Fondu, Graphique, Infobulle,
                         Jauge, Logo, Segmente, apparaitre, bouton, melange, pastille, pied_de_page, repolir,
@@ -34,6 +35,7 @@ COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élém
 
 DUREE_FONDU = 300  # millisecondes : passage en douceur entre le mode clair et le mode sombre
 DUREE_ONGLET = 180  # millisecondes : passage en douceur d'un onglet à l'autre
+DELAI_RECHERCHE = 3000  # millisecondes après l'ouverture : la recherche de mise à jour ne freine pas le démarrage
 ONGLETS = ["Bilan de santé", "Stockage", "Connexion"]
 ONGLET_STOCKAGE, ONGLET_CONNEXION = 1, 2
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # boutons de la barre de titre sombres
@@ -92,6 +94,9 @@ class Fenetre(QMainWindow):
         self.racine_stockage: str | None = None
         self.doublons_stockage: dict | None = None
         self.resultat_connexion: dict | None = None  # page Connexion : dernier test, pour la même raison
+        self.nouvelle_version: dict | None = None  # version publiée plus récente (voir mise_a_jour.plus_recente)
+        self.recherche: Travail | None = None
+        self.telechargement: Travail | None = None
         self.construire()
         colorer_barre_titre(self, *couleurs_cadre())  # barre de titre fondue dans la barre du haut
         epurer_barre_titre(self)
@@ -127,7 +132,8 @@ class Fenetre(QMainWindow):
     # --- Construction des zones de la fenêtre ---
 
     def _barre(self) -> BarreHaut:
-        """Barre du haut : l'application à gauche, les onglets au milieu, le mode clair/sombre à droite."""
+        """Barre du haut : l'application à gauche, les onglets au milieu, à droite le mode clair/sombre et, quand une
+        nouvelle version est publiée, le bouton « Mettre à jour »."""
         self.barre = barre = BarreHaut()
         gauche = QWidget()
         identite = QHBoxLayout(gauche)
@@ -144,14 +150,20 @@ class Fenetre(QMainWindow):
         texte, icone = ("Passer en mode sombre", "lune") if theme.CLAIR else ("Passer en mode clair", "soleil")
         self.mode = bouton("", "rond", icone, theme.TEXTE_2, 15, toolTip=texte, accessibleName=texte)
         self.mode.clicked.connect(self.changer_mode)
+        self.bouton_maj = bouton(" Mettre à jour", "teinte", "telechargement", theme.ACCENT_CLAIR, 13)
+        self.bouton_maj.clicked.connect(self.proposer_mise_a_jour)
+        self._montrer_mise_a_jour()
         droite = QWidget()
         reglages = QHBoxLayout(droite)
         reglages.setContentsMargins(0, 0, 0, 0)
+        reglages.setSpacing(8)
         reglages.addStretch()
+        reglages.addWidget(self.bouton_maj)
         reglages.addWidget(self.mode)
 
-        # Côtés de même largeur : les onglets restent pile au milieu de la fenêtre.
-        cote = gauche.sizeHint().width()
+        # Côtés de même largeur (bouton de mise à jour compris, même caché) : les onglets restent pile au milieu.
+        cote = max(gauche.sizeHint().width(),
+                   self.bouton_maj.sizeHint().width() + reglages.spacing() + self.mode.sizeHint().width())
         for widget in (gauche, droite):
             widget.setFixedWidth(cote)
         grille = QGridLayout(barre)
@@ -464,7 +476,7 @@ class Fenetre(QMainWindow):
     def _autoriser_mode(self) -> None:
         """Le changement de mode recrée tout le contenu : pas pendant une analyse, qui perdrait son affichage."""
         self.mode.setEnabled(not self.bilan_en_cours and not self.stockage.en_cours()
-                             and not self.connexion.en_cours())
+                             and not self.connexion.en_cours() and self.telechargement is None)
 
     def changer_page(self, numero: int) -> None:
         """Onglets : la nouvelle page apparaît en fondu rapide sur l'ancienne."""
@@ -572,15 +584,108 @@ class Fenetre(QMainWindow):
             return
         self.annonce.montrer("Rapport enregistré.", "valide")
 
+    # --- Mises à jour ---
+
+    def verifier_mise_a_jour(self) -> None:
+        """Peu après l'ouverture : cherche en arrière-plan une nouvelle version publiée sur GitHub (rien ne s'affiche
+        s'il n'y en a pas, ou hors ligne)."""
+        self.recherche = Travail(lambda _avance, _arret: mise_a_jour.verifier(),
+                                 "La recherche de mise à jour a échoué.")
+        self.recherche.termine.connect(self._nouvelle_version)
+        self.recherche.start()
+
+    def _nouvelle_version(self, nouvelle: dict | None) -> None:
+        if not nouvelle or "erreur" in nouvelle:
+            return
+        self.nouvelle_version = nouvelle
+        self._montrer_mise_a_jour()
+        apparaitre(self.bouton_maj)
+        self.annonce.montrer(f"Une nouvelle version de Bilan santé PC est disponible : la {nouvelle['version']}.",
+                             duree=6000)
+
+    def _montrer_mise_a_jour(self) -> None:
+        """Le bouton « Mettre à jour » de la barre du haut, seulement quand une nouvelle version est publiée."""
+        self.bouton_maj.setVisible(self.nouvelle_version is not None)
+        if self.nouvelle_version:
+            self.bouton_maj.setToolTip(f"Version {self.nouvelle_version['version']} disponible "
+                                       f"(tu as la {config.VERSION})")
+
+    def proposer_mise_a_jour(self) -> None:
+        """Bouton « Mettre à jour » : les nouveautés, puis, sur confirmation, le téléchargement et l'installation (ou
+        la page de la version, si elle ne peut pas s'installer toute seule)."""
+        nouvelle = self.nouvelle_version
+        notes = mise_a_jour.notes_lisibles(nouvelle["notes"])
+        texte = f"Tu as la version {config.VERSION}." + (f" Nouveautés :\n{notes}" if notes else "")
+        if mise_a_jour.installable(nouvelle):
+            details = ("L'application télécharge la nouvelle version depuis GitHub, se ferme puis se rouvre toute "
+                       "seule. Ton historique et tes réglages sont gardés.")
+            confirmer = "Mettre à jour"
+        else:
+            details = ("Elle ne peut pas s'installer toute seule ici : télécharge-la depuis sa page sur GitHub, puis "
+                       "remplace l'ancienne version par la nouvelle.")
+            confirmer = "Ouvrir la page"
+        feuille = Feuille(self, f"Version {nouvelle['version']} disponible", texte, details, confirmer=confirmer,
+                          annuler="Plus tard", icone="telechargement")
+        if feuille.exec() != QDialog.DialogCode.Accepted:
+            return
+        if confirmer == "Mettre à jour":
+            self.telecharger_mise_a_jour()
+        else:
+            self.ouvrir(nouvelle["page"])
+
+    def telecharger_mise_a_jour(self) -> None:
+        """Télécharge et vérifie la nouvelle version en arrière-plan ; le bouton montre où en est le téléchargement."""
+        nouvelle, dossier = self.nouvelle_version, mise_a_jour.dossier_application()
+
+        def preparer(avance, arret) -> dict | None:
+            exe = mise_a_jour.preparer(nouvelle["zip"], dossier, avance, arret)
+            return exe and {"exe": exe}
+
+        self.telechargement = Travail(preparer, "La mise à jour n'a pas pu être téléchargée.", discret=False)
+        self.telechargement.avance.connect(lambda valeurs: self.bouton_maj.setText(f" {round(valeurs[0] * 100)} %"))
+        self.telechargement.termine.connect(self._installer)
+        self.bouton_maj.setMinimumWidth(self.bouton_maj.width())  # même largeur pendant le téléchargement
+        self.bouton_maj.setEnabled(False)
+        self.bouton_maj.setText(" 0 %")
+        self._autoriser_mode()
+        self.annonce.montrer(f"Téléchargement de la version {nouvelle['version']}…")
+        self.telechargement.start()
+
+    def _installer(self, resultat: dict | None) -> None:
+        """Nouvelle version prête : elle se lance en mode installation et l'application se ferme pour la laisser
+        remplacer ses fichiers (elle rouvre l'application ensuite)."""
+        self.telechargement.wait()
+        self.telechargement = None
+        if resultat is None:  # arrêté : l'application se ferme
+            return
+        if "erreur" not in resultat:
+            try:
+                mise_a_jour.lancer_installation(resultat["exe"], mise_a_jour.dossier_application())
+            except OSError:
+                journal.exception("Impossible de lancer l'installation de la mise à jour")
+                resultat = {"erreur": f"La mise à jour n'a pas pu s'installer. {analyse.AIDE}"}
+            else:
+                self.close()
+                return
+        self.bouton_maj.setText(" Mettre à jour")
+        self.bouton_maj.setEnabled(True)
+        self._autoriser_mode()
+        self.annonce.montrer(resultat["erreur"], "erreur", 8000)
+
     def closeEvent(self, evenement) -> None:
         # Fermer pendant une analyse : on cache la fenêtre puis on attend la fin des threads,
-        # sinon Qt plante en détruisant un thread encore actif. Le stockage et le test de connexion s'arrêtent en route.
-        if (self.analyse and self.analyse.isRunning()) or self.stockage.en_cours() or self.connexion.en_cours():
+        # sinon Qt plante en détruisant un thread encore actif. Le stockage, le test de connexion et le téléchargement
+        # d'une mise à jour s'arrêtent en route.
+        travaux = [travail for travail in (self.analyse, self.recherche, self.telechargement)
+                   if travail and travail.isRunning()]
+        if travaux or self.stockage.en_cours() or self.connexion.en_cours():
             self.hide()
         self.stockage.arreter()
         self.connexion.arreter()
-        if self.analyse:
-            self.analyse.wait()
+        if self.telechargement:
+            self.telechargement.arret.set()
+        for travail in travaux:
+            travail.wait()
         super().closeEvent(evenement)
 
 
@@ -677,4 +782,12 @@ def lancer_interface() -> int:
     fenetre = Fenetre()
     fenetre.show()
     journal.info("Fenêtre ouverte")
+    if mise_a_jour.ARGUMENT_FAITE in sys.argv:  # rouverte par le mode installation d'une mise à jour
+        QTimer.singleShot(400, lambda: fenetre.annonce.montrer(
+            f"Bilan santé PC est à jour : version {config.VERSION}.", "valide", 6000))
+    elif mise_a_jour.ARGUMENT_RATEE in sys.argv:
+        QTimer.singleShot(400, lambda: fenetre.annonce.montrer(
+            f"La mise à jour n'a pas pu s'installer : l'ancienne version est restée en place. {analyse.AIDE}",
+            "erreur", 10000))
+    QTimer.singleShot(DELAI_RECHERCHE, fenetre.verifier_mise_a_jour)
     return app.exec()
