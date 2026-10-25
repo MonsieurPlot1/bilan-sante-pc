@@ -4,10 +4,10 @@ barre du disque, confirmations et annonces. Les matières (verre, lueur, ombres)
 from datetime import datetime
 from typing import Callable
 
-from PySide6.QtCore import (QEasingCurve, QPointF, QPropertyAnimation, QRectF, QSequentialAnimationGroup,
+from PySide6.QtCore import (QEasingCurve, QPointF, QPropertyAnimation, QRect, QRectF, QSequentialAnimationGroup,
                             QSize, Qt, QTimer, QVariantAnimation, Signal)
-from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QFont, QFontMetricsF, QLinearGradient, QPainter,
-                           QPainterPath, QPen, QPixmap)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QFont, QFontMetricsF, QImage, QLinearGradient, QPainter,
+                           QPainterPath, QPen, QPixmap, QRegion)
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
                                QHeaderView, QLabel, QPushButton, QScrollArea, QSizePolicy, QToolTip,
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
@@ -701,33 +701,80 @@ class Graphique(QWidget):
 
 
 class BarreHaut(QWidget):
-    """Barre du haut (application, onglets, mode) : un trait fin apparaît dessous dès que la page défile sous elle,
-    comme dans les applications du Mac."""
+    """Barre du haut (application, onglets, mode). Dès que la page défile, elle devient du verre dépoli : le
+    contenu qui vient de passer dessous s'y devine, flouté, avec un trait fin en bas, comme sur Mac et iPhone.
+
+    La barre ne recouvre pas la page : elle peint elle-même, floutée, la bande de page juste au-dessus de la
+    partie visible. Même effet qu'un verre posé sur la page, mais Qt peut toujours faire défiler la page en
+    décalant l'image déjà dessinée (rien ne la recouvre) : le défilement reste fluide.
+    """
+
+    MARGE_FLOU = 16  # contenu pris en plus autour de la bande : le flou reste régulier jusqu'aux bords
+    ECHELLE = 0.5  # la bande est dessinée en petit avant d'être floutée : deux fois moins de pixels
 
     def __init__(self) -> None:
         super().__init__(objectName="barre")
         self.setFixedHeight(theme.HAUTEUR_BARRE)
         self.zone = None  # zone de défilement suivie (celle de l'onglet affiché)
-        self.trait = 0.0
+        self.verre = 0.0  # 0 en haut de la page, 1 dès qu'elle a défilé de quelques pixels
+        self.flou: QImage | None = None
+        # Page défilée : ce qui est sous la barre peut changer (animations) ; on le relit de temps en temps.
+        self.relecture = QTimer(self, interval=300)
+        self.relecture.timeout.connect(self._relire)
 
     def suivre(self, zone) -> None:
         if self.zone is not None:
-            self.zone.verticalScrollBar().valueChanged.disconnect(self._defiler)
+            self.zone.verticalScrollBar().valueChanged.disconnect(self._relire)
         self.zone = zone
-        zone.verticalScrollBar().valueChanged.connect(self._defiler)
-        self._defiler(zone.verticalScrollBar().value())
+        zone.verticalScrollBar().valueChanged.connect(self._relire)
+        self._relire()
 
-    def _defiler(self, position: int) -> None:
-        trait = min(1.0, position / 16)  # apparaît en douceur sur les premiers pixels
-        if trait != self.trait:
-            self.trait = trait
-            self.update()
+    def _relire(self) -> None:
+        position = self.zone.verticalScrollBar().value() if self.zone is not None else 0
+        self.verre = min(1.0, position / 16)  # apparaît en douceur sur les premiers pixels
+        if position <= 0 or not self.isVisible():
+            self.flou = None
+            self.relecture.stop()
+        else:
+            self.flou = self._contenu_floute(position)
+            if not self.relecture.isActive():
+                self.relecture.start()
+        self.update()
+
+    def _contenu_floute(self, position: int) -> QImage:
+        """La bande de page qui vient de passer sous la barre, dessinée en petit puis floutée."""
+        page, marge, echelle = self.zone.widget(), self.MARGE_FLOU, self.ECHELLE
+        source = QRect(0, position - self.height() - marge, self.width(), self.height() + 2 * marge)
+        image = QImage(max(1, round(source.width() * echelle)), max(1, round(source.height() * echelle)),
+                       QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(QColor(theme.FOND))  # au-dessus du haut de la page : la couleur du haut de la fenêtre
+        visible = source.intersected(page.rect())
+        if not visible.isEmpty():
+            peintre = QPainter(image)
+            peintre.scale(echelle, echelle)
+            page.render(peintre, visible.topLeft() - source.topLeft(), QRegion(visible))
+            peintre.end()
+        floue = flouter(image, 6)
+        return floue.copy(0, round(marge * echelle), floue.width(), round(self.height() * echelle))
 
     def paintEvent(self, _evenement) -> None:
-        if self.trait > 0:
-            peintre = QPainter(self)
-            peintre.setOpacity(self.trait)
-            peintre.fillRect(QRectF(0, self.height() - 1, self.width(), 1), QColor(theme.SEPARATEUR))
+        if self.verre <= 0:
+            return  # page en haut : la barre se confond avec le fond
+        peintre = QPainter(self)
+        peintre.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        rect = QRectF(self.rect())
+        peintre.setOpacity(self.verre)
+        if self.flou is not None:
+            peintre.drawImage(rect, self.flou)
+        peintre.fillRect(rect, QColor(theme.VERRE_BARRE))
+        # Le haut se fond dans la barre de titre de Windows, unie : pas de raccord visible entre les deux.
+        haut = QLinearGradient(0, 0, 0, 14)
+        uni, transparent = QColor(theme.FOND), QColor(theme.FOND)
+        transparent.setAlpha(0)
+        haut.setColorAt(0, uni)
+        haut.setColorAt(1, transparent)
+        peintre.fillRect(QRectF(0, 0, rect.width(), 14), haut)
+        peintre.fillRect(QRectF(0, rect.height() - 1, rect.width(), 1), QColor(theme.SEPARATEUR))
 
 
 class Segmente(QFrame):

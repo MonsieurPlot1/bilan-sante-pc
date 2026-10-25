@@ -326,6 +326,21 @@ def test_pages_opaques_pour_un_defilement_fluide(fenetre):
         assert page.testAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
 
 
+def test_barre_en_verre_au_defilement(fenetre, tmp_path, monkeypatch):
+    """Page en haut : barre fondue dans le fond. Page défilée : le contenu passé dessous s'y voit, flouté."""
+    faux_modules(monkeypatch)
+    fenetre.afficher(analyse_faite(tmp_path), animer=False)
+    fenetre.show()
+    QTest.qWait(10)
+    barre = fenetre.pages.currentWidget().verticalScrollBar()
+    assert fenetre.barre.flou is None and fenetre.barre.verre == 0
+    barre.setValue(200)
+    assert fenetre.barre.verre == 1 and fenetre.barre.flou is not None
+    assert fenetre.barre.flou.height() == round(fenetre.barre.height() * fenetre.barre.ECHELLE)
+    barre.setValue(0)
+    assert fenetre.barre.flou is None and not fenetre.barre.relecture.isActive()
+
+
 def test_echelle_typographique(app):
     from ui import theme
     assert app.font().family() == theme.famille(theme.CORPS)  # Segoe UI Variable Text, ou Segoe UI à défaut

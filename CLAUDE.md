@@ -22,7 +22,8 @@ Interface dans l'esprit Apple (verre dépoli sur une lueur douce) : matières da
 `ui/widgets.py`, couleurs et échelle typographique dans `ui/theme.py` (police Segoe UI Variable : Inter, essayée,
 était moins nette et plus lente à dessiner). Les pages restent opaques (elles peignent la lueur) : c'est ce qui
 rend le défilement fluide, ne pas leur donner de `background` dans la feuille de style (test
-`test_pages_opaques_pour_un_defilement_fluide`).
+`test_pages_opaques_pour_un_defilement_fluide`). Pour la même raison, rien ne doit recouvrir une page : la barre
+du haut en verre est posée au-dessus et peint elle-même, floutée, la bande de page passée dessous.
 
 ## Modules
 - Dans le score : démarrage, disque, ressources (mémoire et processeur), redémarrage, batterie (PC portables).

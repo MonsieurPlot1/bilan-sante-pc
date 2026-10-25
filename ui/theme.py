@@ -93,8 +93,9 @@ REFLET_BAS = _selon_mode(voile(BLANC, 0.05), voile(BLANC, 0.55))
 CONTOUR = _selon_mode(voile(NOIR, 0.30), voile("#1d2440", 0.07))  # trait extérieur, qui détache la carte
 SURFACE = _selon_mode("#232633", "#f6f7fa")  # couleur moyenne d'une carte : anneau autour des points du graphique
 OMBRE = _selon_mode(voile(NOIR, 0.30), voile("#26305a", 0.09))
-# Verre des fenêtres de confirmation et des annonces.
+# Verre des fenêtres de confirmation et des annonces, et de la barre du haut quand la page défile dessous.
 VERRE_FEUILLE = _selon_mode(voile("#262a36", 0.92), voile("#fbfbfd", 0.94))
+VERRE_BARRE = _selon_mode(voile(FOND, 0.38), voile(FOND, 0.42))
 VOILE_FEUILLE = _selon_mode(voile(NOIR, 0.35), voile("#1d2440", 0.16))  # assombrit la fenêtre derrière
 
 # Éléments posés sur le verre : boutons secondaires, pistes des barres, survol des lignes.
