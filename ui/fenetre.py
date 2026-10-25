@@ -20,8 +20,9 @@ from modules.disque import taille_lisible
 from ui import analyse, theme
 from ui.stockage import PageStockage
 from ui.verre import Ambiance, Page, Verre
-from ui.widgets import (Annonce, BarreHaut, Carte, CarteConseil, DefilementDoux, Feuille, Fondu, Graphique, Jauge, Logo,
-                        Segmente, apparaitre, bouton, melange, pastille, pied_de_page, repolir, titre_section)
+from ui.widgets import (Annonce, BarreHaut, Carte, CarteConseil, DefilementDoux, Feuille, Fondu, Graphique, Infobulle,
+                        Jauge, Logo, Segmente, apparaitre, bouton, melange, pastille, pied_de_page, repolir,
+                        titre_section)
 
 journal = logging.getLogger(__name__)
 
@@ -629,11 +630,12 @@ def mode_barre_titre(app: QApplication) -> None:
 
 
 def preparer_application(app: QApplication) -> None:
-    """Style Fusion, police, palette et feuille de style du mode, et icône de l'application."""
+    """Style Fusion, police, palette et feuille de style du mode, icône de l'application et infobulles."""
     app.setStyle("Fusion")
     app.setFont(theme.police("corps"))
     app.setWindowIcon(QIcon(str(theme.ICONE_APPLICATION)))  # vaut pour toutes les fenêtres, dialogues compris
     appliquer_couleurs(app)
+    Infobulle.instance()  # toutes les infobulles dans le style de l'application, jamais la bulle grise de Qt
 
 
 def appliquer_couleurs(app: QApplication) -> None:
@@ -642,8 +644,6 @@ def appliquer_couleurs(app: QApplication) -> None:
     for role, couleur in ((QPalette.ColorRole.Window, theme.FOND), (QPalette.ColorRole.WindowText, theme.TEXTE),
                           (QPalette.ColorRole.Base, theme.SURFACE), (QPalette.ColorRole.Text, theme.TEXTE),
                           (QPalette.ColorRole.Button, theme.SURFACE), (QPalette.ColorRole.ButtonText, theme.TEXTE),
-                          (QPalette.ColorRole.ToolTipBase, theme.SURFACE),
-                          (QPalette.ColorRole.ToolTipText, theme.TEXTE),
                           (QPalette.ColorRole.Highlight, theme.ACCENT), (QPalette.ColorRole.HighlightedText, "white"),
                           (QPalette.ColorRole.PlaceholderText, theme.TEXTE_3)):
         palette.setColor(role, QColor(couleur))

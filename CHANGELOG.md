@@ -1,5 +1,13 @@
 # Journal des versions
 
+## Prochaine version (pas encore publiée)
+
+- Infobulles revues : celles qui répétaient ce qui est déjà écrit disparaissent (barre du disque, boutons
+  « Afficher » et « Supprimer »), et la part utilisée du disque est écrite en clair (« 75 % utilisés »). Celles
+  qui restent (bouton clair/sombre, points du graphique, noms et chemins coupés) prennent le style de
+  l'application : verre arrondi, clair ou sombre ; un nom coupé s'affiche en entier par-dessus lui-même, sans
+  cacher la ligne voisine.
+
 ## v0.3.0 - 2026-10-24
 
 - Nouvel onglet « Stockage » (hors du score) : ce qui prend de la place sur un disque, classé en 12

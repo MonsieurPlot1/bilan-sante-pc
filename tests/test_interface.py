@@ -7,9 +7,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # avant d'importer Qt : a
 
 import pytest
 from PySide6.QtTest import QSignalSpy, QTest
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
-from PySide6.QtGui import QFont, QWheelEvent
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
+from PySide6.QtGui import QFont, QHelpEvent, QWheelEvent
+from PySide6.QtWidgets import QApplication, QDialog, QToolTip, QTreeWidget, QTreeWidgetItem
 
 import historique
 from modules import fichiers as module_fichiers
@@ -17,7 +17,7 @@ from tests.test_analyse import faux_modules, plante
 from tests.test_score import GO, batterie, demarrage, disque, fichiers
 from ui import analyse
 from ui.fenetre import Fenetre, preparer_application
-from ui.widgets import Carte, Feuille, Fondu, Graphique, Logo
+from ui.widgets import Carte, Feuille, Fondu, Graphique, Infobulle, Logo, texte_infobulle
 from ui import fenetre as fenetre_module
 
 
@@ -267,6 +267,38 @@ def test_detail_qui_se_deplie_et_se_replie(fenetre, tmp_path, monkeypatch):
     carte.bouton.click()
     QTest.qWait(400)
     assert not carte.ouvert and carte.detail.isHidden()
+
+
+def test_infobulle_dans_le_style_de_l_application(fenetre):
+    """Les infobulles passent toutes par Infobulle (plaque de verre arrondie), jamais par la bulle grise de Qt."""
+    fenetre.show()
+    QTest.qWait(10)
+    bulle, mode = Infobulle.instance(), fenetre.mode
+    centre = mode.rect().center()
+    QApplication.sendEvent(mode, QHelpEvent(QEvent.Type.ToolTip, centre, mode.mapToGlobal(centre)))
+    assert bulle.isVisible() and bulle.texte == mode.toolTip() and not QToolTip.isVisible()
+    assert bulle.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)  # rien autour des coins arrondis
+    QApplication.sendEvent(mode, QEvent(QEvent.Type.Leave))
+    assert not bulle.isVisible()
+
+
+def test_infobulle_d_une_cellule_seulement_si_elle_est_coupee(app):
+    tableau = QTreeWidget(columnCount=1, textElideMode=Qt.TextElideMode.ElideMiddle)
+    long = r"C:\Users\moi\AppData\Local\Programs\Un logiciel au nom très long\lanceur.exe"
+    lignes = [QTreeWidgetItem([texte]) for texte in ("Court", long, "Lanceur")]
+    for ligne in lignes[:2]:
+        ligne.setToolTip(0, ligne.text(0))  # infobulle qui répète le texte de la cellule
+    lignes[2].setToolTip(0, "Explication en plus")
+    tableau.addTopLevelItems(lignes)
+    tableau.resize(220, 160)
+    tableau.show()
+    QTest.qWait(10)
+    entier, coupe, explication = (texte_infobulle(tableau.viewport(), tableau.visualItemRect(ligne).center())
+                                  for ligne in lignes)
+    assert entier.texte == ""  # écrit en entier : rien à répéter
+    assert coupe.texte == long and coupe.ancre is not None  # coupé : complet au survol, posé par-dessus lui
+    assert explication.texte == "Explication en plus" and explication.ancre is None  # sous le pointeur
+    tableau.close()
 
 
 def test_conseils_qui_apparaissent_en_fondu(fenetre, tmp_path, monkeypatch):

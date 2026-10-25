@@ -24,6 +24,9 @@ Interface dans l'esprit Apple (verre dépoli sur une lueur douce) : matières da
 rend le défilement fluide, ne pas leur donner de `background` dans la feuille de style (test
 `test_pages_opaques_pour_un_defilement_fluide`). Pour la même raison, rien ne doit recouvrir une page : la barre
 du haut en verre est posée au-dessus et peint elle-même, floutée, la bande de page passée dessous.
+Infobulles : seulement pour un bouton à icône seule, un terme technique ou une info visible nulle part ailleurs
+(jamais pour répéter un texte affiché, sauf s'il est coupé). `setToolTip` suffit : `Infobulle` (ui/widgets.py) les
+affiche toutes dans le style de l'application, jamais la bulle grise de Qt.
 
 ## Modules
 - Dans le score : démarrage, disque, ressources (mémoire et processeur), redémarrage, batterie (PC portables).

@@ -93,7 +93,8 @@ REFLET_BAS = _selon_mode(voile(BLANC, 0.05), voile(BLANC, 0.55))
 CONTOUR = _selon_mode(voile(NOIR, 0.30), voile("#1d2440", 0.07))  # trait extérieur, qui détache la carte
 SURFACE = _selon_mode("#232633", "#f6f7fa")  # couleur moyenne d'une carte : anneau autour des points du graphique
 OMBRE = _selon_mode(voile(NOIR, 0.30), voile("#26305a", 0.09))
-# Verre des fenêtres de confirmation et des annonces, et de la barre du haut quand la page défile dessous.
+# Verre des fenêtres de confirmation, des annonces et des infobulles, et de la barre du haut quand la page
+# défile dessous.
 VERRE_FEUILLE = _selon_mode(voile("#262a36", 0.92), voile("#fbfbfd", 0.94))
 VERRE_BARRE = _selon_mode(voile(FOND, 0.38), voile(FOND, 0.42))
 VOILE_FEUILLE = _selon_mode(voile(NOIR, 0.35), voile("#1d2440", 0.16))  # assombrit la fenêtre derrière
@@ -222,6 +223,13 @@ def icone(nom: str, couleur: str = TEXTE, taille: int = 16) -> QIcon:
 
 HAUTEUR_BARRE = 50  # barre du haut (logo, onglets, mode), sous la barre de titre de Windows
 
+# Infobulles au survol, toutes dessinées par Infobulle (ui/widgets.py), pas par la feuille de style : le verre bleu
+# nuit des annonces (VERRE_FEUILLE), bordé comme les cartes, texte clair (TEXTE) dans la police des légendes.
+POLICE_INFOBULLE = "legende"
+RAYON_INFOBULLE = 12  # comme les lignes de liste
+MARGES_INFOBULLE = (12, 7)  # marge intérieure : à gauche et à droite, en haut et en bas
+MARGES_TEXTE_COMPLET = (8, 3)  # posée par-dessus un texte coupé : juste de quoi l'entourer, sans cacher ses voisins
+
 STYLE = f"""
 QWidget {{ color: {TEXTE}; }}
 QMainWindow, QStackedWidget, QScrollArea, QWidget#qt_scrollarea_viewport {{
@@ -290,7 +298,4 @@ QScrollBar::handle {{ background: {rgba(POIGNEE)}; border-radius: 4px; min-heigh
 QScrollBar::handle:hover {{ background: {rgba(POIGNEE_SURVOL)}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
-
-QToolTip {{ background: {_selon_mode("#2c2f3a", "#ffffff")}; color: {TEXTE}; border: 1px solid {rgba(SEPARATEUR)};
-            border-radius: 8px; padding: 5px 9px; }}
 """

@@ -94,11 +94,11 @@ def parts_du_disque(resultat: dict) -> list[tuple[str, str, int]]:
 
 
 class TexteCoupe(QLabel):
-    """Texte sur une ligne, coupé au milieu s'il est trop long (« C:\\Users\\…\\film.mkv »), complet au survol."""
+    """Texte sur une ligne, coupé au milieu s'il est trop long (« C:\\Users\\…\\film.mkv »), complet au survol
+    seulement s'il est coupé (sinon, l'infobulle répéterait ce qui est déjà écrit)."""
 
     def __init__(self, texte: str, **proprietes) -> None:
         super().__init__(texte, **proprietes)
-        self.setToolTip(texte)
         self.setMinimumWidth(60)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self._coupe = (-1, "")  # (largeur, texte coupé) : recalculé seulement quand la largeur change
@@ -107,6 +107,7 @@ class TexteCoupe(QLabel):
         if self._coupe[0] != self.width():
             self._coupe = (self.width(), self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideMiddle,
                                                                        self.width()))
+            self.setToolTip(self.text() if self._coupe[1] != self.text() else "")
         coupe = self._coupe[1]
         # Dessiné par le style : la couleur de la feuille de style (objectName) est respectée.
         alignement = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
@@ -160,14 +161,12 @@ class LigneElement(QFrame):
         taille.setMinimumWidth(70)
         disposition.addWidget(taille)
         if element["chemin"]:
-            afficher = bouton("Afficher", "lien", "ouvrir", theme.ACCENT_CLAIR, 12,
-                              toolTip="Ouvrir son emplacement dans l'Explorateur (rien n'est modifié)")
+            afficher = bouton("Afficher", "lien", "ouvrir", theme.ACCENT_CLAIR, 12)
             afficher.clicked.connect(lambda: montrer(element["chemin"], element["dossier"]))
             disposition.addWidget(afficher)
         if supprimer:
             effacer = bouton("Supprimer", "supprimer", "corbeille", theme.TEXTE_2, 12,
-                             accessibleName=f"Supprimer {os.path.basename(element['chemin'])}",
-                             toolTip="Supprimer définitivement, après confirmation (sans passer par la Corbeille)")
+                             accessibleName=f"Supprimer {os.path.basename(element['chemin'])}")
             effacer.clicked.connect(lambda: supprimer(element["chemin"], element["dossier"]))
             disposition.addWidget(effacer)
 
@@ -516,16 +515,13 @@ class PageStockage(Page):
         self.etat.setProperty("niveau", niveau)
         repolir(self.etat)
         self.utilise.setText(f"{taille_lisible(utilise)} utilisés")
-        self.sur.setText(f"sur {taille_lisible(total)}, {taille_lisible(libre)} libres")
+        self.sur.setText(f"sur {taille_lisible(total)} · {taille_lisible(libre)} libres · {pourcentage:.0f} % utilisés")
         if parts:
-            self.jauge.definir([(taille / total, theme.TEINTES[teinte],
-                                 f"{nom} : {taille_lisible(taille)} ({part_lisible(taille, total)} du disque)")
-                                for nom, teinte, taille in parts], animer)
+            self.jauge.definir([(taille / total, theme.TEINTES[teinte]) for _nom, teinte, taille in parts], animer)
             self.legende.definir([(theme.TEINTES[teinte], nom, taille_lisible(taille)) for nom, teinte, taille in parts]
                                  + [(theme.REMPLI, "Libre", taille_lisible(libre))])
         else:
-            self.jauge.definir([(utilise / total if total else 0, theme.VIFS[niveau],
-                                 f"Utilisé : {taille_lisible(utilise)} ({pourcentage:.0f} %)")], animer)
+            self.jauge.definir([(utilise / total if total else 0, theme.VIFS[niveau])], animer)
         self.legende.setVisible(bool(parts))
 
     @staticmethod

@@ -7,12 +7,13 @@ import time
 from datetime import datetime
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QAbstractAnimation, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 from modules import doublons, stockage
 from modules import fichiers as module_fichiers
+from modules.disque import taille_lisible
 from tests.test_interface import app, corbeille_protegee, fenetre, rien_ne_s_ouvre  # noqa: F401 (fixtures)
 from tests.test_stockage import UTILISE, Usage, disque  # noqa: F401 (fixture)
 from ui import fenetre as fenetre_module
@@ -85,11 +86,11 @@ def test_categorie_qui_se_deplie(fenetre, disque):
     jeux = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "jeux")
     assert jeux.detail.maximumHeight() == 0
     QTest.keyClick(jeux, Qt.Key.Key_Space)  # au clavier aussi
-    QTest.qWait(350)
+    attendre(lambda: jeux.animation.state() == QAbstractAnimation.State.Stopped, 1000)  # 240 ms, plus en test
     assert jeux.ouvert and jeux.detail.maximumHeight() == HAUTEUR_LIBRE
     assert [e.findChild(QPushButton).text() for e in jeux.detail.findChildren(LigneElement)] == ["Afficher"]
     jeux.basculer()
-    QTest.qWait(350)
+    attendre(lambda: jeux.animation.state() == QAbstractAnimation.State.Stopped, 1000)
     assert not jeux.ouvert and jeux.detail.maximumHeight() == 0
 
 
@@ -404,6 +405,25 @@ def test_barre_du_disque_par_categorie(fenetre, disque):
     page.afficher(resultat, animer=False)
     noms = [nom for nom, _teinte, _taille in page_stockage.parts_du_disque(resultat)]
     assert noms == [nom for nom, _t, _c in page_stockage.GROUPES if nom in noms]  # toujours le même ordre
-    assert sum(part for part, _c, _t in page.jauge.parts) == pytest.approx(resultat["utilise"] / resultat["total"])
+    assert sum(part for part, _c in page.jauge.parts) == pytest.approx(resultat["utilise"] / resultat["total"])
     assert [nom for _c, nom, _t in page.legende.elements][-1] == "Libre" and not page.legende.isHidden()
     assert all(cle in page_stockage.TEINTE_CATEGORIE for cle in stockage.NOMS)  # chaque catégorie a sa teinte
+
+
+def test_pas_d_infobulle_qui_repete_ce_qui_est_ecrit(fenetre, disque):
+    """La part utilisée est écrite en clair, plus seulement dans une bulle ; ni la barre ni les boutons « Afficher »
+    et « Supprimer » n'ont d'infobulle. Seuls les noms et chemins coupés en gardent une."""
+    page = fenetre.stockage
+    page.afficher(resultat_du_faux_disque(disque), animer=False)
+    assert page.sur.text() == f"sur {taille_lisible(20_000)} · {taille_lisible(10_000)} libres · 50 % utilisés"
+    assert [w for w in page.findChildren(QWidget) if w.toolTip() and not isinstance(w, page_stockage.TexteCoupe)] == []
+
+
+def test_texte_coupe_complet_au_survol_seulement_s_il_est_coupe(app):
+    texte = page_stockage.TexteCoupe(r"C:\Users\moi\Videos\Un très long nom de fichier vidéo.mkv")
+    texte.resize(2000, 20)  # assez large même pour la police de secours (plus large) des tests sans écran
+    texte.grab()  # dessiné : le texte coupé (ou non) est calculé
+    assert texte.toolTip() == ""
+    texte.resize(80, 20)
+    texte.grab()
+    assert texte.toolTip() == texte.text()

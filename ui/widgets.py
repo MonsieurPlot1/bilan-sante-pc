@@ -1,16 +1,18 @@
 """Composants de l'interface : anneau du score, cartes, conseils, graphique, sélecteur à segments,
-barre du disque, confirmations et annonces. Les matières (verre, lueur, ombres) sont dans ui/verre.py."""
+barre du disque, confirmations, annonces et infobulles. Les matières (verre, lueur, ombres) sont dans ui/verre.py."""
 
 from datetime import datetime
-from typing import Callable
+from typing import Callable, NamedTuple
 
-from PySide6.QtCore import (QEasingCurve, QPointF, QPropertyAnimation, QRect, QRectF, QSequentialAnimationGroup,
-                            QSize, Qt, QTimer, QVariantAnimation, Signal)
-from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QFont, QFontMetricsF, QImage, QLinearGradient, QPainter,
-                           QPainterPath, QPen, QPixmap, QRegion)
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
-                               QHeaderView, QLabel, QPushButton, QScrollArea, QSizePolicy, QToolTip,
-                               QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+from math import ceil
+
+from PySide6.QtCore import (QEasingCurve, QEvent, QModelIndex, QPoint, QPointF, QPropertyAnimation, QRect, QRectF,
+                            QSequentialAnimationGroup, QSize, Qt, QTimer, QVariantAnimation, Signal)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor, QFont, QFontMetricsF, QImage, QLinearGradient,
+                           QPainter, QPainterPath, QPen, QPixmap, QRegion, QTextLayout, QTextOption)
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QDialog, QFrame, QGraphicsOpacityEffect,
+                               QHBoxLayout, QHeaderView, QLabel, QPushButton, QScrollArea, QSizePolicy, QStyle,
+                               QStyleOptionViewItem, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 import config
 from ui import theme
@@ -166,21 +168,21 @@ class BarreScore(QWidget):
 class BarreEmpilee(QWidget):
     """Barre d'un disque découpée en parts de couleur (comme le stockage d'un Mac) ; le reste est l'espace libre.
 
-    Les parts se dévoilent de gauche à droite ; au survol, chacune donne son nom, sa taille et sa part.
+    Les parts se dévoilent de gauche à droite. Pas d'infobulle : les chiffres sont écrits à côté et dans la légende.
     """
 
     ECART = 2  # px entre deux parts : elles se distinguent sans trait autour
 
     def __init__(self, hauteur: int = 12) -> None:
-        super().__init__(mouseTracking=True)
+        super().__init__()
         self.setFixedHeight(hauteur)
-        self.parts: list[tuple[float, str, str]] = []  # (part du disque, couleur, texte au survol)
+        self.parts: list[tuple[float, str]] = []  # (part du disque, couleur)
         self.progres = 1.0
         self.animation = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=900,
                                            easingCurve=QEasingCurve.Type.OutCubic)
         self.animation.valueChanged.connect(self._avancer)
 
-    def definir(self, parts: list[tuple[float, str, str]], animer: bool = True) -> None:
+    def definir(self, parts: list[tuple[float, str]], animer: bool = True) -> None:
         self.parts = parts
         self.animation.stop()
         self._avancer(0.0 if animer else 1.0)
@@ -193,7 +195,7 @@ class BarreEmpilee(QWidget):
 
     def _rects(self) -> list[QRectF]:
         rects, x = [], 0.0
-        for part, _couleur, _texte in self.parts:
+        for part, _couleur in self.parts:
             largeur = part * self.width()
             rects.append(QRectF(x, 0, max(0.0, largeur - self.ECART), self.height()))
             x += largeur
@@ -207,18 +209,9 @@ class BarreEmpilee(QWidget):
         peintre.setClipPath(capsule)
         peintre.setClipRect(QRectF(0, 0, self.width() * self.progres, self.height()),
                             Qt.ClipOperation.IntersectClip)
-        for rect, (_part, couleur, _texte) in zip(self._rects(), self.parts):
+        for rect, (_part, couleur) in zip(self._rects(), self.parts):
             if rect.width() >= 1:
                 peintre.fillRect(rect, QColor(couleur))
-
-    def mouseMoveEvent(self, evenement) -> None:
-        x = evenement.position().x()
-        texte = next((t for rect, (_p, _c, t) in zip(self._rects(), self.parts)
-                      if rect.left() <= x <= rect.right() + self.ECART), "")
-        if texte:
-            QToolTip.showText(evenement.globalPosition().toPoint(), texte, self)
-        else:
-            QToolTip.hideText()
 
 
 class Legende(QWidget):
@@ -384,7 +377,7 @@ class Carte(Verre):
         self.bouton = bouton("Voir le détail", "lien", "deplier", theme.ACCENT_CLAIR, 11)
         self.bouton.clicked.connect(self.basculer)
         self.bouton.hide()
-        # Longs chemins coupés au milieu (« C:\Users\…\app.exe »), texte complet au survol.
+        # Longs chemins coupés au milieu (« C:\Users\…\app.exe »), texte complet au survol s'il est coupé.
         self.detail = QTreeWidget(rootIsDecorated=False, uniformRowHeights=True,
                                   textElideMode=Qt.TextElideMode.ElideMiddle,
                                   horizontalScrollBarPolicy=Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
@@ -455,7 +448,7 @@ class Carte(Verre):
         for ligne in lignes:
             element = QTreeWidgetItem(ligne)
             for colonne, texte in enumerate(ligne):
-                element.setToolTip(colonne, texte)  # texte complet, même coupé à l'affichage
+                element.setToolTip(colonne, texte)  # montré au survol seulement s'il est coupé (texte_infobulle)
             elements.append(element)
         self.detail.addTopLevelItems(elements)
         self.bouton.setVisible(bool(lignes))
@@ -691,8 +684,8 @@ class Graphique(QWidget):
             self.survol = index
             self.update()
         date = datetime.fromisoformat(self.entrees[index]["date"])
-        QToolTip.showText(evenement.globalPosition().toPoint(),
-                          f"{date:%d/%m/%Y à %H:%M} : {self.entrees[index]['score']} sur 100", self)
+        Infobulle.instance().montrer(f"{date:%d/%m/%Y à %H:%M} : {self.entrees[index]['score']} sur 100",
+                                     evenement.globalPosition().toPoint(), self)
 
     def leaveEvent(self, evenement) -> None:
         self.survol = None
@@ -997,3 +990,209 @@ class Annonce(QWidget):
         dessiner_ombre(peintre, rect, round(rayon), flou=12, decalage=6,
                        couleur=theme.voile(theme.NOIR, 0.14 if theme.CLAIR else 0.40))
         peindre_verre(peintre, rect, rayon, theme.VERRE_FEUILLE, theme.VERRE_FEUILLE)
+
+
+def _option_cellule(vue: QAbstractItemView, index: QModelIndex) -> QStyleOptionViewItem:
+    """Ce que le tableau donne au style pour dessiner le texte de la cellule (police, place, alignement)."""
+    option = QStyleOptionViewItem()
+    option.initFrom(vue)
+    option.widget, option.font, option.rect = vue, vue.font(), vue.visualRect(index)
+    option.text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+    option.features = QStyleOptionViewItem.ViewItemFeature.HasDisplay
+    option.displayAlignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    return option
+
+
+def cellule_coupee(vue: QAbstractItemView, index: QModelIndex) -> bool:
+    """Vrai si le texte de la cellule est coupé (« C:\\Users\\…\\app.exe ») : il demande plus de place que la
+    largeur de sa colonne, marges du thème comprises (le calcul même qui règle la largeur des colonnes)."""
+    option = _option_cellule(vue, index)
+    return vue.itemDelegateForIndex(index).sizeHint(option, index).width() > option.rect.width()
+
+
+class Demande(NamedTuple):
+    """Une infobulle à montrer : son texte et la zone de l'écran où elle reste valable. Si elle montre en entier
+    un texte coupé : `ancre`, où le poser par-dessus lui (bord gauche du texte, milieu de sa hauteur) pour ne rien
+    cacher d'autre, et sa police, pour que le texte semble simplement s'allonger."""
+    texte: str
+    zone: QRect
+    ancre: QPoint | None = None
+    police: QFont | None = None
+
+
+def texte_infobulle(widget: QWidget, position: QPoint) -> Demande:
+    """L'infobulle sous `position` (coordonnées de `widget`).
+
+    Dans un tableau : celle de la cellule, mais si elle ne fait que répéter son texte, seulement quand il est coupé.
+    Ailleurs : celle du widget ou, à défaut, du plus proche parent qui en a une (comme Qt).
+    """
+    vue = widget.parentWidget()
+    if isinstance(vue, QAbstractItemView) and widget is vue.viewport():
+        index = vue.indexAt(position)
+        texte = index.data(Qt.ItemDataRole.ToolTipRole) or ""
+        rect = vue.visualRect(index)
+        zone = QRect(widget.mapToGlobal(rect.topLeft()), rect.size())
+        if not texte or texte != index.data(Qt.ItemDataRole.DisplayRole):
+            return Demande(texte, zone)
+        if not cellule_coupee(vue, index):
+            return Demande("", zone)
+        style = vue.style()
+        debut = (style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, _option_cellule(vue, index), vue).left()
+                 + style.pixelMetric(QStyle.PixelMetric.PM_FocusFrameHMargin, None, vue) + 1)
+        return Demande(texte, zone, widget.mapToGlobal(QPoint(debut, rect.center().y())), vue.font())
+    while widget is not None:
+        if widget.toolTip():
+            zone = QRect(widget.mapToGlobal(QPoint(0, 0)), widget.size())
+            if isinstance(widget, QLabel) and widget.toolTip() == widget.text():  # son propre texte, coupé
+                return Demande(widget.toolTip(), zone, widget.mapToGlobal(QPoint(0, widget.height() // 2)),
+                               widget.font())
+            return Demande(widget.toolTip(), zone)
+        widget = None if widget.isWindow() else widget.parentWidget()
+    return Demande("", QRect())
+
+
+class Infobulle(QWidget):
+    """Infobulle au survol, dans la matière de l'application : une petite plaque du verre bleu nuit des annonces,
+    bordée comme les cartes, aux coins arrondis, avec une ombre douce (couleurs, police, arrondi : ui/theme.py).
+
+    Elle remplace celle de Qt partout : posée sur l'application, elle reçoit avant eux les demandes d'infobulle de
+    tous les widgets (`setToolTip`, cellules d'un tableau). La bulle de Qt est une fenêtre opaque : sous Windows, un
+    arrondi de la feuille de style y laisse des coins carrés. Celle-ci est une fenêtre transparente où seules la
+    plaque et son ombre sont dessinées.
+    """
+
+    FLOU, DECALAGE = 6, 3  # ombre de la plaque
+    MARGE = 2 * FLOU + DECALAGE  # place de l'ombre autour de la plaque
+    LARGEUR_MAX = 420  # au-delà, le texte passe à la ligne
+    DUREE = 10000  # ms : elle s'efface seule, comme celle de Windows
+    # Évènements qui l'effacent, où qu'ils arrivent : on clique, on tape, on fait défiler ou on quitte la fenêtre.
+    EFFACENT = {QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonDblClick, QEvent.Type.Wheel,
+                QEvent.Type.KeyPress, QEvent.Type.WindowDeactivate}
+    SURVEILLES = EFFACENT | {QEvent.Type.ToolTip, QEvent.Type.Leave}
+    _instance: "Infobulle | None" = None
+
+    @classmethod
+    def instance(cls) -> "Infobulle":
+        """L'infobulle de l'application, créée et posée sur l'application au premier appel."""
+        if cls._instance is None:
+            cls._instance = cls()
+            QApplication.instance().installEventFilter(cls._instance)
+        return cls._instance
+
+    def __init__(self) -> None:
+        super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint
+                         | Qt.WindowType.NoDropShadowWindowHint | Qt.WindowType.WindowTransparentForInput)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)  # rien autour de la plaque arrondie
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.texte = ""
+        self.lignes = QTextLayout()
+        self.marges = theme.MARGES_INFOBULLE  # marge intérieure de la plaque
+        self.plaque = QRectF()
+        self.proprietaire: QWidget | None = None  # widget survolé
+        self.zone = QRect()  # zone de l'écran où elle reste valable (le widget, la cellule)
+        # La souris peut quitter la zone sans que son widget le signale (d'une cellule à l'autre) : vérifié souvent.
+        self.veille = QTimer(self, interval=100)
+        self.veille.timeout.connect(self._verifier)
+        self.fin = QTimer(self, singleShot=True, interval=self.DUREE)
+        self.fin.timeout.connect(self.cacher)
+        self.apparition = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=120,
+                                            easingCurve=QEasingCurve.Type.OutCubic)
+        self.apparition.valueChanged.connect(self.setWindowOpacity)
+
+    def eventFilter(self, objet, evenement) -> bool:
+        genre = evenement.type()
+        if genre not in self.SURVEILLES:  # presque tous les évènements de l'application : rendus aussitôt
+            return False
+        if genre == QEvent.Type.ToolTip:
+            if not isinstance(objet, QWidget):
+                return False
+            demande = texte_infobulle(objet, evenement.pos())
+            if demande.texte:
+                self.montrer(demande.texte, evenement.globalPos(), objet, demande.zone, demande.ancre, demande.police)
+            else:
+                self.cacher()
+            return True  # traitée ici : la bulle grise de Qt n'apparaît jamais
+        if (genre != QEvent.Type.Leave or objet is self.proprietaire) and self.isVisible():
+            self.cacher()
+        return False
+
+    def montrer(self, texte: str, curseur: QPoint, proprietaire: QWidget, zone: QRect | None = None,
+                ancre: QPoint | None = None, police: QFont | None = None) -> None:
+        """`texte` sous le pointeur (ou par-dessus le texte coupé qu'il complète, à `ancre`, dans sa `police`), tant
+        que le pointeur reste dans `zone` (coordonnées de l'écran ; tout `proprietaire` par défaut). Rappelée pendant
+        le survol (graphique), elle suit le pointeur sans réapparaître."""
+        self.proprietaire = proprietaire
+        self.zone = zone if zone is not None else QRect(proprietaire.mapToGlobal(QPoint(0, 0)), proprietaire.size())
+        police = police or theme.police(theme.POLICE_INFOBULLE)
+        marges = theme.MARGES_INFOBULLE if ancre is None else theme.MARGES_TEXTE_COMPLET
+        if (texte, police, marges) != (self.texte, self.lignes.font(), self.marges):
+            self.texte, self.marges = texte, marges
+            self._disposer(police)
+            self.update()
+        self._placer(curseur, ancre)
+        if not self.isVisible():
+            self.setWindowOpacity(0.0)
+            self.show()
+            self.apparition.start()
+        self.veille.start()
+        self.fin.start()
+
+    def cacher(self) -> None:
+        self.veille.stop()
+        self.fin.stop()
+        self.apparition.stop()
+        self.proprietaire = None
+        self.hide()
+
+    def _disposer(self, police: QFont) -> None:
+        """Le texte sur une ligne s'il tient, sinon sur plusieurs : coupé entre deux mots ou, pour un long chemin,
+        n'importe où. La fenêtre prend la taille de la plaque et de son ombre."""
+        self.lignes = QTextLayout(self.texte, police)
+        option = QTextOption()
+        option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self.lignes.setTextOption(option)
+        self.lignes.beginLayout()
+        largeur = hauteur = 0.0
+        while (ligne := self.lignes.createLine()).isValid():
+            ligne.setLineWidth(self.LARGEUR_MAX)
+            ligne.setPosition(QPointF(0, hauteur))
+            largeur, hauteur = max(largeur, ligne.naturalTextWidth()), hauteur + ligne.height()
+        self.lignes.endLayout()
+        cote, haut = self.marges
+        self.plaque = QRectF(self.MARGE, self.MARGE, ceil(largeur) + 2 * cote, ceil(hauteur) + 2 * haut)
+        self.resize(round(self.plaque.width()) + 2 * self.MARGE, round(self.plaque.height()) + 2 * self.MARGE)
+
+    def _placer(self, curseur: QPoint, ancre: QPoint | None) -> None:
+        """Par-dessus le texte coupé qu'elle complète (ses lettres sur les siennes), sinon centrée sous le pointeur
+        ou au-dessus s'il n'y a pas la place ; dans la fenêtre si elle y tient, toujours entière dans l'écran."""
+        largeur, hauteur = self.plaque.width(), self.plaque.height()
+        limites = (QApplication.screenAt(curseur) or QApplication.primaryScreen()).availableGeometry()
+        fenetre = limites.intersected(self.proprietaire.window().geometry())
+        if fenetre.width() >= largeur + 8 and fenetre.height() >= hauteur + 8:
+            limites = fenetre
+        limites = limites.adjusted(4, 4, -4, -4)
+        if ancre is not None:
+            x, y = ancre.x() - self.marges[0], ancre.y() - hauteur / 2
+        else:
+            x, y = curseur.x() - largeur / 2, curseur.y() + 22  # sous la flèche de la souris
+            if y + hauteur > limites.bottom():
+                y = curseur.y() - 10 - hauteur
+        x = min(max(x, limites.left()), limites.right() - largeur)
+        self.move(round(x) - self.MARGE, round(y) - self.MARGE)
+
+    def _verifier(self) -> None:
+        try:
+            present = self.proprietaire is not None and self.proprietaire.isVisible()
+        except RuntimeError:  # widget supprimé entre-temps (liste refaite)
+            present = False
+        if not present or not self.zone.contains(QCursor.pos()):
+            self.cacher()
+
+    def paintEvent(self, _evenement) -> None:
+        peintre = QPainter(self)
+        rayon = min(theme.RAYON_INFOBULLE, int(self.plaque.height() // 2))  # plaque fine : bouts tout ronds
+        dessiner_ombre(peintre, self.plaque, rayon, flou=self.FLOU, decalage=self.DECALAGE,
+                       couleur=theme.voile(theme.NOIR, 0.14 if theme.CLAIR else 0.40))
+        peindre_verre(peintre, self.plaque, rayon, theme.VERRE_FEUILLE, theme.VERRE_FEUILLE)
+        peintre.setPen(QColor(theme.TEXTE))
+        self.lignes.draw(peintre, self.plaque.topLeft() + QPointF(*self.marges))
