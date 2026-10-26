@@ -1,5 +1,15 @@
 # Journal des versions
 
+## v0.5.0 - 2026-10-26
+
+- Installation plus simple : sur GitHub, l'application se télécharge maintenant en un seul fichier,
+  `BilanSantePC-Installation-v0.5.0.exe`. Il l'installe pour toi seul, sans droits d'administrateur, avec un
+  raccourci dans le menu Démarrer, et elle se désinstalle depuis les Paramètres de Windows.
+- Les mises à jour depuis l'application passent par ce même installateur : il remplace l'application puis la
+  rouvre tout seul. En cas d'échec, l'ancienne version est remise en place.
+- Le zip joint à cette version ne sert qu'aux mises à jour depuis la v0.4.1 : pour installer l'application,
+  prends l'installateur.
+
 ## v0.4.1 - 2026-10-26
 
 - Correction : en passant du mode sombre au mode clair (ou l'inverse), une petite fenêtre ne s'ouvre plus
