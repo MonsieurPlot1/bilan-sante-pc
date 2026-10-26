@@ -1,5 +1,18 @@
 # Journal des versions
 
+## v0.5.6 - 2026-10-26
+
+- Conseils plus justes : le disque n'est dit « presque plein » qu'à partir de 90 %, et le conseil renvoie à
+  l'onglet Stockage. Un pilote proposé par Windows Update pour un accessoire ne passe plus devant les vrais
+  freins (mémoire, disque) ; une nouvelle version du pilote NVIDIA reste prioritaire.
+- Les boutons « Vider la Corbeille » et « Mettre à jour les pilotes » n'apparaissent que s'il y a quelque chose
+  à faire. Pendant l'analyse, la pastille dit « Analyse en cours ».
+- Stockage : les catégories vides ne s'affichent plus, et la part « Autres » de la barre devient « Temporaires
+  et autres ».
+- Le rapport enregistré a l'allure de l'application (anneau du score, cartes, clair ou sombre comme le
+  navigateur) et reprend les tableaux des cartes, pilotes compris.
+- Petites retouches de textes (« Disque C: 117,8 Go libres… », comparaison avec l'analyse précédente plus lisible).
+
 ## v0.5.5 - 2026-10-26
 
 - Nouvelle partie « Pilotes » dans l'analyse (hors score) : les pilotes que Windows Update propose, la dernière
