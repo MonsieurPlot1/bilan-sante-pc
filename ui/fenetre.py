@@ -152,7 +152,6 @@ class Fenetre(QMainWindow):
         self.mode.clicked.connect(self.changer_mode)
         self.bouton_maj = bouton(" Mettre à jour", "teinte", "telechargement", theme.ACCENT_CLAIR, 13)
         self.bouton_maj.clicked.connect(self.proposer_mise_a_jour)
-        self._montrer_mise_a_jour()
         droite = QWidget()
         reglages = QHBoxLayout(droite)
         reglages.setContentsMargins(0, 0, 0, 0)
@@ -160,6 +159,7 @@ class Fenetre(QMainWindow):
         reglages.addStretch()
         reglages.addWidget(self.bouton_maj)
         reglages.addWidget(self.mode)
+        self._montrer_mise_a_jour()  # une fois rangé : montré sans parent, il s'ouvrirait en petite fenêtre
 
         # Côtés de même largeur (bouton de mise à jour compris, même caché) : les onglets restent pile au milieu.
         cote = max(gauche.sizeHint().width(),

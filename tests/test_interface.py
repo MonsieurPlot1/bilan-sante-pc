@@ -7,9 +7,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # avant d'importer Qt : a
 
 import pytest
 from PySide6.QtTest import QSignalSpy, QTest
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QFont, QHelpEvent, QWheelEvent
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QToolTip, QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QToolTip, QTreeWidget, QTreeWidgetItem, QWidget
 
 import historique
 from modules import fichiers as module_fichiers
@@ -251,6 +251,48 @@ def test_changer_de_mode(fenetre, app, tmp_path, monkeypatch):
         app.processEvents()
         assert fenetre.mode.isEnabled()  # de nouveau possible une fois l'analyse finie
     finally:
+        theme.fichier_reglages().unlink(missing_ok=True)
+        importlib.reload(theme)  # les autres tests retrouvent le mode de Windows
+
+
+class FenetresMontrees(QObject):
+    """Note chaque fenêtre qui s'affiche : un widget montré avant d'avoir un parent s'ouvre en petite fenêtre à part."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.noms: list[str] = []
+
+    def eventFilter(self, objet, evenement) -> bool:
+        if evenement.type() == QEvent.Type.Show and isinstance(objet, QWidget) and objet.isWindow():
+            self.noms.append(type(objet).__name__)
+        return False
+
+
+def test_aucune_petite_fenetre_au_changement_de_mode(app, tmp_path, monkeypatch):
+    """Plusieurs disques (choix du disque), une nouvelle version (bouton « Mettre à jour ») et une confirmation avec
+    précision : rien de tout cela ne doit apparaître, même un instant, hors de la fenêtre."""
+    from modules import disque as module_disque
+    from ui import theme
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    deux_disques = [{"disque": lettre, "total": 100 * GO, "utilise": 50 * GO, "libre": 50 * GO, "pourcentage": 50.0}
+                    for lettre in ("C:\\", "D:\\")]
+    monkeypatch.setattr(module_disque, "lister_disques", lambda: deux_disques)
+    espion = FenetresMontrees()
+    app.installEventFilter(espion)
+    fenetre = Fenetre()
+    try:
+        fenetre.show()
+        assert not fenetre.stockage.choix.isHidden()
+        fenetre.nouvelle_version = {"version": "99.0.0"}
+        fenetre.mode.click()
+        QTest.qWait(50)  # contenu recréé : choix du disque et bouton « Mettre à jour » compris
+        assert not fenetre.bouton_maj.isHidden()
+        feuille = Feuille(fenetre, "Supprimer ?", "Texte", details="Précision")
+        feuille.deleteLater()
+        assert espion.noms == ["Fenetre"]
+    finally:
+        app.removeEventFilter(espion)
+        fenetre.close()
         theme.fichier_reglages().unlink(missing_ok=True)
         importlib.reload(theme)  # les autres tests retrouvent le mode de Windows
 

@@ -852,7 +852,8 @@ class Feuille(QDialog):
         entete.addWidget(QLabel(titre, font=theme.police("carte"), wordWrap=True), 1)
         corps = QLabel(texte, wordWrap=True, font=theme.police("corps"), textFormat=Qt.TextFormat.PlainText)
         precision = QLabel(details, objectName="secondaire", wordWrap=True, textFormat=Qt.TextFormat.PlainText)
-        precision.setVisible(bool(details))
+        if not details:  # jamais setVisible(True) ici : sans parent, il s'ouvrirait en petite fenêtre
+            precision.hide()
 
         self.bouton_confirmer = bouton(confirmer, "destructif" if destructif else "principal")
         self.bouton_confirmer.clicked.connect(self.accept)

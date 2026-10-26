@@ -415,7 +415,8 @@ class PageStockage(Page):
                        if os.path.normcase(d["disque"]) == os.path.normcase(self.racine)), 0)
         self.choix = Segmente([f"Disque {d['disque'].rstrip(os.sep)}" for d in self.disques] or ["Disque"], actuel)
         self.choix.setAccessibleName("Disque à analyser")
-        self.choix.setVisible(len(self.disques) > 1)
+        if len(self.disques) < 2:  # jamais setVisible(True) ici : sans parent, il s'ouvrirait en petite fenêtre
+            self.choix.hide()
         self.choix.choisi.connect(self.changer_disque)
         haut = QHBoxLayout()
         haut.addWidget(self.etat)
