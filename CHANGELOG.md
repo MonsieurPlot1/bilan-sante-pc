@@ -1,5 +1,15 @@
 # Journal des versions
 
+## v0.5.5 - 2026-10-26
+
+- Nouvelle partie « Pilotes » dans l'analyse (hors score) : les pilotes que Windows Update propose, la dernière
+  version du pilote d'une carte graphique NVIDIA, et les pilotes du PC de plus de 2 ans, à vérifier avec
+  l'application du fabricant (MyASUS…). Elle signale aussi quand Windows est réglé pour ne jamais installer de
+  pilotes.
+- Bouton « Mettre à jour les pilotes » : après confirmation, il installe d'un coup les pilotes de Windows Update
+  et le pilote NVIDIA, téléchargé depuis le site de NVIDIA et lancé seulement s'il est bien signé par NVIDIA.
+  Windows demande l'autorisation, et l'application dit si un redémarrage est nécessaire.
+
 ## v0.5.0 - 2026-10-26
 
 - Installation plus simple : sur GitHub, l'application se télécharge maintenant en un seul fichier,
