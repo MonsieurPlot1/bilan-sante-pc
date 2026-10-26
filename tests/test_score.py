@@ -438,6 +438,15 @@ class TestPilotes(unittest.TestCase):
                          "Windows Update propose aussi 1 pilote (Garmin USB GPS). Le bouton installe tout d'un coup : "
                          "Windows te demandera l'autorisation et l'écran peut clignoter un instant.")
 
+    def test_windows_update_seul_passe_apres_les_vrais_freins(self):
+        garmin = [{"id": "x", "nom": "Garmin USB GPS"}]
+        resultat = score.calculer(pc(pilotes=pilotes(mises_a_jour=garmin), ressources=ressources(ram=85)))
+        self.assertEqual(resultat["liens"], [score.LIEN_GESTIONNAIRE, score.LIEN_PILOTES])  # la mémoire d'abord
+        ((impact, _texte, lien),) = score.conseils_pilotes(pilotes(mises_a_jour=garmin))
+        self.assertEqual((impact, lien), (config.PILOTES_WINDOWS_UPDATE_IMPACT, score.LIEN_PILOTES))
+        ((impact, _texte, _lien),) = score.conseils_pilotes(pilotes(nvidia=nvidia(), mises_a_jour=garmin))
+        self.assertEqual(impact, config.PILOTES_IMPACT)  # une nouvelle version NVIDIA reste prioritaire
+
     def test_un_seul_pilote(self):
         conseil = score.conseil_pilotes(pilotes(mises_a_jour=[{"id": "x", "nom": "Garmin USB GPS"}]))
         self.assertEqual(conseil, "Windows Update propose 1 pilote (Garmin USB GPS). Le bouton installe ce pilote : "

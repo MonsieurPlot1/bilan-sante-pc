@@ -65,10 +65,13 @@ PILOTE_GRAPHIQUE_IMPACT = 5
 # Mode jeu de Windows coupé : effet plus modeste, et seulement pendant une partie.
 MODE_JEU_IMPACT = 3
 
-# Pilotes (hors score) : une mise à jour à installer (NVIDIA ou Windows Update) se fait d'un clic depuis le conseil,
-# d'où un poids assez fort. Les pilotes des composants du PC plus vieux que PILOTE_ANCIEN_AGE (jours) sont à vérifier
-# avec l'application du fabricant du PC : conseil plus modeste, une version plus récente n'existe pas toujours.
+# Pilotes (hors score) : une nouvelle version du pilote NVIDIA s'installe d'un clic depuis le conseil et rend les jeux
+# plus fluides, d'où un poids assez fort. Les pilotes proposés par Windows Update seuls (souvent pour un accessoire)
+# s'installent aussi d'un clic, mais ne freinent pas le PC : poids modeste, après les vrais freins (mémoire, disque).
+# Les pilotes des composants du PC plus vieux que PILOTE_ANCIEN_AGE (jours) sont à vérifier avec l'application du
+# fabricant du PC : conseil modeste aussi, une version plus récente n'existe pas toujours.
 PILOTES_IMPACT = 7
+PILOTES_WINDOWS_UPDATE_IMPACT = 4
 PILOTE_ANCIEN_AGE = 2 * 365
 PILOTES_ANCIENS_IMPACT = 4
 

@@ -334,7 +334,9 @@ def conseils_pilotes(resultat: dict) -> list[tuple[float, str, Lien]]:
     """Hors score : poids fixes (voir config). Ce qui s'installe d'un clic d'abord, puis ce qui est à vérifier."""
     conseils = []
     if resultat["a_installer"]:
-        conseils.append((config.PILOTES_IMPACT, conseil_pilotes(resultat), LIEN_PILOTES))
+        impact = (config.PILOTES_IMPACT if pilotes_module.nvidia_a_installer(resultat["nvidia"])
+                  else config.PILOTES_WINDOWS_UPDATE_IMPACT)
+        conseils.append((impact, conseil_pilotes(resultat), LIEN_PILOTES))
     if resultat["anciens"]:
         conseils.append((config.PILOTES_ANCIENS_IMPACT, *conseil_pilotes_anciens(resultat)))
     return conseils
