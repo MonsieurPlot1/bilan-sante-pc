@@ -63,6 +63,13 @@ PILOTE_GRAPHIQUE_IMPACT = 5
 # Mode jeu de Windows coupé : effet plus modeste, et seulement pendant une partie.
 MODE_JEU_IMPACT = 3
 
+# Pilotes (hors score) : une mise à jour à installer (NVIDIA ou Windows Update) se fait d'un clic depuis le conseil,
+# d'où un poids assez fort. Les pilotes des composants du PC plus vieux que PILOTE_ANCIEN_AGE (jours) sont à vérifier
+# avec l'application du fabricant du PC : conseil plus modeste, une version plus récente n'existe pas toujours.
+PILOTES_IMPACT = 7
+PILOTE_ANCIEN_AGE = 2 * 365
+PILOTES_ANCIENS_IMPACT = 4
+
 # Conseils.
 NB_CONSEILS_MAX = 3
 GROS_DOSSIER_SEUIL = 5 * 1024**3  # un dossier personnel est signalé à partir de 5 Go

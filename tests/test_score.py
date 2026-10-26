@@ -60,6 +60,18 @@ def jeux(frequence: int = 144, maximum: int = 144, age: int | None = 30, mode_je
             "sur_batterie": sur_batterie}
 
 
+def pilotes(nvidia: dict | None = None, mises_a_jour: list[dict] | None = None, anciens: int = 0,
+            outil: dict | None = None) -> dict:
+    """Par défaut : rien à mettre à jour, rien de vieux. `nvidia` : voir modules/pilotes.verifier_nvidia."""
+    vieux = [{"nom": f"Pilote {i}", "categorie": categorie, "fournisseur": "Realtek", "version": "1.0",
+              "date": date(2022, 5, 16), "age": 1624}
+             for i, categorie in enumerate(["Réseau", "Son", "Carte mère et processeur", "Bluetooth"][:anciens])]
+    mises_a_jour = mises_a_jour or []
+    a_jour = nvidia is None or not nvidia["derniere"] or nvidia["derniere"]["version"] == nvidia["installee"]
+    return {"nvidia": nvidia, "mises_a_jour": mises_a_jour, "anciens": vieux, "pilotes": vieux, "outil": outil,
+            "fabricant": "ASUSTeK COMPUTER INC.", "bloques": False, "a_installer": len(mises_a_jour) + (not a_jour)}
+
+
 def pc(**modules) -> dict:
     """Résultats d'un PC en forme, sans batterie, où l'on remplace certains modules."""
     return {"demarrage": demarrage(5), "disque": disque(40), "ressources": ressources(),
@@ -391,6 +403,60 @@ class TestJeux(unittest.TestCase):
                                      alimentation=alimentation(mode=1)))
         self.assertEqual(len(resultat["conseils"]), config.NB_CONSEILS_MAX)
         self.assertEqual(resultat["liens"], [score.LIEN_ALIMENTATION, score.LIEN_ECRAN, None])  # 10, 9, puis 5
+
+
+def nvidia(installee: str = "617.14", derniere: str | None = "621.01") -> dict:
+    """La carte de jeux() (NVIDIA GeForce RTX 3060), vérifiée auprès de NVIDIA (voir modules/pilotes)."""
+    return {"carte": "NVIDIA GeForce RTX 3060", "installee": installee,
+            "derniere": derniere and {"version": derniere, "date": date(2026, 10, 21), "url": "", "taille": 0}}
+
+
+class TestPilotes(unittest.TestCase):
+    """Pilotes : hors score, un conseil pour ce qui s'installe d'un clic, un autre pour ce qui est à vérifier."""
+
+    def test_rien_a_faire(self):
+        resultat = score.calculer(pc(pilotes=pilotes(nvidia=nvidia(derniere="617.14"))))
+        self.assertEqual((resultat["score"], resultat["conseils"]), (100, []))
+        self.assertNotIn("pilotes", resultat["scores"])  # hors score
+
+    def test_nvidia_et_windows_update(self):
+        garmin = [{"id": "x", "nom": "Garmin USB GPS"}]
+        resultat = score.calculer(pc(pilotes=pilotes(nvidia=nvidia(), mises_a_jour=garmin)))
+        self.assertEqual(resultat["score"], 100)
+        self.assertEqual(resultat["liens"], [score.LIEN_PILOTES])
+        self.assertEqual(resultat["conseils"][0],
+                         "Une nouvelle version du pilote de ta carte graphique NVIDIA est sortie (621.01, tu as la "
+                         "617.14) : les pilotes récents corrigent des bugs et rendent les jeux récents plus fluides. "
+                         "Windows Update propose aussi 1 pilote (Garmin USB GPS). Le bouton installe tout d'un coup : "
+                         "Windows te demandera l'autorisation et l'écran peut clignoter un instant.")
+
+    def test_windows_update_seul(self):
+        conseil = score.conseil_pilotes(pilotes(mises_a_jour=[{"id": "x", "nom": "A"}, {"id": "y", "nom": "B"}]))
+        self.assertEqual(conseil, "Windows Update propose 2 pilotes (A, B). Le bouton installe tout d'un coup : "
+                                  "Windows te demandera l'autorisation.")
+
+    def test_vieux_pilotes(self):
+        myasus = {"nom": "MyASUS", "cible": r"shell:AppsFolder\B9ECED6F.ASUSPCAssistant_qmba6cd70vzyy!App"}
+        ((impact, texte, lien),) = score.conseils_pilotes(pilotes(anciens=4, outil=myasus))
+        self.assertEqual((impact, lien), (config.PILOTES_ANCIENS_IMPACT, ("Ouvrir MyASUS", myasus["cible"])))
+        self.assertTrue(texte.startswith("4 pilotes de ton PC (réseau, son, carte mère et processeur…) ont plus de "
+                                         "2 ans. MyASUS, l'application du fabricant"))
+        ((_, texte, lien),) = score.conseils_pilotes(pilotes(anciens=1))
+        self.assertIsNone(lien)  # pas d'application du fabricant : son site
+        self.assertTrue(texte.startswith("1 pilote de ton PC (réseau) a plus de 2 ans. Le site du fabricant de ton PC "
+                                         "(ASUSTeK COMPUTER INC.), à la page d'assistance de ton modèle"))
+
+    def test_l_age_du_pilote_ne_compte_plus_si_nvidia_a_repondu(self):
+        vieux = jeux(age=400)
+        self.assertEqual(len(score.conseils_jeux(vieux, pilotes(nvidia=nvidia()))), 0)
+        self.assertEqual(len(score.conseils_jeux(vieux, pilotes(nvidia=nvidia(derniere=None)))), 1)  # hors ligne
+        self.assertEqual(len(score.conseils_jeux(vieux, pilotes())), 1)  # pas une carte NVIDIA
+
+    def test_ordre_parmi_les_autres_conseils(self):
+        resultat = score.calculer(pc(pilotes=pilotes(nvidia=nvidia(), anciens=2), alimentation=alimentation(mode=1)))
+        self.assertEqual([impact for impact in (config.ALIMENTATION_IMPACT, config.PILOTES_IMPACT,
+                                                config.PILOTES_ANCIENS_IMPACT)], [10, 7, 4])
+        self.assertEqual(resultat["liens"][:2], [score.LIEN_ALIMENTATION, score.LIEN_PILOTES])
 
 
 if __name__ == "__main__":

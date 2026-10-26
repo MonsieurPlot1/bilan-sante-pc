@@ -20,7 +20,7 @@ from ui.verre import Verre, arrondi, dessiner_ombre, flouter, peindre_verre
 
 # Teinte de la tuile d'icône de chaque partie du bilan (jamais une couleur d'état).
 TUILES = {"demarrage": "violet", "disque": "bleu", "fichiers": "aqua", "ressources": "magenta",
-          "redemarrage": "gris", "alimentation": "bleu", "jeux": "magenta", "batterie": "aqua", "historique": "bleu"}
+          "redemarrage": "gris", "alimentation": "bleu", "jeux": "magenta", "pilotes": "violet", "batterie": "aqua", "historique": "bleu"}
 
 
 def couleur_alpha(couleur: str, alpha: int) -> QColor:
@@ -482,7 +482,8 @@ class CarteConseil(Verre):
         self.bouton: QPushButton | None = None
         if lien and ouvrir:
             libelle, cible = lien
-            self.bouton = bouton(f" {libelle}", "teinte", "ouvrir", theme.ACCENT_CLAIR, 12)
+            icone = "telechargement" if cible.startswith("bilan:") else "ouvrir"  # « bilan: » : une action de l'appli
+            self.bouton = bouton(f" {libelle}", "teinte", icone, theme.ACCENT_CLAIR, 12)
             self.bouton.clicked.connect(lambda: ouvrir(cible))
             droite.addWidget(self.bouton, alignment=Qt.AlignmentFlag.AlignLeft)
         disposition = QHBoxLayout(self)

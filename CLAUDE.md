@@ -11,15 +11,23 @@ App Windows grand public : scanne le PC et explique en français clair pourquoi 
   logiciels, le dossier temporaire ni le profil et ses dossiers (`stockage.supprimable`). Et, à ma demande, le
   bouton « Mettre à jour » (`modules/mise_a_jour.py`), qui après confirmation lance l'installateur de la nouvelle
   version : il remplace seulement les fichiers de l'application elle-même (son .exe et `_internal`, l'ancienne
-  version remise en place en cas d'échec).
+  version remise en place en cas d'échec). Et, à ma demande, le bouton « Mettre à jour les pilotes » (partie
+  Pilotes et son conseil, `modules/installation_pilotes.py`) : après confirmation, il installe en administrateur
+  (Windows demande l'autorisation) les pilotes proposés par Windows Update et le pilote NVIDIA plus récent,
+  téléchargé depuis le site de NVIDIA et vérifié (signature de NVIDIA). Pas de point de restauration (à ma demande).
   Aucune autre action ne s'ajoute sans mon accord explicite.
-  Les boutons « Ouvrir » des conseils ne font qu'ouvrir une page des Paramètres, un dossier ou un outil de Windows.
-- 100 % local : aucune donnée n'est envoyée ailleurs, aucun réseau. Deux exceptions, à ma demande : le test de
+  Les boutons « Ouvrir » des conseils ne font qu'ouvrir une page des Paramètres, un dossier ou un outil de Windows,
+  sauf celui du conseil des pilotes (« Mettre à jour les pilotes », cible `bilan:`), qui demande confirmation.
+- 100 % local : aucune donnée n'est envoyée ailleurs, aucun réseau. Trois exceptions, à ma demande : le test de
   l'onglet Connexion (`modules/connexion.py`), uniquement sur clic, qui échange des données de test tirées au
   hasard avec les serveurs de Cloudflare (speed.cloudflare.com) ; et les mises à jour (`modules/mise_a_jour.py`) :
   à l'ouverture, une requête à GitHub pour la liste des versions publiées (seulement le nom et la version de
-  l'appli), puis, sur clic, le téléchargement de l'installateur depuis GitHub. Rien sur le PC ni sur l'utilisateur ne part,
-  et aucun autre accès au réseau ne s'ajoute sans mon accord explicite.
+  l'appli), puis, sur clic, le téléchargement de l'installateur depuis GitHub ; et les pilotes (`modules/pilotes.py`) :
+  à chaque analyse, sur un PC qui a une carte NVIDIA, deux requêtes au site de NVIDIA pour la dernière version de son
+  pilote (seuls les numéros de produit de la carte et la version de Windows partent), puis, sur clic, le
+  téléchargement de ce pilote ; Windows Update, lui, est lu sur le PC (dernière recherche de Windows), et c'est Windows
+  qui télécharge ses pilotes à l'installation. Rien d'autre sur le PC ni sur l'utilisateur ne part, et aucun autre
+  accès au réseau ne s'ajoute sans mon accord explicite.
 - Un module = un fichier dans `modules/`, avec une fonction `scan()` qui renvoie un dict (mesures + constats ; le score est calculé dans `modules/score.py`).
 - La logique (modules/) est séparée de l'interface (ui/) : les modules doivent tourner sans PySide6.
 - Textes affichés en français simple, sans jargon. Jamais "désactive X" sans préciser que certains programmes sont légitimes.
@@ -39,6 +47,11 @@ affiche toutes dans le style de l'application, jamais la bulle grise de Qt.
 ## Modules
 - Dans le score : démarrage, disque, ressources (mémoire et processeur), redémarrage, batterie (PC portables).
 - Hors score : fichiers (Corbeille, fichiers temporaires, cache des navigateurs, Windows.old), alimentation (mode d'économie d'énergie), jeux (fréquence des écrans, pilote de la carte graphique des jeux, Mode jeu).
+- Hors score : pilotes (`modules/pilotes.py`) : ceux que Windows Update propose (lus avec PowerShell, sans réseau), la
+  dernière version du pilote NVIDIA, et les pilotes des composants du PC de plus de 2 ans, à vérifier avec
+  l'application du fabricant du PC (MyASUS…). Installation sur clic : `modules/installation_pilotes.py`. Les tests ne
+  lancent jamais PowerShell, n'utilisent pas le réseau et n'installent rien (fixture `pilotes_hors_ligne`, dans
+  `tests/conftest.py` : elle vaut pour tous les tests).
 - Onglet à part, hors du bilan : stockage (`modules/stockage.py`, page `ui/stockage.py`), ce qui occupe un disque en 12 catégories, et doublons (`modules/doublons.py`), fichiers et dossiers personnels au contenu identique.
 - Onglet à part, hors du bilan : connexion (`modules/connexion.py`, page `ui/connexion.py`), la liaison avec la box (lue auprès de Windows) et le test de débit sur clic. Les tests n'utilisent jamais le réseau (fixture `reseau_interdit`).
 - Hors du bilan : mises à jour (`modules/mise_a_jour.py`, bouton « Mettre à jour » de la barre du haut).

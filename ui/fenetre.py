@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QFrame, QGrid
 
 import config
 import historique
-from modules import fichiers, mise_a_jour
+from modules import fichiers, installation_pilotes, mise_a_jour, pilotes, score
 from modules.disque import taille_lisible
 from ui import analyse, theme
 from ui.connexion import PageConnexion
@@ -31,7 +31,7 @@ journal = logging.getLogger(__name__)
 # Colonnes du détail dépliable de chaque carte (les cartes sans colonnes n'ont pas de détail).
 COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élément", "Taille", "Détail"],
             "fichiers": [], "ressources": ["Programme", "Mémoire"], "redemarrage": [], "alimentation": [],
-            "jeux": [], "batterie": []}
+            "jeux": [], "pilotes": ["Appareil", "Pilote installé", "Mise à jour"], "batterie": []}
 
 DUREE_FONDU = 300  # millisecondes : passage en douceur entre le mode clair et le mode sombre
 DUREE_ONGLET = 180  # millisecondes : passage en douceur d'un onglet à l'autre
@@ -97,6 +97,13 @@ class Fenetre(QMainWindow):
         self.nouvelle_version: dict | None = None  # version publiée plus récente (voir mise_a_jour.plus_recente)
         self.recherche: Travail | None = None
         self.telechargement: Travail | None = None
+        # Mise à jour des pilotes en cours : ce qui s'installe, le téléchargement du pilote NVIDIA, puis l'installation
+        # en administrateur, suivie toutes les demi-secondes.
+        self.pilotes_a_installer: dict | None = None
+        self.travail_pilotes: Travail | None = None
+        self.processus_pilotes: int | None = None
+        self.suivi_pilotes = QTimer(self, interval=500)
+        self.suivi_pilotes.timeout.connect(self._suivre_pilotes)
         self.construire()
         colorer_barre_titre(self, *couleurs_cadre())  # barre de titre fondue dans la barre du haut
         epurer_barre_titre(self)
@@ -279,6 +286,9 @@ class Fenetre(QMainWindow):
         voir = bouton("Voir ce qui prend de la place", "lien", "stockage", theme.ACCENT_CLAIR, 12)
         voir.clicked.connect(lambda: self.changer_page(ONGLET_STOCKAGE))
         self.cartes["disque"].layout().addWidget(voir, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.bouton_pilotes = bouton(" Mettre à jour les pilotes", "", "telechargement", theme.TEXTE, 13, enabled=False)
+        self.bouton_pilotes.clicked.connect(self.mettre_a_jour_pilotes)
+        self.cartes["pilotes"].layout().addWidget(self.bouton_pilotes, alignment=Qt.AlignmentFlag.AlignLeft)
         colonnes = [QVBoxLayout(), QVBoxLayout()]
         for position, carte in enumerate(self.cartes.values()):
             colonnes[position % 2].addWidget(carte)
@@ -350,6 +360,7 @@ class Fenetre(QMainWindow):
         self.copier.setEnabled(False)
         self.enregistrer.setEnabled(False)
         self.vider.setEnabled(False)
+        self.bouton_pilotes.setEnabled(False)
         self.glissement.stop()
         self.progression.setValue(0)
         self.progression.show()
@@ -393,6 +404,7 @@ class Fenetre(QMainWindow):
 
         module_fichiers = resultat["modules"].get("fichiers")
         self.vider.setEnabled(bool(module_fichiers and module_fichiers["corbeille"]))
+        self._bouton_pilotes_pret()
 
         conseils = analyse.conseils(resultat)
         if bilan is None:
@@ -476,7 +488,8 @@ class Fenetre(QMainWindow):
     def _autoriser_mode(self) -> None:
         """Le changement de mode recrée tout le contenu : pas pendant une analyse, qui perdrait son affichage."""
         self.mode.setEnabled(not self.bilan_en_cours and not self.stockage.en_cours()
-                             and not self.connexion.en_cours() and self.telechargement is None)
+                             and not self.connexion.en_cours() and self.telechargement is None
+                             and self.pilotes_a_installer is None)
 
     def changer_page(self, numero: int) -> None:
         """Onglets : la nouvelle page apparaît en fondu rapide sur l'ancienne."""
@@ -545,7 +558,12 @@ class Fenetre(QMainWindow):
         fondu.demarrer(nouvelle)
 
     def ouvrir(self, cible: str) -> None:
-        """Bouton « Ouvrir » d'un conseil : la page des Paramètres, le dossier ou l'outil, sans rien modifier."""
+        """Bouton « Ouvrir » d'un conseil : la page des Paramètres, le dossier ou l'outil, sans rien modifier.
+
+        Seule exception, le conseil des pilotes : son bouton lance leur mise à jour, après confirmation."""
+        if cible == score.ACTION_PILOTES:
+            self.mettre_a_jour_pilotes()
+            return
         try:
             os.startfile(cible)  # comme un double-clic
         except OSError:
@@ -672,11 +690,124 @@ class Fenetre(QMainWindow):
         self._autoriser_mode()
         self.annonce.montrer(resultat["erreur"], "erreur", 8000)
 
+    # --- Pilotes ---
+
+    def _bouton_pilotes_pret(self) -> None:
+        module = self.resultat and self.resultat["modules"].get("pilotes")
+        self.bouton_pilotes.setText(" Mettre à jour les pilotes")
+        self.bouton_pilotes.setEnabled(bool(module and module["a_installer"]) and self.pilotes_a_installer is None)
+
+    def mettre_a_jour_pilotes(self) -> None:
+        """Bouton « Mettre à jour les pilotes » (carte Pilotes ou conseil) : après confirmation, télécharge le pilote
+        NVIDIA, puis installe tout en administrateur (Windows demande l'autorisation)."""
+        module = self.resultat and self.resultat["modules"].get("pilotes")
+        if not module or self.pilotes_a_installer is not None:
+            return
+        if not module["a_installer"]:
+            self.annonce.montrer("Les pilotes ont déjà été mis à jour : relance l'analyse pour vérifier.")
+            return
+        nvidia = module["nvidia"] if pilotes.nvidia_a_installer(module["nvidia"]) else None
+        mises_a_jour = module["mises_a_jour"] or []
+        lignes = [f"• Pilote NVIDIA {nvidia['derniere']['version']}, téléchargé depuis le site de NVIDIA "
+                  f"({taille_lisible(nvidia['derniere']['taille'])})"] if nvidia else []
+        lignes += [f"• {mise_a_jour['nom']}, par Windows Update" for mise_a_jour in mises_a_jour]
+        details = ("Windows va demander ton autorisation." + (" Pendant l'installation du pilote NVIDIA, l'écran peut "
+                   "clignoter ou devenir noir quelques secondes." if nvidia else "")
+                   + " Un redémarrage peut être demandé à la fin.")
+        feuille = Feuille(self, "Mettre à jour les pilotes ?", "\n".join(lignes), details, confirmer="Mettre à jour",
+                          icone="telechargement")
+        if feuille.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.pilotes_a_installer = {"nvidia": nvidia, "mises_a_jour": mises_a_jour}
+        self.bouton_pilotes.setMinimumWidth(self.bouton_pilotes.width())  # même largeur pendant l'installation
+        self.bouton_pilotes.setEnabled(False)
+        self._autoriser_mode()
+        if not nvidia:
+            self._installer_pilotes(None)
+            return
+
+        def telecharger(avance, arret) -> dict | None:
+            paquet = installation_pilotes.telecharger_nvidia(nvidia["derniere"], avance, arret)
+            return paquet and {"paquet": paquet}
+
+        self.travail_pilotes = Travail(telecharger, "Le pilote NVIDIA n'a pas pu être téléchargé.", discret=False)
+        self.travail_pilotes.avance.connect(
+            lambda valeurs: self.bouton_pilotes.setText(f" {round(valeurs[0] * 100)} %"))
+        self.travail_pilotes.termine.connect(self._pilote_nvidia_telecharge)
+        self.bouton_pilotes.setText(" 0 %")
+        self.annonce.montrer(f"Téléchargement du pilote NVIDIA {nvidia['derniere']['version']}…")
+        self.travail_pilotes.start()
+
+    def _pilote_nvidia_telecharge(self, resultat: dict | None) -> None:
+        self.travail_pilotes.wait()
+        self.travail_pilotes = None
+        if resultat is None:  # arrêté : l'application se ferme
+            return
+        if "erreur" in resultat:
+            self._fin_pilotes()
+            self.annonce.montrer(resultat["erreur"], "erreur", 8000)
+            return
+        self._installer_pilotes(resultat["paquet"])
+
+    def _installer_pilotes(self, paquet) -> None:
+        """Lance l'installation en administrateur, puis la suit toutes les demi-secondes."""
+        ids = [mise_a_jour["id"] for mise_a_jour in self.pilotes_a_installer["mises_a_jour"]]
+        self.bouton_pilotes.setText(" Autorisation…")
+        try:
+            self.processus_pilotes = installation_pilotes.lancer(ids, paquet, int(self.winId()))
+        except installation_pilotes.Annulee:
+            self._fin_pilotes()
+            self.annonce.montrer("Mise à jour des pilotes annulée : l'autorisation n'a pas été donnée.")
+            return
+        except (OSError, ValueError):
+            journal.exception("Impossible de lancer l'installation des pilotes")
+            self._fin_pilotes()
+            self.annonce.montrer(f"L'installation des pilotes n'a pas pu démarrer. {analyse.AIDE}", "erreur", 8000)
+            return
+        self.bouton_pilotes.setText(" Installation…")
+        self.annonce.montrer("Installation des pilotes en cours : ça peut prendre quelques minutes.", duree=8000)
+        self.suivi_pilotes.start()
+
+    def _suivre_pilotes(self) -> None:
+        etape = installation_pilotes.lire_etat().get("etape")
+        texte = {"windows_update": " Windows Update…", "nvidia": " Pilote NVIDIA…"}.get(etape)
+        if texte:
+            self.bouton_pilotes.setText(texte)
+        if not installation_pilotes.termine(self.processus_pilotes):
+            return
+        self.suivi_pilotes.stop()
+        self.processus_pilotes = None
+        resultat = installation_pilotes.bilan(installation_pilotes.lire_etat(), self.pilotes_a_installer["mises_a_jour"],
+                                              self.pilotes_a_installer["nvidia"])
+        installation_pilotes.nettoyer()
+        if resultat["installes"] and not resultat["echecs"]:
+            self.resultat["modules"]["pilotes"]["a_installer"] = 0  # à jour jusqu'à la prochaine analyse
+        self._fin_pilotes()
+        self._annoncer_pilotes(resultat)
+
+    def _annoncer_pilotes(self, resultat: dict) -> None:
+        installes = " et ".join(resultat["installes"])
+        if resultat["installes"] and resultat["redemarrage"]:
+            Feuille(self, "Redémarre le PC pour finir", f"Installé : {installes}.",
+                    " ".join(resultat["echecs"] + ["Windows utilisera les nouveaux pilotes après le redémarrage."]),
+                    annuler=None, icone="valide").exec()
+        elif resultat["installes"]:
+            self.annonce.montrer(f"Installé : {installes}. {' '.join(resultat['echecs'])} "
+                                 "Relance l'analyse pour voir le résultat.", "valide", 8000)
+        else:
+            self.annonce.montrer(f"{' '.join(resultat['echecs'])} {analyse.AIDE}", "erreur", 10000)
+
+    def _fin_pilotes(self) -> None:
+        self.pilotes_a_installer = None
+        self.bouton_pilotes.setMinimumWidth(0)
+        self._bouton_pilotes_pret()
+        self._autoriser_mode()
+
     def closeEvent(self, evenement) -> None:
         # Fermer pendant une analyse : on cache la fenêtre puis on attend la fin des threads,
         # sinon Qt plante en détruisant un thread encore actif. Le stockage, le test de connexion et le téléchargement
         # d'une mise à jour s'arrêtent en route.
-        travaux = [travail for travail in (self.analyse, self.recherche, self.telechargement)
+        travaux = [travail for travail in (self.analyse, self.recherche, self.telechargement, self.travail_pilotes)
                    if travail and travail.isRunning()]
         if travaux or self.stockage.en_cours() or self.connexion.en_cours():
             self.hide()
@@ -684,6 +815,8 @@ class Fenetre(QMainWindow):
         self.connexion.arreter()
         if self.telechargement:
             self.telechargement.arret.set()
+        if self.travail_pilotes:  # l'installation en administrateur, elle, va au bout même si l'application se ferme
+            self.travail_pilotes.arret.set()
         for travail in travaux:
             travail.wait()
         super().closeEvent(evenement)
@@ -693,6 +826,8 @@ def lignes_detail(cle: str, module: dict) -> list[list[str]]:
     """Lignes du détail dépliable d'une carte."""
     if cle == "demarrage":
         return [[p["nom"], p["editeur"] or "inconnu", p["chemin"]] for p in module["programmes"]]
+    if cle == "pilotes":
+        return lignes_pilotes(module)
     if cle == "disque":
         lignes = [[f"Disque {d['disque']}", taille_lisible(d["libre"]) + " libres",
                    f"{d['pourcentage']:.0f} % utilisé sur {taille_lisible(d['total'])}"] for d in module["disques"]]
@@ -701,6 +836,22 @@ def lignes_detail(cle: str, module: dict) -> list[list[str]]:
     if cle == "ressources":
         return [[p["nom"], taille_lisible(p["octets"])] for p in module["processus"]]
     return []
+
+
+def lignes_pilotes(module: dict) -> list[list[str]]:
+    """Ce qui s'installe d'un clic d'abord, puis chaque pilote des composants du PC, du plus vieux au plus récent."""
+    nvidia, lignes = module["nvidia"], []
+    if pilotes.nvidia_a_installer(nvidia):
+        lignes.append([nvidia["carte"], nvidia["installee"], f"{nvidia['derniere']['version']} disponible (NVIDIA)"])
+    for mise_a_jour in module["mises_a_jour"] or []:
+        lignes.append([mise_a_jour["nom"], "", "Windows Update"])
+    a_verifier = f"à vérifier avec {module['outil']['nom']}" if module["outil"] else "à vérifier chez le fabricant"
+    for pilote in module["pilotes"]:
+        if lignes and pilotes.nvidia_a_installer(nvidia) and pilote["nom"] == nvidia["carte"]:
+            continue  # déjà en tête
+        quand = f" du {pilote['date']:%d/%m/%Y}" if pilote["date"] else ""
+        lignes.append([pilote["nom"], pilote["version"] + quand, a_verifier if pilote in module["anciens"] else ""])
+    return lignes
 
 
 @cache  # chargée une fois : appelée à chaque étape du fondu

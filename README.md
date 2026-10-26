@@ -34,7 +34,13 @@ Paramètres > Applications > Applications installées. Ton historique et tes ré
   d'énergie, mode « Meilleure efficacité énergétique » ou « Économies d'énergie »), avec où le changer.
 - **Jeux et affichage** (hors score) : si un écran est réglé nettement sous sa fréquence maximale (60 Hz sur
   un écran 144 Hz), la date du pilote de la carte graphique qui fait tourner les jeux (conseil au-delà de
-  6 mois) et si le Mode jeu de Windows est coupé.
+  6 mois, quand la partie Pilotes n'a pas pu vérifier sa dernière version) et si le Mode jeu de Windows
+  est coupé.
+- **Pilotes** (hors score) : les pilotes que Windows Update propose (d'après sa dernière recherche, lue sur
+  le PC), la dernière version du pilote d'une carte graphique NVIDIA (demandée au site de NVIDIA), et les
+  pilotes des composants du PC de plus de 2 ans (carte mère, son, réseau…), à vérifier avec l'application
+  du fabricant du PC quand elle est installée (MyASUS, Lenovo Vantage…). Un bouton « Mettre à jour les
+  pilotes » installe d'un coup ceux de Windows Update et le pilote NVIDIA.
 - **Batterie** (PC portables seulement) : le niveau de charge, le branchement et l'usure, lue auprès
   du pilote de batterie de Windows. Si le PC ne donne pas cette information, l'application l'écrit
   au lieu d'inventer un chiffre.
@@ -92,22 +98,28 @@ bouton ouvre seulement la page de la nouvelle version sur GitHub, pour la télé
 ## Ce qu'elle ne fait jamais
 
 - Elle ne modifie, ne supprime et ne désactive rien : elle se contente de lire.
-  Trois exceptions, qui n'agissent que si tu cliques dessus et que tu confirmes :
+  Quatre exceptions, qui n'agissent que si tu cliques dessus et que tu confirmes :
   - le bouton « Vider la Corbeille » (confirmation dans la fenêtre de Windows). Pense à vérifier
     la Corbeille avant : c'est définitif ;
   - les boutons « Supprimer » de l'onglet Stockage, qui effacent définitivement un fichier ou un
     dossier, sans passer par la Corbeille : vérifie avec « Afficher » avant de confirmer ;
-  - le bouton « Mettre à jour », qui remplace seulement les fichiers de l'application elle-même.
+  - le bouton « Mettre à jour », qui remplace seulement les fichiers de l'application elle-même ;
+  - le bouton « Mettre à jour les pilotes », qui installe les pilotes proposés par Windows Update et le
+    pilote NVIDIA plus récent (Windows demande ton autorisation ; le fichier de NVIDIA n'est lancé que s'il
+    est bien signé par NVIDIA). Aucun point de restauration n'est créé.
 - Les boutons « Ouvrir » sous les conseils affichent seulement la bonne page des Paramètres, le dossier
-  concerné ou le Gestionnaire des tâches : c'est toi qui décides ensuite quoi changer. Dans l'onglet
+  concerné, le Gestionnaire des tâches ou l'application du fabricant du PC : c'est toi qui décides ensuite
+  quoi changer. Seule exception, « Mettre à jour les pilotes », qui demande confirmation. Dans l'onglet
   Stockage, « Afficher » ouvre seulement l'Explorateur à l'emplacement d'un dossier ou d'un fichier.
 - Elle n'envoie aucune donnée sur toi ni sur ton PC : tout reste sur ton PC. Elle n'utilise le réseau
   que pour le test de l'onglet Connexion, quand tu le lances, avec des données de test, et pour les
   mises à jour : la liste des versions à l'ouverture, puis le téléchargement si tu cliques sur
-  « Mettre à jour ».
+  « Mettre à jour ». Et pour les pilotes : à chaque analyse, si le PC a une carte NVIDIA, elle demande au
+  site de NVIDIA la dernière version de son pilote (seuls les numéros de produit de la carte et la version
+  de Windows partent), puis le télécharge si tu cliques sur « Mettre à jour les pilotes ».
 
 Elle écrit seulement dans `%LOCALAPPDATA%\BilanSantePC` (et, le temps d'une mise à jour, dans son propre
-dossier) :
+dossier ; le temps d'une mise à jour des pilotes, dans `pilotes`, effacé ensuite) :
 - `bilan.log` : un journal, utile en cas de problème ;
 - `historique.json` : les chiffres de chaque analyse (date, scores, espace disque utilisé), pour
   l'encadré « Depuis la dernière fois » (avec l'évolution du disque sur le dernier mois) et le graphique.

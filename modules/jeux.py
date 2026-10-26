@@ -4,24 +4,22 @@ Lecture seule : on demande à Windows les réglages des écrans et on lit le reg
 """
 
 import ctypes
-import uuid
 import winreg
 from ctypes import wintypes
 from datetime import date
 
 import psutil
 
+from modules.pilotes import CLE_CLASSES, cles_pilotes, date_pilote, valeur as _valeur
+
 # Vraies cartes graphiques : les écrans virtuels (Microsoft, logiciels de partage d'écran…) n'ont rien à régler.
 FABRICANTS = {"NVIDIA": "NVIDIA", "Advanced Micro Devices, Inc.": "AMD", "AMD": "AMD",
               "ATI Technologies Inc.": "AMD", "Intel Corporation": "Intel"}
 CLASSE_AFFICHAGE = "4d36e968-e325-11ce-bfc1-08002be10318"  # GUID_DEVCLASS_DISPLAY
-CLE_CLASSES = r"SYSTEM\CurrentControlSet\Control\Class"
 CLE_MODE_JEU = r"Software\Microsoft\GameBar"
 ATTACHE_AU_BUREAU, PRINCIPAL = 0x1, 0x4  # DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICE_PRIMARY_DEVICE
 MODE_ACTUEL = -1  # ENUM_CURRENT_SETTINGS
 ENTRELACE = 0x2  # DM_INTERLACED : image moins nette, pas un vrai réglage à conseiller
-DIGCF_PRESENT = 0x2
-SPDRP_DRIVER = 9  # nom de la clé du pilote, sous CLE_CLASSES
 
 
 class _Peripherique(ctypes.Structure):  # DISPLAY_DEVICEW
@@ -36,11 +34,6 @@ class _Mode(ctypes.Structure):  # DEVMODEW (partie écran)
                 ("pixels_logiques", wintypes.WORD), ("bits", wintypes.DWORD), ("largeur", wintypes.DWORD),
                 ("hauteur", wintypes.DWORD), ("drapeaux", wintypes.DWORD), ("frequence", wintypes.DWORD),
                 ("reste", wintypes.DWORD * 8)]
-
-
-class _InfoAppareil(ctypes.Structure):  # SP_DEVINFO_DATA
-    _fields_ = [("taille", wintypes.DWORD), ("classe", ctypes.c_ubyte * 16), ("instance", wintypes.DWORD),
-                ("reserve", ctypes.c_void_p)]
 
 
 def _modes(user32: ctypes.WinDLL, peripherique: str) -> list[_Mode]:
@@ -85,58 +78,11 @@ def ecrans() -> list[dict]:
     return sorted(trouves, key=lambda ecran: not ecran["principal"])
 
 
-def date_pilote(texte: object) -> date | None:
-    """Date d'un pilote telle que Windows la note (« 9-17-2026 », mois en premier), ou None."""
-    try:
-        mois, jour, annee = (int(nombre) for nombre in str(texte).split("-"))
-        return date(annee, mois, jour)
-    except ValueError:
-        return None
-
-
-def _cles_pilotes() -> list[str]:
-    """Clé du pilote (sous CLE_CLASSES) de chaque carte graphique présente dans le PC."""
-    setupapi = ctypes.WinDLL("setupapi")
-    setupapi.SetupDiGetClassDevsW.restype = ctypes.c_void_p
-    setupapi.SetupDiGetClassDevsW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR, wintypes.HWND, wintypes.DWORD]
-    setupapi.SetupDiEnumDeviceInfo.argtypes = [ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
-    setupapi.SetupDiGetDeviceRegistryPropertyW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD,
-                                                           ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD,
-                                                           ctypes.c_void_p]
-    setupapi.SetupDiDestroyDeviceInfoList.argtypes = [ctypes.c_void_p]
-    classe = (ctypes.c_ubyte * 16).from_buffer_copy(uuid.UUID(CLASSE_AFFICHAGE).bytes_le)
-    liste = setupapi.SetupDiGetClassDevsW(ctypes.byref(classe), None, None, DIGCF_PRESENT)
-    if liste in (None, ctypes.c_void_p(-1).value):
-        return []
-    cles = []
-    try:
-        numero = 0
-        while True:
-            appareil = _InfoAppareil(taille=ctypes.sizeof(_InfoAppareil))
-            if not setupapi.SetupDiEnumDeviceInfo(liste, numero, ctypes.byref(appareil)):
-                break
-            numero += 1
-            tampon = ctypes.create_unicode_buffer(256)
-            if setupapi.SetupDiGetDeviceRegistryPropertyW(liste, ctypes.byref(appareil), SPDRP_DRIVER, None,
-                                                          tampon, ctypes.sizeof(tampon), None):
-                cles.append(tampon.value)
-    finally:
-        setupapi.SetupDiDestroyDeviceInfoList(liste)
-    return cles
-
-
-def _valeur(cle, nom: str) -> object:
-    try:
-        return winreg.QueryValueEx(cle, nom)[0]
-    except OSError:
-        return None
-
-
 def cartes_graphiques(aujourd_hui: date | None = None) -> list[dict]:
     """Cartes graphiques présentes d'un vrai fabricant : nom, fabricant, date et âge du pilote (jours), mémoire."""
     aujourd_hui = aujourd_hui or date.today()
     cartes = []
-    for cle_pilote in _cles_pilotes():
+    for cle_pilote in cles_pilotes(CLASSE_AFFICHAGE):
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, rf"{CLE_CLASSES}\{cle_pilote}") as cle:
                 nom, fournisseur = _valeur(cle, "DriverDesc"), _valeur(cle, "ProviderName")

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import config
 from modules import alimentation
+from modules import pilotes as pilotes_module
 from modules.disque import taille_lisible
 from modules.redemarrage import duree_lisible
 
@@ -36,6 +37,9 @@ LIEN_GESTIONNAIRE: Lien = ("Ouvrir le Gestionnaire des tâches", "taskmgr.exe")
 LIEN_MISES_A_JOUR: Lien = ("Ouvrir Windows Update", "ms-settings:windowsupdate")
 LIEN_ECRAN: Lien = (PARAMETRES, "ms-settings:display-advanced")
 LIEN_MODE_JEU: Lien = (PARAMETRES, "ms-settings:gaming-gamemode")
+# Seul bouton de conseil qui agit : il lance la mise à jour des pilotes, après confirmation (voir ui/fenetre.py).
+ACTION_PILOTES = "bilan:mettre-a-jour-pilotes"
+LIEN_PILOTES: Lien = ("Mettre à jour les pilotes", ACTION_PILOTES)
 
 # Application de chaque fabricant qui met à jour le pilote de la carte graphique.
 APPLIS_PILOTES = {"NVIDIA": "NVIDIA App", "AMD": "AMD Software: Adrenalin Edition",
@@ -203,6 +207,36 @@ def conseil_pilote(carte: dict) -> str:
             "la marque du PC propose aussi le bon pilote.")
 
 
+def conseil_pilotes(pilotes: dict) -> str:
+    nvidia, mises_a_jour = pilotes["nvidia"], pilotes["mises_a_jour"] or []
+    phrases = []
+    if pilotes_module.nvidia_a_installer(nvidia):
+        phrases.append(f"Une nouvelle version du pilote de ta carte graphique NVIDIA est sortie "
+                       f"({nvidia['derniere']['version']}, tu as la {nvidia['installee']}) : les pilotes récents "
+                       "corrigent des bugs et rendent les jeux récents plus fluides.")
+    if mises_a_jour:
+        nombre = f"{len(mises_a_jour)} pilote{'s' if len(mises_a_jour) > 1 else ''}"
+        noms = ", ".join(mise_a_jour["nom"] for mise_a_jour in mises_a_jour[:3])
+        phrases.append(f"Windows Update propose {'aussi ' if phrases else ''}{nombre} ({noms}).")
+    clignote = " et l'écran peut clignoter un instant" if pilotes_module.nvidia_a_installer(nvidia) else ""
+    phrases.append(f"Le bouton installe tout d'un coup : Windows te demandera l'autorisation{clignote}.")
+    return " ".join(phrases)
+
+
+def conseil_pilotes_anciens(pilotes: dict) -> tuple[str, Lien]:
+    anciens, outil = pilotes["anciens"], pilotes["outil"]
+    categories = list(dict.fromkeys(ancien["categorie"].lower() for ancien in anciens))
+    plusieurs = len(anciens) > 1
+    debut = (f"{len(anciens)} pilote{'s' if plusieurs else ''} de ton PC ({', '.join(categories[:3])}"
+             f"{'…' if len(categories) > 3 else ''}) {'ont' if plusieurs else 'a'} plus de 2 ans.")
+    if outil:
+        return (f"{debut} {outil['nom']}, l'application du fabricant installée sur ce PC, propose les versions prévues "
+                "pour ton modèle : regarde s'il y en a de plus récentes.", (f"Ouvrir {outil['nom']}", outil["cible"]))
+    marque = f" ({pilotes['fabricant']})" if pilotes["fabricant"] else ""
+    return (f"{debut} Le site du fabricant de ton PC{marque}, à la page d'assistance de ton modèle, propose les "
+            "versions prévues pour ton PC : regarde s'il y en a de plus récentes.", None)
+
+
 def conseil_mode_jeu() -> str:
     return ("Le Mode jeu de Windows est désactivé. Si tu joues sur ce PC, active-le dans Paramètres > Jeux > "
             "Mode jeu : pendant une partie, Windows donne la priorité au jeu, et Windows Update n'installe pas de "
@@ -270,8 +304,11 @@ def conseils_batterie(resultat: dict, points: int) -> list[tuple[float, str, Lie
     return [(points * (1 - sante_batterie(resultat)), conseil_batterie(resultat["sante"]), None)]
 
 
-def conseils_jeux(resultat: dict) -> list[tuple[float, str, Lien]]:
-    """Hors score : chaque réglage a un poids fixe parmi les conseils (voir config), comme l'alimentation."""
+def conseils_jeux(resultat: dict, pilotes: dict | None = None) -> list[tuple[float, str, Lien]]:
+    """Hors score : chaque réglage a un poids fixe parmi les conseils (voir config), comme l'alimentation.
+
+    Pilote de la carte des jeux : seulement d'après son âge, quand la partie Pilotes n'a pas pu vérifier mieux.
+    """
     conseils = []
     ecrans = resultat["ecrans"]
     for numero, ecran in enumerate(ecrans, start=1):
@@ -281,10 +318,22 @@ def conseils_jeux(resultat: dict) -> list[tuple[float, str, Lien]]:
                              LIEN_ECRAN))
             break  # un seul conseil, même si plusieurs écrans sont concernés : le réglage se fait au même endroit
     carte = resultat["carte_jeux"]
-    if carte and carte["age"] is not None and carte["age"] > config.PILOTE_GRAPHIQUE_AGE_MAX:
+    nvidia = (pilotes or {}).get("nvidia")
+    verifiee = bool(carte and nvidia and nvidia["derniere"] and nvidia["carte"] == carte["nom"])
+    if carte and carte["age"] is not None and carte["age"] > config.PILOTE_GRAPHIQUE_AGE_MAX and not verifiee:
         conseils.append((config.PILOTE_GRAPHIQUE_IMPACT, conseil_pilote(carte), None))
     if not resultat["mode_jeu"]:
         conseils.append((config.MODE_JEU_IMPACT, conseil_mode_jeu(), LIEN_MODE_JEU))
+    return conseils
+
+
+def conseils_pilotes(resultat: dict) -> list[tuple[float, str, Lien]]:
+    """Hors score : poids fixes (voir config). Ce qui s'installe d'un clic d'abord, puis ce qui est à vérifier."""
+    conseils = []
+    if resultat["a_installer"]:
+        conseils.append((config.PILOTES_IMPACT, conseil_pilotes(resultat), LIEN_PILOTES))
+    if resultat["anciens"]:
+        conseils.append((config.PILOTES_ANCIENS_IMPACT, *conseil_pilotes_anciens(resultat)))
     return conseils
 
 
@@ -328,7 +377,9 @@ def calculer(resultats: dict[str, dict | None]) -> dict:
     if resultats.get("alimentation") and (conseil := conseil_alimentation(resultats["alimentation"])):
         conseils.append((config.ALIMENTATION_IMPACT, *conseil))  # hors score : poids fixe
     if resultats.get("jeux"):
-        conseils += conseils_jeux(resultats["jeux"])
+        conseils += conseils_jeux(resultats["jeux"], resultats.get("pilotes"))
+    if resultats.get("pilotes"):
+        conseils += conseils_pilotes(resultats["pilotes"])
     if (resultats.get("disque") or {}).get("systeme_hdd"):
         conseils.append((config.DISQUE_DUR_IMPACT, conseil_disque_dur(), None))
     installee = (resultats.get("ressources") or {}).get("installee")
