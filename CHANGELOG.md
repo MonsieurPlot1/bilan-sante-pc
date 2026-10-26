@@ -1,5 +1,11 @@
 # Journal des versions
 
+## v0.4.1 - 2026-10-26
+
+- Correction : en passant du mode sombre au mode clair (ou l'inverse), une petite fenêtre ne s'ouvre plus
+  un instant à côté de l'application (sur les PC à plusieurs disques). Même correction pour le bouton
+  « Mettre à jour » et pour les fenêtres de confirmation.
+
 ## v0.4.0 - 2026-10-25
 
 - Mises à jour dans l'application : à l'ouverture, elle regarde sur GitHub si une nouvelle version est publiée.
