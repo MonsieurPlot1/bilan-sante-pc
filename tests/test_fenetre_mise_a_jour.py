@@ -59,14 +59,14 @@ def test_onglets_toujours_au_milieu(fenetre):
 
 def test_mise_a_jour_telechargee_puis_installee(fenetre, monkeypatch, feuilles):
     signalee(fenetre, monkeypatch)
-    exe = Path(r"C:\App\.mise-a-jour\BilanSantePC\BilanSantePC.exe")
+    installateur = Path(r"C:\App\.mise-a-jour\BilanSantePC-Installation-v99.0.0.exe")
     pendant, lancements, fermetures = [], [], []
 
     def preparer(fichier, _dossier, progression, _arret):
-        assert fichier == NOUVELLE["zip"]
+        assert fichier == NOUVELLE["installateur"]
         progression(0.5)
         pendant.append(fenetre.mode.isEnabled())
-        return exe
+        return installateur
     monkeypatch.setattr(mise_a_jour, "installable", lambda _nouvelle: True)
     monkeypatch.setattr(mise_a_jour, "preparer", preparer)
     monkeypatch.setattr(mise_a_jour, "lancer_installation", lambda *arguments: lancements.append(arguments))
@@ -79,7 +79,7 @@ def test_mise_a_jour_telechargee_puis_installee(fenetre, monkeypatch, feuilles):
     assert not fenetre.bouton_maj.isEnabled()
     attendre(lambda: fermetures)
     assert pendant == [False]  # pas de changement de mode pendant le téléchargement
-    assert lancements == [(exe, None)]  # None : dossier de l'application, absent depuis le code source
+    assert lancements == [(installateur, None)]  # None : dossier de l'application, absent depuis le code source
 
 
 def test_plus_tard(fenetre, monkeypatch, feuilles):

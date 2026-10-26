@@ -4,9 +4,9 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -24,20 +24,19 @@ def reseau_et_lancement_interdits(monkeypatch):
     monkeypatch.setattr(mise_a_jour, "PAUSE", 0)
 
 
-def version(tag: str, brouillon: bool = False, avec_zip: bool = True, notes: str = "- Nouveauté") -> dict:
-    """Une version publiée, telle que la liste de GitHub la décrit."""
-    nom = f"BilanSantePC-{tag}-windows.zip"
-    fichiers = [{"name": nom, "size": 10, "digest": "sha256:" + "AB" * 32,
-                 "browser_download_url": f"{mise_a_jour.ORIGINE_ZIP}{tag}/{nom}"}] if avec_zip else []
+def fichier_joint(tag: str, nom: str) -> dict:
+    """Un fichier joint à une version publiée, avec son empreinte."""
+    return {"name": nom, "size": 10, "digest": "sha256:" + "AB" * 32,
+            "browser_download_url": f"{mise_a_jour.ORIGINE}{tag}/{nom}"}
+
+
+def version(tag: str, brouillon: bool = False, avec_installateur: bool = True, notes: str = "- Nouveauté") -> dict:
+    """Une version publiée, telle que la liste de GitHub la décrit (zip de la v0.4.1 et d'avant à côté)."""
+    fichiers = [fichier_joint(tag, f"BilanSantePC-{tag}-windows.zip")]
+    if avec_installateur:
+        fichiers.append(fichier_joint(tag, f"BilanSantePC-Installation-{tag}.exe"))
     return {"tag_name": tag, "draft": brouillon, "prerelease": True, "body": notes, "assets": fichiers,
             "html_url": f"https://github.com/{mise_a_jour.DEPOT}/releases/tag/{tag}"}
-
-
-def zip_application(chemin: Path, fichiers: dict[str, bytes]) -> Path:
-    with zipfile.ZipFile(chemin, "w") as archive:
-        for nom, contenu in fichiers.items():
-            archive.writestr(nom, contenu)
-    return chemin
 
 
 def servir(contenu: bytes):
@@ -46,8 +45,8 @@ def servir(contenu: bytes):
 
 
 def fichier_publie(contenu: bytes, **valeurs) -> dict:
-    return {"nom": "BilanSantePC-v0.9.0-windows.zip", "taille": len(contenu),
-            "url": f"{mise_a_jour.ORIGINE_ZIP}v0.9.0/BilanSantePC-v0.9.0-windows.zip",
+    return {"nom": "BilanSantePC-Installation-v0.9.0.exe", "taille": len(contenu),
+            "url": f"{mise_a_jour.ORIGINE}v0.9.0/BilanSantePC-Installation-v0.9.0.exe",
             "empreinte": hashlib.sha256(contenu).hexdigest()} | valeurs
 
 
@@ -77,7 +76,7 @@ def test_la_plus_recente_des_versions_publiees():
     assert nouvelle["version"] == "0.3.10"  # 10 > 9 : comparaison des nombres, pas du texte ; brouillon écarté
     assert nouvelle["notes"] == "- Dix"
     assert nouvelle["page"].endswith("/releases/tag/v0.3.10")
-    assert nouvelle["zip"]["url"].endswith("/v0.3.10/BilanSantePC-v0.3.10-windows.zip")
+    assert nouvelle["installateur"]["url"].endswith("/v0.3.10/BilanSantePC-Installation-v0.3.10.exe")
 
 
 @pytest.mark.parametrize("actuelle, publiees, attendu", [
@@ -91,17 +90,17 @@ def test_deja_a_jour_ou_pas(actuelle, publiees, attendu):
     assert (nouvelle and nouvelle["version"]) == attendu
 
 
-def test_zip_de_la_version():
-    assert mise_a_jour.zip_de(version("v0.9.0")) == {
-        "nom": "BilanSantePC-v0.9.0-windows.zip", "taille": 10, "empreinte": "ab" * 32,
-        "url": f"{mise_a_jour.ORIGINE_ZIP}v0.9.0/BilanSantePC-v0.9.0-windows.zip"}
-    assert mise_a_jour.zip_de(version("v0.9.0", avec_zip=False)) is None
+def test_installateur_de_la_version():
+    assert mise_a_jour.installateur_de(version("v0.9.0")) == {
+        "nom": "BilanSantePC-Installation-v0.9.0.exe", "taille": 10, "empreinte": "ab" * 32,
+        "url": f"{mise_a_jour.ORIGINE}v0.9.0/BilanSantePC-Installation-v0.9.0.exe"}
+    assert mise_a_jour.installateur_de(version("v0.4.1", avec_installateur=False)) is None  # le zip seul ne sert pas
     sans_empreinte = version("v0.9.0")
-    sans_empreinte["assets"][0]["digest"] = None
-    assert mise_a_jour.zip_de(sans_empreinte) is None  # sans empreinte, pas d'installation automatique
+    sans_empreinte["assets"][1]["digest"] = None
+    assert mise_a_jour.installateur_de(sans_empreinte) is None  # sans empreinte, pas d'installation automatique
     ailleurs = version("v0.9.0")
-    ailleurs["assets"][0]["browser_download_url"] = "https://exemple.com/BilanSantePC-v0.9.0-windows.zip"
-    assert mise_a_jour.zip_de(ailleurs) is None
+    ailleurs["assets"][1]["browser_download_url"] = "https://exemple.com/BilanSantePC-Installation-v0.9.0.exe"
+    assert mise_a_jour.installateur_de(ailleurs) is None
 
 
 def test_notes_lisibles():
@@ -157,41 +156,27 @@ def test_telecharger_arrete(monkeypatch, tmp_path):
     assert mise_a_jour.telecharger(fichier_publie(donnees), tmp_path, lambda _part: None, lambda: True) is None
 
 
-def test_decompresser(tmp_path):
-    archive = zip_application(tmp_path / "a.zip", {"BilanSantePC/BilanSantePC.exe": b"exe",
-                                                   "BilanSantePC/_internal/a.txt": b"a", "../dehors.txt": b"non"})
-    dossier = mise_a_jour.decompresser(archive, tmp_path / "dest")
-    assert dossier == tmp_path / "dest" / "BilanSantePC"
-    assert contenu(dossier) == {"BilanSantePC.exe": b"exe", str(Path("_internal/a.txt")): b"a"}
-    assert not (tmp_path / "dehors.txt").exists()  # rien d'écrit hors du dossier de destination
-
-
-def test_decompresser_refuse_un_zip_sans_l_application(tmp_path):
-    archive = zip_application(tmp_path / "a.zip", {"autre/programme.exe": b"exe"})
-    with pytest.raises(mise_a_jour.Invalide):
-        mise_a_jour.decompresser(archive, tmp_path / "dest")
-
-
 def test_preparer(monkeypatch, tmp_path):
-    donnees = zip_application(tmp_path / "a.zip", {"BilanSantePC/BilanSantePC.exe": b"neuf"}).read_bytes()
+    donnees = os.urandom(600 * 1024)
     monkeypatch.setattr(mise_a_jour, "_ouvrir", servir(donnees))
     app = application(tmp_path / "app", b"ancien", {})
-    exe = mise_a_jour.preparer(fichier_publie(donnees), app, lambda _part: None, lambda: False)
-    assert exe == app / ".mise-a-jour" / "BilanSantePC" / "BilanSantePC.exe" and exe.read_bytes() == b"neuf"
-    assert [chemin.name for chemin in (app / ".mise-a-jour").iterdir()] == ["BilanSantePC"]  # zip effacé
+    installateur = mise_a_jour.preparer(fichier_publie(donnees), app, lambda _part: None, lambda: False)
+    assert installateur == app / ".mise-a-jour" / "BilanSantePC-Installation-v0.9.0.exe"
+    assert installateur.read_bytes() == donnees
     assert (app / "BilanSantePC.exe").read_bytes() == b"ancien"  # rien de remplacé avant la fermeture
 
 
 @pytest.mark.parametrize("arret, erreur", [(False, mise_a_jour.Invalide), (True, None)])
 def test_preparer_efface_un_telechargement_rate_ou_arrete(monkeypatch, tmp_path, arret, erreur):
-    donnees = zip_application(tmp_path / "a.zip", {"autre.exe": b"x"}).read_bytes()
+    donnees = os.urandom(600 * 1024)
     monkeypatch.setattr(mise_a_jour, "_ouvrir", servir(donnees))
     app = application(tmp_path / "app", b"ancien", {})
+    publie = fichier_publie(donnees, empreinte="00" * 32)  # pas celui publié
     if erreur:
         with pytest.raises(erreur):
-            mise_a_jour.preparer(fichier_publie(donnees), app, lambda _part: None, lambda: arret)
+            mise_a_jour.preparer(publie, app, lambda _part: None, lambda: arret)
     else:
-        assert mise_a_jour.preparer(fichier_publie(donnees), app, lambda _part: None, lambda: arret) is None
+        assert mise_a_jour.preparer(publie, app, lambda _part: None, lambda: arret) is None
     assert not (app / ".mise-a-jour").exists()
 
 
@@ -200,7 +185,7 @@ def test_installable(monkeypatch, tmp_path):
     assert not mise_a_jour.installable(nouvelle)  # depuis le code source : pas d'application installée
     assert mise_a_jour.installable(nouvelle, tmp_path)
     assert list(tmp_path.iterdir()) == []  # l'essai d'écriture ne laisse rien
-    assert not mise_a_jour.installable(nouvelle | {"zip": None}, tmp_path)
+    assert not mise_a_jour.installable(nouvelle | {"installateur": None}, tmp_path)
 
     def protege(*_args, **_options):
         raise PermissionError("Accès refusé")
@@ -300,9 +285,20 @@ def test_attendre_fermeture():
 def test_lancer_installation(monkeypatch, tmp_path):
     lancements = []
     monkeypatch.setattr(mise_a_jour, "_lancer", lambda arguments, dossier: lancements.append((arguments, dossier)))
-    exe = tmp_path / ".mise-a-jour" / "BilanSantePC" / "BilanSantePC.exe"
-    mise_a_jour.lancer_installation(exe, tmp_path)
-    assert lancements == [([str(exe), "--installer", str(tmp_path), str(os.getpid())], exe.parent)]
+    installateur = tmp_path / ".mise-a-jour" / "BilanSantePC-Installation-v0.9.0.exe"
+    mise_a_jour.lancer_installation(installateur, tmp_path)
+    assert lancements == [([str(installateur), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={tmp_path}",
+                            f"/ATTENDRE={os.getpid()}"], installateur.parent)]
+
+
+def test_l_installateur_parle_comme_l_application():
+    """installateur.iss lit /ATTENDRE, rouvre l'application avec les mêmes arguments et porte le nom cherché."""
+    script = (Path(mise_a_jour.__file__).parent.parent / "installateur.iss").read_text(encoding="utf-8-sig")
+    assert "{param:ATTENDRE|0}" in script
+    assert f'Parameters: "{mise_a_jour.ARGUMENT_FAITE}"' in script and f"'{mise_a_jour.ARGUMENT_RATEE}'" in script
+    assert re.search(rf"^OutputBaseFilename={mise_a_jour.PREFIXE_INSTALLATEUR}v\{{#Version}}$", script, re.MULTILINE)
+    assert f"{{app}}\\{mise_a_jour.NOM_EXE}" in script
+    assert f"{{app}}\\{mise_a_jour.TEMPORAIRE}" in script and f"{{app}}\\{mise_a_jour.ANCIENNE}" in script
 
 
 def test_environnement_d_une_autre_copie(monkeypatch, tmp_path):

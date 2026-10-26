@@ -3,6 +3,17 @@
 Une application Windows qui scanne ton PC et t'explique en français clair pourquoi il rame :
 un score sur 100 et 3 conseils au maximum.
 
+## L'installer
+
+Dans la dernière version de la page [Releases](https://github.com/MonsieurPlot1/bilan-sante-pc/releases),
+télécharge `BilanSantePC-Installation-vX.Y.Z.exe`, puis lance-le. L'installateur n'est pas signé (c'est
+payant) : Windows peut afficher « Windows a protégé votre ordinateur ». Clique alors sur « Informations
+complémentaires », puis sur « Exécuter quand même ».
+
+L'application s'installe pour toi seul, sans droits d'administrateur, dans
+`%LOCALAPPDATA%\Programs\BilanSantePC`, avec un raccourci dans le menu Démarrer. Pour la désinstaller :
+Paramètres > Applications > Applications installées. Ton historique et tes réglages sont gardés.
+
 ## Ce qu'elle lit
 
 - **Démarrage** : les programmes lancés avec Windows (registre `Run` et dossiers Démarrage), sans
@@ -70,10 +81,10 @@ tests trop rapprochés depuis une même connexion : l'application dit alors comb
 Quelques secondes après l'ouverture, l'application demande à GitHub la liste de ses versions publiées
 (une seule requête, qui ne contient que son nom et sa version). Si une version plus récente existe, un
 bouton « Mettre à jour » apparaît en haut à droite. Il montre les nouveautés et, si tu confirmes, il télécharge
-le zip de la nouvelle version depuis GitHub, vérifie qu'il est bien celui publié (taille et empreinte SHA-256
-données par GitHub), puis l'application se ferme : la nouvelle version remplace l'ancienne et se rouvre
-toute seule. En cas d'échec, l'ancienne version est remise en place. Ton historique et tes réglages sont
-gardés : ils ne sont pas dans le dossier de l'application.
+l'installateur de la nouvelle version depuis GitHub, vérifie qu'il est bien celui publié (taille et empreinte
+SHA-256 données par GitHub), puis l'application se ferme : l'installateur, sans rien te demander, la remplace
+dans son dossier et la rouvre toute seule. En cas d'échec, l'ancienne version est remise en place. Ton
+historique et tes réglages sont gardés : ils ne sont pas dans le dossier de l'application.
 
 Si l'application est dans un dossier où elle n'a pas le droit d'écrire (Program Files, par exemple), le
 bouton ouvre seulement la page de la nouvelle version sur GitHub, pour la télécharger toi-même.
@@ -134,8 +145,9 @@ python -m pytest         # tests
 build.bat
 ```
 
-Le résultat est dans `dist\BilanSantePC\BilanSantePC.exe` : copie tout le dossier
-`dist\BilanSantePC` pour l'emporter sur un autre PC. Pour une version publiée, joins à la release
-GitHub le zip de ce dossier, nommé `BilanSantePC-vX.Y.Z-windows.zip`, avec le dossier `BilanSantePC` à
-sa racine : c'est lui que les mises à jour installent. L'icône vient de `assets\icon.ico`
+L'application est dans `dist\BilanSantePC\BilanSantePC.exe`, et son installateur dans
+`dist\BilanSantePC-Installation-vX.Y.Z.exe` (version lue dans `config.py`). L'installateur est fabriqué par
+Inno Setup 6 (`winget install JRSoftware.InnoSetup`) à partir de `installateur.iss`. Pour une version
+publiée, joins cet installateur à la release GitHub : c'est lui que les mises à jour téléchargent et
+lancent. L'icône vient de `assets\icon.ico`
 (ses sources : `icon.svg`, et `icon-simple.svg` pour les petites tailles, de 16 à 24 pixels).

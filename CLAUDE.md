@@ -9,15 +9,16 @@ App Windows grand public : scanne le PC et explique en français clair pourquoi 
   (sans passer par la Corbeille, à ma demande) un fichier ou un dossier de l'analyse après confirmation, jeux
   et logiciels compris ; jamais Windows, les dossiers de Windows et de Microsoft, les emplacements des
   logiciels, le dossier temporaire ni le profil et ses dossiers (`stockage.supprimable`). Et, à ma demande, le
-  bouton « Mettre à jour » (`modules/mise_a_jour.py`), qui après confirmation remplace seulement les fichiers de
-  l'application elle-même (son .exe et `_internal`, l'ancienne version remise en place en cas d'échec).
+  bouton « Mettre à jour » (`modules/mise_a_jour.py`), qui après confirmation lance l'installateur de la nouvelle
+  version : il remplace seulement les fichiers de l'application elle-même (son .exe et `_internal`, l'ancienne
+  version remise en place en cas d'échec).
   Aucune autre action ne s'ajoute sans mon accord explicite.
   Les boutons « Ouvrir » des conseils ne font qu'ouvrir une page des Paramètres, un dossier ou un outil de Windows.
 - 100 % local : aucune donnée n'est envoyée ailleurs, aucun réseau. Deux exceptions, à ma demande : le test de
   l'onglet Connexion (`modules/connexion.py`), uniquement sur clic, qui échange des données de test tirées au
   hasard avec les serveurs de Cloudflare (speed.cloudflare.com) ; et les mises à jour (`modules/mise_a_jour.py`) :
   à l'ouverture, une requête à GitHub pour la liste des versions publiées (seulement le nom et la version de
-  l'appli), puis, sur clic, le téléchargement du zip depuis GitHub. Rien sur le PC ni sur l'utilisateur ne part,
+  l'appli), puis, sur clic, le téléchargement de l'installateur depuis GitHub. Rien sur le PC ni sur l'utilisateur ne part,
   et aucun autre accès au réseau ne s'ajoute sans mon accord explicite.
 - Un module = un fichier dans `modules/`, avec une fonction `scan()` qui renvoie un dict (mesures + constats ; le score est calculé dans `modules/score.py`).
 - La logique (modules/) est séparée de l'interface (ui/) : les modules doivent tourner sans PySide6.
@@ -40,9 +41,11 @@ affiche toutes dans le style de l'application, jamais la bulle grise de Qt.
 - Hors score : fichiers (Corbeille, fichiers temporaires, cache des navigateurs, Windows.old), alimentation (mode d'économie d'énergie), jeux (fréquence des écrans, pilote de la carte graphique des jeux, Mode jeu).
 - Onglet à part, hors du bilan : stockage (`modules/stockage.py`, page `ui/stockage.py`), ce qui occupe un disque en 12 catégories, et doublons (`modules/doublons.py`), fichiers et dossiers personnels au contenu identique.
 - Onglet à part, hors du bilan : connexion (`modules/connexion.py`, page `ui/connexion.py`), la liaison avec la box (lue auprès de Windows) et le test de débit sur clic. Les tests n'utilisent jamais le réseau (fixture `reseau_interdit`).
-- Hors du bilan : mises à jour (`modules/mise_a_jour.py`, bouton « Mettre à jour » de la barre du haut). La
-  nouvelle version, lancée avec `--installer`, remplace l'ancienne une fois celle-ci fermée. Les tests n'utilisent
-  jamais le réseau et ne lancent rien (fixture `reseau_et_lancement_interdits`).
+- Hors du bilan : mises à jour (`modules/mise_a_jour.py`, bouton « Mettre à jour » de la barre du haut).
+  L'installateur téléchargé (Inno Setup, `installateur.iss`), lancé sans questions avec `/ATTENDRE=<pid>`, remplace
+  l'application une fois celle-ci fermée, puis la rouvre. L'ancien mode `--installer` (les versions jusqu'à la
+  v0.4.1 installent un zip avec) ne reste que pour la première version publiée avec un installateur. Les tests
+  n'utilisent jamais le réseau et ne lancent rien (fixture `reseau_et_lancement_interdits`).
 - Barème et seuils dans `config.py`, calcul du score et conseils dans `modules/score.py`.
 
 ## Style
@@ -58,6 +61,7 @@ Code commenté en français, fonctions courtes, type hints, pas de dépendance i
 
 ## Environnement de dev (hors git)
 - Python 3.15 seul installé. Visual Studio Build Tools 2026 (C++) installés : nécessaires pour compiler `tree-sitter` (pas de wheel 3.15).
+- Inno Setup 6, installé pour l'utilisateur (`winget install JRSoftware.InnoSetup --scope user`) : `build.bat` fabrique l'installateur avec.
 - graphify : `pip install --user graphifyy`. Pas dans le PATH → utiliser `& "$env:APPDATA\Python\Python315\Scripts\graphify.exe"`.
 - Hooks git graphify (post-commit, post-checkout, merge driver) dans `.git/hooks`, non versionnés : après un clone, relancer `graphify hook install`.
 - `graphify-out/` est ignoré par git (chemins propres à la machine).
@@ -73,5 +77,5 @@ Code commenté en français, fonctions courtes, type hints, pas de dépendance i
 - Quand tu proposes un tag : indique la dernière version existante (git tag --sort=-v:refname), explique en une phrase ce qui a changé, suggère la version adaptée (CORRECTIF ou MINEURE) et demande-moi de choisir : la version suggérée, une autre version que je tape, ou pas de tag pour cette fois.
 - Une fois le tag validé, dans cet ordre : mets à jour VERSION dans config.py, ajoute l'entrée correspondante dans CHANGELOG.md, fais un commit "Version vX.Y.Z", crée le tag annoté avec git tag -a vX.Y.Z -F <fichier>. Le message du tag = une ligne de titre « vX.Y.Z : résumé en une phrase », une ligne vide, puis le contenu de l'entrée vX.Y.Z du CHANGELOG (ce qui a changé).
 - Ne fais PAS de git push (ni du code ni des tags) sans que je te le demande explicitement. Quand je le demande, le tag se pousse avec git push origin vX.Y.Z.
-- Juste après avoir poussé un tag, crée sa release GitHub : gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <entrée vX.Y.Z du CHANGELOG> --verify-tag, avec --prerelease tant qu'on est en v0.x. Toujours avec le zip de l'exe en pièce jointe (les mises à jour de l'appli l'installent) : `BilanSantePC-vX.Y.Z-windows.zip`, fait de `dist\BilanSantePC` recompilé après le commit de version, avec le dossier `BilanSantePC` à sa racine. Vérifie avant qu'il démarre et que son journal donne la bonne version.
+- Juste après avoir poussé un tag, crée sa release GitHub : gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <entrée vX.Y.Z du CHANGELOG> --verify-tag, avec --prerelease tant qu'on est en v0.x. Toujours avec l'installateur en pièce jointe (les mises à jour de l'appli le téléchargent et le lancent) : `dist\BilanSantePC-Installation-vX.Y.Z.exe`, fait par `build.bat` après le commit de version. Vérifie avant que l'application qu'il installe démarre et que son journal donne la bonne version. Plus de zip, à ma demande, sauf pour la première version publiée avec un installateur : son zip `BilanSantePC-vX.Y.Z-windows.zip` (dossier `BilanSantePC` à sa racine) permet aux versions jusqu'à la v0.4.1 de s'y mettre à jour.
 - Si un tag existe déjà ou si la version est plus basse que la dernière, préviens-moi au lieu de continuer.

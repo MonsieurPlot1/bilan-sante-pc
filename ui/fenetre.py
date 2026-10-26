@@ -621,8 +621,8 @@ class Fenetre(QMainWindow):
                        "seule. Ton historique et tes réglages sont gardés.")
             confirmer = "Mettre à jour"
         else:
-            details = ("Elle ne peut pas s'installer toute seule ici : télécharge-la depuis sa page sur GitHub, puis "
-                       "remplace l'ancienne version par la nouvelle.")
+            details = ("Elle ne peut pas s'installer toute seule ici : télécharge son installation depuis sa page sur "
+                       "GitHub, puis lance-la.")
             confirmer = "Ouvrir la page"
         feuille = Feuille(self, f"Version {nouvelle['version']} disponible", texte, details, confirmer=confirmer,
                           annuler="Plus tard", icone="telechargement")
@@ -638,8 +638,8 @@ class Fenetre(QMainWindow):
         nouvelle, dossier = self.nouvelle_version, mise_a_jour.dossier_application()
 
         def preparer(avance, arret) -> dict | None:
-            exe = mise_a_jour.preparer(nouvelle["zip"], dossier, avance, arret)
-            return exe and {"exe": exe}
+            installateur = mise_a_jour.preparer(nouvelle["installateur"], dossier, avance, arret)
+            return installateur and {"installateur": installateur}
 
         self.telechargement = Travail(preparer, "La mise à jour n'a pas pu être téléchargée.", discret=False)
         self.telechargement.avance.connect(lambda valeurs: self.bouton_maj.setText(f" {round(valeurs[0] * 100)} %"))
@@ -652,15 +652,15 @@ class Fenetre(QMainWindow):
         self.telechargement.start()
 
     def _installer(self, resultat: dict | None) -> None:
-        """Nouvelle version prête : elle se lance en mode installation et l'application se ferme pour la laisser
-        remplacer ses fichiers (elle rouvre l'application ensuite)."""
+        """Installateur téléchargé : il se lance et l'application se ferme pour le laisser remplacer ses fichiers (il
+        rouvre l'application ensuite)."""
         self.telechargement.wait()
         self.telechargement = None
         if resultat is None:  # arrêté : l'application se ferme
             return
         if "erreur" not in resultat:
             try:
-                mise_a_jour.lancer_installation(resultat["exe"], mise_a_jour.dossier_application())
+                mise_a_jour.lancer_installation(resultat["installateur"], mise_a_jour.dossier_application())
             except OSError:
                 journal.exception("Impossible de lancer l'installation de la mise à jour")
                 resultat = {"erreur": f"La mise à jour n'a pas pu s'installer. {analyse.AIDE}"}

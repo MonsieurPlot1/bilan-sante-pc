@@ -1,10 +1,10 @@
 """Mises à jour : signale une nouvelle version publiée sur GitHub et l'installe sur demande.
 
 Au lancement, une seule requête demande à GitHub la liste des versions publiées : elle ne contient que le nom de
-l'application et sa version, rien sur le PC ni sur l'utilisateur. L'installation se fait seulement sur clic : le zip
-de la nouvelle version est téléchargé depuis GitHub, vérifié (taille et empreinte SHA-256 données par GitHub), puis
-décompressé dans le dossier de l'application. L'application se ferme, la nouvelle version (lancée en mode
-installation) remplace l'ancienne, gardée de côté et remise en place en cas d'échec, puis rouvre l'application.
+l'application et sa version, rien sur le PC ni sur l'utilisateur. L'installation se fait seulement sur clic :
+l'installateur de la nouvelle version (installateur.iss) est téléchargé depuis GitHub dans le dossier de l'application,
+vérifié (taille et empreinte SHA-256 données par GitHub), puis lancé sans questions. L'application se ferme,
+l'installateur la remplace dans son dossier, puis la rouvre (même en cas d'échec, pour le signaler).
 Rien d'autre n'est modifié : l'historique et les réglages sont dans %LOCALAPPDATA%, pas dans ce dossier.
 """
 
@@ -18,7 +18,6 @@ import subprocess
 import sys
 import time
 import urllib.request
-import zipfile
 from pathlib import Path
 from typing import Callable
 
@@ -31,26 +30,27 @@ journal = logging.getLogger(__name__)
 DEPOT = "MonsieurPlot1/bilan-sante-pc"
 API = f"https://api.github.com/repos/{DEPOT}/releases?per_page=20"  # les plus récentes d'abord
 PAGE = f"https://github.com/{DEPOT}/releases"
-ORIGINE_ZIP = f"https://github.com/{DEPOT}/releases/download/"
+ORIGINE = f"https://github.com/{DEPOT}/releases/download/"  # seule adresse d'où un fichier est téléchargé
 ENTETES = {"User-Agent": f"BilanSantePC/{config.VERSION}", "Accept": "application/vnd.github+json"}
 DELAI = 15  # secondes sans réponse de GitHub avant d'abandonner
 
-SUFFIXE_ZIP = "-windows.zip"  # BilanSantePC-vX.Y.Z-windows.zip, joint à chaque version publiée
-DOSSIER_ZIP = "BilanSantePC"  # dossier de l'application, à la racine du zip
+PREFIXE_INSTALLATEUR = "BilanSantePC-Installation-"  # BilanSantePC-Installation-vX.Y.Z.exe, joint à chaque version
 NOM_EXE = "BilanSantePC.exe"
-TAILLE_MAX = 500 * 1024**2  # zip ou contenu décompressé : au-delà, ce n'est pas l'application
+TAILLE_MAX = 500 * 1024**2  # au-delà, ce n'est pas l'application
 BLOC = 256 * 1024
 
 # Dans le dossier de l'application, le temps d'une mise à jour (effacés au lancement suivant).
-TEMPORAIRE = ".mise-a-jour"  # nouvelle version décompressée
-ANCIENNE = ".ancienne-version"  # ancienne version, gardée de côté pendant le remplacement
+TEMPORAIRE = ".mise-a-jour"  # installateur téléchargé
+ANCIENNE = ".ancienne-version"  # ancienne version, gardée de côté pendant le remplacement (installateur.iss aussi)
 ATTENTE_FERMETURE = 120  # secondes au plus pour que l'ancienne version se ferme (fin d'une analyse comprise)
 ESSAIS = 10  # un fichier tout juste libéré peut rester bloqué un instant (antivirus) : on réessaie
 PAUSE = 0.5
 
-ARGUMENT_INSTALLER = "--installer"  # BilanSantePC.exe --installer <dossier de l'application> <pid de l'ancienne>
-ARGUMENT_FAITE = "--mise-a-jour-faite"
+# Installateur lancé sans questions (seulement sa barre de progression) ; il attend la fin du processus /ATTENDRE.
+OPTIONS_INSTALLATEUR = ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
+ARGUMENT_FAITE = "--mise-a-jour-faite"  # donnés par l'installateur en rouvrant l'application
 ARGUMENT_RATEE = "--mise-a-jour-ratee"
+ARGUMENT_INSTALLER = "--installer"  # ancien mode : BilanSantePC.exe --installer <dossier de l'application> <pid>
 
 
 class Invalide(ValueError):
@@ -65,12 +65,12 @@ def numero(version: str) -> tuple[int, ...] | None:
     return tuple(int(morceau) for morceau in morceaux)
 
 
-def zip_de(version: dict) -> dict | None:
-    """Le zip de l'application joint à une version publiée, avec son empreinte (sans elle, pas d'installation)."""
+def installateur_de(version: dict) -> dict | None:
+    """L'installateur joint à une version publiée, avec son empreinte (sans elle, pas d'installation)."""
     for fichier in version.get("assets") or []:
-        empreinte, url = fichier.get("digest") or "", fichier.get("browser_download_url") or ""
-        if (fichier.get("name", "").endswith(SUFFIXE_ZIP) and empreinte.startswith("sha256:")
-                and url.startswith(ORIGINE_ZIP)):
+        nom, empreinte, url = (fichier.get(cle) or "" for cle in ("name", "digest", "browser_download_url"))
+        if (nom.startswith(PREFIXE_INSTALLATEUR) and nom.endswith(".exe") and empreinte.startswith("sha256:")
+                and url.startswith(ORIGINE)):
             return {"nom": Path(fichier["name"]).name, "url": url, "taille": int(fichier["size"]),
                     "empreinte": empreinte.removeprefix("sha256:").lower()}
     return None
@@ -89,7 +89,7 @@ def plus_recente(versions: list[dict], actuelle: str = config.VERSION) -> dict |
     if numero_ <= numero(actuelle):
         return None
     return {"version": version["tag_name"].removeprefix("v"), "notes": (version.get("body") or "").strip(),
-            "page": version.get("html_url") or PAGE, "zip": zip_de(version)}
+            "page": version.get("html_url") or PAGE, "installateur": installateur_de(version)}
 
 
 def notes_lisibles(notes: str, longueur_max: int = 600) -> str:
@@ -131,10 +131,10 @@ def dossier_application() -> Path | None:
 
 
 def installable(nouvelle: dict, dossier: Path | None = None) -> bool:
-    """Vrai si la nouvelle version peut s'installer toute seule : application installée, zip publié, et dossier
-    où l'application a le droit d'écrire (pas dans « Program Files », par exemple)."""
+    """Vrai si la nouvelle version peut s'installer toute seule : application installée, installateur publié, et
+    dossier où l'application a le droit d'écrire (pas dans « Program Files », par exemple)."""
     dossier = dossier or dossier_application()
-    if dossier is None or nouvelle["zip"] is None:
+    if dossier is None or nouvelle["installateur"] is None:
         return False
     essai = dossier / f".essai-{os.getpid()}"
     try:  # os.access ne voit pas les droits de Windows : seul un vrai essai le dit
@@ -153,11 +153,11 @@ def verifier() -> dict | None:
 
 def telecharger(fichier: dict, destination: Path, progression: Callable[[float], None],
                 arret: Callable[[], bool]) -> Path | None:
-    """Télécharge le zip `fichier` (voir zip_de) dans `destination`, en vérifiant sa taille et son empreinte.
+    """Télécharge `fichier` (voir installateur_de) dans `destination`, en vérifiant sa taille et son empreinte.
 
     `progression(part)` : part téléchargée (0 à 1). None si `arret()` devient vrai.
     """
-    if not fichier["url"].startswith(ORIGINE_ZIP) or not 0 < fichier["taille"] <= TAILLE_MAX:
+    if not fichier["url"].startswith(ORIGINE) or not 0 < fichier["taille"] <= TAILLE_MAX:
         raise Invalide(f"Fichier inattendu : {fichier['url']} ({fichier['taille']} octets)")
     chemin = destination / fichier["nom"]
     empreinte, recus = hashlib.sha256(), 0
@@ -176,38 +176,23 @@ def telecharger(fichier: dict, destination: Path, progression: Callable[[float],
     return chemin
 
 
-def decompresser(archive: Path, destination: Path) -> Path:
-    """Décompresse le zip dans `destination` ; renvoie le dossier de la nouvelle version (celui de son .exe)."""
-    with zipfile.ZipFile(archive) as contenu:
-        if sum(element.file_size for element in contenu.infolist()) > TAILLE_MAX:
-            raise Invalide("Le zip décompressé serait trop gros")
-        contenu.extractall(destination)  # zipfile n'écrit jamais hors de `destination` (chemins « .. » écartés)
-    dossier = destination / DOSSIER_ZIP
-    if not (dossier / NOM_EXE).is_file():
-        raise Invalide("Le zip ne contient pas l'application")
-    return dossier
-
-
 def preparer(fichier: dict, dossier_app: Path, progression: Callable[[float], None],
              arret: Callable[[], bool]) -> Path | None:
-    """Télécharge et décompresse la nouvelle version dans le dossier temporaire de l'application.
+    """Télécharge l'installateur de la nouvelle version dans le dossier temporaire de l'application.
 
-    Renvoie le .exe de la nouvelle version, prêt à s'installer ; None si `arret()` devient vrai.
+    Renvoie l'installateur, vérifié et prêt à être lancé ; None si `arret()` devient vrai.
     """
     temporaire = dossier_app / TEMPORAIRE
     shutil.rmtree(temporaire, ignore_errors=True)
     temporaire.mkdir()
     try:
-        archive = telecharger(fichier, temporaire, progression, arret)
-        if archive is None:
-            shutil.rmtree(temporaire, ignore_errors=True)
-            return None
-        nouvelle = decompresser(archive, temporaire)
-        archive.unlink()
+        installateur = telecharger(fichier, temporaire, progression, arret)
     except BaseException:
         shutil.rmtree(temporaire, ignore_errors=True)
         raise
-    return nouvelle / NOM_EXE
+    if installateur is None:
+        shutil.rmtree(temporaire, ignore_errors=True)
+    return installateur
 
 
 def _environnement() -> dict[str, str]:
@@ -224,14 +209,21 @@ def _environnement() -> dict[str, str]:
 
 
 def _lancer(arguments: list[str], dossier: Path) -> None:
-    """Lance un .exe de l'application, détaché : il continue après la fermeture de celle-ci."""
+    """Lance un .exe (installateur ou application), détaché : il continue après la fermeture de l'application."""
     subprocess.Popen(arguments, cwd=dossier, env=_environnement(), close_fds=True,
                      creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
 
 
-def lancer_installation(exe: Path, dossier_app: Path) -> None:
-    """Lance la nouvelle version en mode installation : elle attend que l'application se ferme pour la remplacer."""
-    _lancer([str(exe), ARGUMENT_INSTALLER, str(dossier_app), str(os.getpid())], exe.parent)
+def lancer_installation(installateur: Path, dossier_app: Path) -> None:
+    """Lance l'installateur : il attend que l'application se ferme, la remplace dans son dossier, puis la rouvre."""
+    _lancer([str(installateur), *OPTIONS_INSTALLATEUR, f"/DIR={dossier_app}", f"/ATTENDRE={os.getpid()}"],
+            installateur.parent)
+
+
+# --- Ancien mode d'installation, gardé pour une version seulement ---
+# Jusqu'à la v0.4.1, l'application téléchargeait un zip et lançait la nouvelle version qu'il contenait avec
+# `--installer` : c'est ce mode qui remplace alors l'ancienne. La première version publiée avec un installateur garde
+# aussi son zip, pour que ces versions puissent s'y mettre à jour ; la suivante pourra retirer ce mode.
 
 
 def attendre_fermeture(pid: int, delai: float = ATTENTE_FERMETURE) -> bool:
