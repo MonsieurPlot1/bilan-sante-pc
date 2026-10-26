@@ -111,7 +111,7 @@ def gros_dossiers(racine: Path, nombre: int = NB_GROS_DOSSIERS) -> list[dict]:
 def scan() -> dict:
     """Point d'entrée du module : renvoie le score partiel et les constats."""
     disques = lister_disques()
-    constats = [f"Disque {d['disque']} : {taille_lisible(d['libre'])} libres sur "
+    constats = [f"Disque {d['disque'].rstrip(os.sep)} {taille_lisible(d['libre'])} libres sur "
                 f"{taille_lisible(d['total'])} ({d['pourcentage']:.0f} % utilisé)." for d in disques]
     hdd = disque_dur(os.environ.get("SystemDrive", "C:"))
     if hdd is not None:

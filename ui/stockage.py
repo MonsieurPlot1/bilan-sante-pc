@@ -19,14 +19,14 @@ from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton,
                                QSizePolicy, QVBoxLayout, QWidget)
 
+import config
 from modules import disque, doublons, fichiers, stockage
 from modules.disque import taille_lisible
 from ui import theme
 from ui.analyse import AIDE, arriere_plan
 from ui.verre import Page, Verre
 from ui.widgets import (BarreEmpilee, BarreScore, Feuille, Legende, Segmente, TuileIcone, apparaitre, bouton,
-                        etiquette_couleur,
-                        pastille, pied_de_page, repolir, titre_section)
+                        etiquette_couleur, pastille, pied_de_page, repolir, titre_section)
 
 journal = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ ETATS = {"vert": "Assez de place", "orange": "Bien rempli", "rouge": "Presque pl
 GROUPES = [("Système", "gris", ("systeme",)), ("Applications", "bleu", ("applications",)),
            ("Jeux", "magenta", ("jeux",)), ("Photos, vidéos et musique", "violet", ("videos", "photos", "musique")),
            ("Documents et archives", "aqua", ("documents", "archives")),
-           ("Autres", "gris_clair", ("temporaires", "corbeille", "sauvegardes", "autres"))]
+           ("Temporaires et autres", "gris_clair", ("temporaires", "corbeille", "sauvegardes", "autres"))]
 TEINTE_CATEGORIE = {cle: teinte for _nom, teinte, cles in GROUPES for cle in cles}
 
 TEXTE_DOUBLONS = ("Cherche les fichiers et les dossiers en double dans tes fichiers personnels (pas dans Windows, "
@@ -88,8 +88,9 @@ def part_lisible(taille: int, total: int) -> str:
 
 
 def niveau_remplissage(pourcentage: float) -> str:
-    """Mêmes seuils que le score du disque : vert jusqu'à 70 %, rouge à partir de 90 %."""
-    return "vert" if pourcentage < 70 else "orange" if pourcentage < 90 else "rouge"
+    """Mêmes seuils que le score et les conseils du disque : vert jusqu'à 70 %, rouge quand il est presque plein."""
+    return ("vert" if pourcentage < config.DISQUE_SEUIL_OK else "orange" if pourcentage < config.DISQUE_PRESQUE_PLEIN
+            else "rouge")
 
 
 def parts_du_disque(resultat: dict) -> list[tuple[str, str, int]]:
@@ -552,7 +553,8 @@ class PageStockage(Page):
         for widget in self.sections:
             widget.hide()
 
-    def afficher(self, resultat: dict, animer: bool = True) -> None:
+    def afficher(self, resultat: dict, animer: bool = True, ouvertes: frozenset[str] = frozenset()) -> None:
+        """`ouvertes` : catégories dépliées à garder même vides (après la suppression de leur dernier élément)."""
         self.resultat = resultat
         utilise = resultat["utilise"]
         self._remplissage(utilise, resultat["total"], resultat["libre"], animer, parts_du_disque(resultat))
@@ -576,7 +578,9 @@ class PageStockage(Page):
             widget.setVisible(bool(elements))
 
         vider(self.liste_categories)
-        for categorie in sorted(resultat["categories"], key=lambda c: c["taille"], reverse=True):
+        # Les catégories vides ne sont pas montrées : une ligne « 0 octets » n'apprend rien.
+        montrees = [c for c in resultat["categories"] if c["taille"] or c["cle"] in ouvertes]
+        for categorie in sorted(montrees, key=lambda c: c["taille"], reverse=True):
             ligne = LigneCategorie(categorie, utilise, self.montrer, self.ouvrir, self.supprimer, self.en_cours)
             self.liste_categories.addWidget(ligne)
             ligne.remplir(categorie["taille"] / utilise if utilise else 0, animer)
@@ -837,9 +841,9 @@ class PageStockage(Page):
 
     def _rafraichir(self) -> None:
         """Après une suppression : les listes avec les chiffres à jour, dépliées comme avant."""
-        categories = {ligne.categorie["cle"] for ligne in self.lignes_categories() if ligne.ouvert}
+        categories = frozenset(ligne.categorie["cle"] for ligne in self.lignes_categories() if ligne.ouvert)
         groupes = [ligne.groupe for ligne in self.lignes_doublons() if ligne.ouvert]
-        self.afficher(self.resultat, animer=False)
+        self.afficher(self.resultat, animer=False, ouvertes=categories)
         for ligne in self.lignes_categories():
             if ligne.categorie["cle"] in categories:
                 ligne.deplier()

@@ -106,9 +106,11 @@ def conseil_demarrage(nb_programmes: int) -> str:
 
 
 def conseil_disque(disque: dict) -> str:
+    effet = ("Un disque presque plein ralentit Windows." if disque["pourcentage"] >= config.DISQUE_PRESQUE_PLEIN
+             else "Plus il se remplit, plus Windows ralentit : mieux vaut garder de la marge.")
     return (f"Ton disque {disque['disque'].rstrip(os.sep)} est plein à {disque['pourcentage']:.0f} % "
-            f"(il reste {taille_lisible(disque['libre'])}). Un disque presque plein ralentit Windows. "
-            "Vide la Corbeille et lance Paramètres > Système > Stockage > Recommandations de nettoyage.")
+            f"(il reste {taille_lisible(disque['libre'])}). {effet} L'onglet Stockage montre ce qui prend le plus de "
+            "place. Vide aussi la Corbeille et lance Paramètres > Système > Stockage > Recommandations de nettoyage.")
 
 
 def conseil_dossier(dossiers: list[dict]) -> tuple[str, Lien] | None:
@@ -159,7 +161,7 @@ def conseil_fichiers(fichiers: dict) -> str:
     if fichiers["ancien_windows"]:
         morceaux.append(f"l'ancienne version de Windows environ {taille_lisible(fichiers['ancien_windows'])}")
     debut = ", ".join(morceaux[:-1]) + " et " + morceaux[-1] if len(morceaux) > 1 else morceaux[0]
-    return (f"{debut[0].upper()}{debut[1:]} : c'est de la place facile à récupérer sur un disque presque plein. "
+    return (f"{debut[0].upper()}{debut[1:]} : c'est de la place facile à récupérer sur un disque bien rempli. "
             "Ouvre la Corbeille pour vérifier qu'elle ne contient rien d'important, puis fais un clic droit "
             "dessus > Vider la Corbeille (c'est définitif). Pour les fichiers temporaires : "
             "Paramètres > Système > Stockage > Fichiers temporaires."
@@ -219,7 +221,8 @@ def conseil_pilotes(pilotes: dict) -> str:
         noms = ", ".join(mise_a_jour["nom"] for mise_a_jour in mises_a_jour[:3])
         phrases.append(f"Windows Update propose {'aussi ' if phrases else ''}{nombre} ({noms}).")
     clignote = " et l'écran peut clignoter un instant" if pilotes_module.nvidia_a_installer(nvidia) else ""
-    phrases.append(f"Le bouton installe tout d'un coup : Windows te demandera l'autorisation{clignote}.")
+    tout = "tout d'un coup" if pilotes["a_installer"] > 1 else "ce pilote"
+    phrases.append(f"Le bouton installe {tout} : Windows te demandera l'autorisation{clignote}.")
     return " ".join(phrases)
 
 

@@ -21,8 +21,6 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
-import psutil
-
 import config
 
 journal = logging.getLogger(__name__)
@@ -35,22 +33,20 @@ ENTETES = {"User-Agent": f"BilanSantePC/{config.VERSION}", "Accept": "applicatio
 DELAI = 15  # secondes sans réponse de GitHub avant d'abandonner
 
 PREFIXE_INSTALLATEUR = "BilanSantePC-Installation-"  # BilanSantePC-Installation-vX.Y.Z.exe, joint à chaque version
-NOM_EXE = "BilanSantePC.exe"
+NOM_EXE = "BilanSantePC.exe"  # nom donné par installateur.iss
 TAILLE_MAX = 500 * 1024**2  # au-delà, ce n'est pas l'application
 BLOC = 256 * 1024
 
 # Dans le dossier de l'application, le temps d'une mise à jour (effacés au lancement suivant).
 TEMPORAIRE = ".mise-a-jour"  # installateur téléchargé
-ANCIENNE = ".ancienne-version"  # ancienne version, gardée de côté pendant le remplacement (installateur.iss aussi)
-ATTENTE_FERMETURE = 120  # secondes au plus pour que l'ancienne version se ferme (fin d'une analyse comprise)
-ESSAIS = 10  # un fichier tout juste libéré peut rester bloqué un instant (antivirus) : on réessaie
+ANCIENNE = ".ancienne-version"  # ancienne version, mise de côté par installateur.iss pendant le remplacement
+ESSAIS = 10  # un dossier tout juste libéré peut rester bloqué un instant (antivirus) : on réessaie
 PAUSE = 0.5
 
 # Installateur lancé sans questions (seulement sa barre de progression) ; il attend la fin du processus /ATTENDRE.
 OPTIONS_INSTALLATEUR = ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
 ARGUMENT_FAITE = "--mise-a-jour-faite"  # donnés par l'installateur en rouvrant l'application
 ARGUMENT_RATEE = "--mise-a-jour-ratee"
-ARGUMENT_INSTALLER = "--installer"  # ancien mode : BilanSantePC.exe --installer <dossier de l'application> <pid>
 
 
 class Invalide(ValueError):
@@ -220,105 +216,10 @@ def lancer_installation(installateur: Path, dossier_app: Path) -> None:
             installateur.parent)
 
 
-# --- Ancien mode d'installation, gardé pour une version seulement ---
-# Jusqu'à la v0.4.1, l'application téléchargeait un zip et lançait la nouvelle version qu'il contenait avec
-# `--installer` : c'est ce mode qui remplace alors l'ancienne. La première version publiée avec un installateur garde
-# aussi son zip, pour que ces versions puissent s'y mettre à jour ; la suivante pourra retirer ce mode.
-
-
-def attendre_fermeture(pid: int, delai: float = ATTENTE_FERMETURE) -> bool:
-    """Attend la fin du processus `pid` (l'ancienne version) ; faux s'il tourne encore au bout de `delai` s."""
-    try:
-        psutil.Process(pid).wait(timeout=delai)
-    except psutil.NoSuchProcess:
-        pass
-    except psutil.TimeoutExpired:
-        return False
-    return True
-
-
-def _reessayer(action: Callable[[], object]) -> None:
-    for essai in range(ESSAIS):
-        try:
-            action()
-            return
-        except OSError:
-            if essai == ESSAIS - 1:
-                raise
-            time.sleep(PAUSE)
-
-
-def _effacer(chemin: Path) -> None:
-    if chemin.is_dir():
-        shutil.rmtree(chemin, ignore_errors=True)
-    else:
-        chemin.unlink(missing_ok=True)
-
-
-def remplacer(source: Path, dossier_app: Path) -> bool:
-    """Remplace les fichiers de l'application par ceux de `source` (la nouvelle version).
-
-    L'ancienne version est d'abord mise de côté dans ANCIENNE : en cas d'échec, elle est remise en place.
-    """
-    ancienne = dossier_app / ANCIENNE
-    shutil.rmtree(ancienne, ignore_errors=True)
-    ancienne.mkdir()
-    mis_de_cote: list[str] = []
-    copies: list[Path] = []
-    try:
-        for element in sorted(source.iterdir()):
-            cible = dossier_app / element.name
-            if cible.exists():
-                _reessayer(lambda: cible.rename(ancienne / element.name))
-                mis_de_cote.append(element.name)
-            copies.append(cible)  # avant la copie : une copie à moitié faite est effacée aussi
-            if element.is_dir():
-                shutil.copytree(element, cible)
-            else:
-                shutil.copy2(element, cible)
-    except OSError:
-        journal.exception("Installation de la mise à jour impossible : retour à l'ancienne version")
-        for cible in copies:
-            _effacer(cible)
-        for nom in mis_de_cote:
-            _reessayer(lambda: (ancienne / nom).rename(dossier_app / nom))
-        return False
-    return True
-
-
-def installer(dossier_app: Path, pid: int) -> bool:
-    """Mode installation, dans la nouvelle version lancée depuis le dossier temporaire : attend la fermeture de
-    l'ancienne, la remplace, puis rouvre l'application (l'ancienne version si le remplacement a échoué)."""
-    source = Path(sys.executable).parent
-    # Garde-fou : seulement le dossier d'une application installée, depuis son propre dossier temporaire.
-    if (source.resolve().parent != (dossier_app / TEMPORAIRE).resolve()
-            or not (dossier_app / NOM_EXE).is_file()):
-        journal.error("Installation refusée : %s n'est pas la mise à jour de %s", source, dossier_app)
-        return False
-    if not attendre_fermeture(pid):
-        journal.error("Installation abandonnée : l'ancienne version ne s'est pas fermée")
-        return False
-    faite = remplacer(source, dossier_app)
-    journal.info("Mise à jour installée" if faite else "Mise à jour annulée")
-    _lancer([str(dossier_app / NOM_EXE), ARGUMENT_FAITE if faite else ARGUMENT_RATEE], dossier_app)
-    return faite
-
-
-def installer_depuis(arguments: list[str]) -> int:
-    """`BilanSantePC.exe --installer <dossier> <pid>` : code de sortie 0 si la mise à jour est installée."""
-    try:
-        position = arguments.index(ARGUMENT_INSTALLER)
-        dossier, pid = Path(arguments[position + 1]), int(arguments[position + 2])
-    except (ValueError, IndexError):
-        journal.error("Mode installation : arguments invalides %s", arguments)
-        return 1
-    return 0 if installer(dossier, pid) else 1
-
-
 def nettoyer(dossier_app: Path | None = None) -> None:
-    """Efface ce qui reste d'une mise à jour (nouvelle version décompressée, ancienne version mise de côté).
+    """Efface ce qui reste d'une mise à jour (installateur téléchargé, ancienne version mise de côté).
 
-    Au lancement qui suit une mise à jour, le mode installation se termine à peine : on réessaie un instant.
+    Au lancement qui suit une mise à jour, l'installateur se termine à peine : on réessaie un instant.
     """
     dossier = dossier_app or dossier_application()
     if dossier is None:

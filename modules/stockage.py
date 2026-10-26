@@ -427,7 +427,7 @@ def scan(racine: str | None = None, progression: Callable[[int, int], None] = la
                            "lien": LIENS.get(cle)})
     classees = sorted(categories, key=lambda c: c["taille"], reverse=True)
     principales = ", ".join(f"{c['nom']} ({taille_lisible(c['taille'])})" for c in classees[:3] if c["taille"])
-    constats = [f"Disque {racine.rstrip(os.sep)} : {taille_lisible(usage.used)} utilisés sur "
+    constats = [f"Disque {racine.rstrip(os.sep)} {taille_lisible(usage.used)} utilisés sur "
                 f"{taille_lisible(usage.total)} ({taille_lisible(usage.free)} libres)."]
     if principales:
         constats.append(f"Ce qui prend le plus de place : {principales}.")

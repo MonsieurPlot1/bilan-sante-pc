@@ -144,7 +144,7 @@ def test_vider_la_corbeille(fenetre, tmp_path, monkeypatch):
     assert appels[1][0] == "scan" and appels[1][1]["temporaires"] == 1 * GO
     assert "2,0 Go libérés" in fenetre.annonce.texte()
     assert fenetre.cartes["fichiers"].resume.text() == "apres"
-    assert not fenetre.vider.isEnabled()  # Corbeille vide
+    assert fenetre.vider.isHidden()  # Corbeille vide : plus rien à vider
 
 
 def test_vidage_refuse(fenetre, tmp_path, monkeypatch):
@@ -156,10 +156,11 @@ def test_vidage_refuse(fenetre, tmp_path, monkeypatch):
     assert fenetre.cartes["fichiers"].resume.text() == "c" and fenetre.vider.isEnabled()
 
 
-def test_bouton_grise_si_corbeille_vide(fenetre, tmp_path, monkeypatch):
+def test_pas_de_bouton_si_corbeille_vide(fenetre, tmp_path, monkeypatch):
+    assert fenetre.vider.isHidden() and fenetre.bouton_pilotes.isHidden()  # avant l'analyse : rien à faire
     faux_modules(monkeypatch)  # Corbeille vide par défaut
     fenetre.afficher(analyse_faite(tmp_path))
-    assert not fenetre.vider.isEnabled()
+    assert fenetre.vider.isHidden()
 
 
 def test_progression_affichee(fenetre):
@@ -168,7 +169,7 @@ def test_progression_affichee(fenetre):
     assert fenetre.progression.maximum() == 600  # en centièmes de partie : la barre glisse
     assert fini.wait(3000)  # attend la vraie fin du glissement : un délai fixe échouait sur un PC chargé
     assert fenetre.progression.value() == 200  # deux parties finies
-    assert fenetre.info.text() == "Analyse en cours : Disque (2 sur 6 finies)…"
+    assert fenetre.info.text() == "En cours : Disque (2 parties sur 6 finies)…"
 
 
 def test_panne_imprevue_de_l_analyse(fenetre, app, monkeypatch):
@@ -186,10 +187,11 @@ def test_analyse_en_arriere_plan(fenetre, app, monkeypatch):
     faux_modules(monkeypatch)
     fenetre.lancer()
     assert fenetre.phrase.text() == "Analyse de ton PC en cours…" and not fenetre.bouton.isEnabled()
+    assert fenetre.etat.text() == "Analyse en cours"  # pas « Pas encore analysé » pendant l'analyse
     fenetre.analyse.wait()
     app.processEvents()  # livre les signaux envoyés depuis le thread
     assert fenetre.glissement.endValue() == (len(analyse.MODULES) - 1) * 100  # dernière étape reçue
-    assert fenetre.jauge.note == 100 and fenetre.bouton.isEnabled()
+    assert fenetre.jauge.note == 100 and fenetre.bouton.isEnabled() and fenetre.etat.text() == "Bon état"
 
 
 def test_bouton_ouvrir_d_un_conseil(fenetre, tmp_path, monkeypatch):

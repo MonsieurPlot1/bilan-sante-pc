@@ -62,7 +62,7 @@ Type: filesandordirs; Name: "{app}\.ancienne-version"
 [Code]
 const
   SYNCHRONIZE = $00100000;
-  ATTENTE_FERMETURE = 120000; // millisecondes, comme mise_a_jour.ATTENTE_FERMETURE
+  ATTENTE_FERMETURE = 120000; // millisecondes : l'application finit d'abord une analyse en cours
   ATTENTE_REUSSIE = 0;        // WAIT_OBJECT_0
 
 function OpenProcess(Acces: Longword; Heritage: Bool; Pid: Longword): Longword;

@@ -139,11 +139,6 @@ TEINTES = {"bleu": _selon_mode("#3987e5", "#2a78d6"), "magenta": _selon_mode("#d
            "gris": _selon_mode("#7c7c84", "#8e8e93"), "gris_clair": _selon_mode("#5c5c66", "#a8a8ae")}
 
 
-def niveau_ratio(ratio: float) -> str:
-    """Niveau de couleur d'une partie selon la part de points gardés."""
-    return "vert" if ratio >= 0.8 else "orange" if ratio >= 0.5 else "rouge"
-
-
 # --- Polices ---
 TITRE = ("Segoe UI Variable Display", "Segoe UI")  # dessin serré des grands textes
 CORPS = ("Segoe UI Variable Text", "Segoe UI")

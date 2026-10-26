@@ -1,7 +1,7 @@
 """Page Connexion : la liaison du PC avec la box, lue auprès de Windows, et un test de débit réel (PySide6).
 
-Le test est la seule partie de l'application qui utilise le réseau, et seulement sur clic : il échange des données
-de test avec les serveurs de Cloudflare, rien d'autre (voir modules/connexion.py).
+Le test n'utilise le réseau que sur clic : il échange des données de test avec les serveurs de Cloudflare, rien
+d'autre (voir modules/connexion.py).
 """
 
 import time
@@ -266,7 +266,7 @@ class PageConnexion(Page):
         if not self.occupe:  # pendant un test, la carte montrera la liaison relevée par le test
             self._afficher_liaison(None if "erreur" in lien else lien)
 
-    # --- Test (le seul accès au réseau de l'application, sur ce clic) ---
+    # --- Test (accès au réseau, seulement sur ce clic) ---
 
     def en_cours(self) -> bool:
         return self.occupe

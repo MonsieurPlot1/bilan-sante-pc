@@ -16,6 +16,8 @@ POINTS_SANS_BATTERIE = {"demarrage": 30, "disque": 30, "ressources": 25, "redema
 # Disque système (C:) : % de remplissage.
 DISQUE_SEUIL_OK = 70
 DISQUE_SEUIL_ZERO = 95
+# À partir de là, le disque est dit « presque plein » (en dessous, au-delà du seuil OK : « bien rempli »).
+DISQUE_PRESQUE_PLEIN = 90
 
 # Démarrage : nombre de programmes lancés avec Windows.
 DEMARRAGE_NB_OK = 10

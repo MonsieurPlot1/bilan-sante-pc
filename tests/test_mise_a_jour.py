@@ -5,7 +5,6 @@ import io
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -57,10 +56,6 @@ def application(dossier: Path, exe: bytes, interne: dict[str, bytes]) -> Path:
     for nom, contenu in interne.items():
         (dossier / "_internal" / nom).write_bytes(contenu)
     return dossier
-
-
-def contenu(dossier: Path) -> dict[str, bytes]:
-    return {str(chemin.relative_to(dossier)): chemin.read_bytes() for chemin in dossier.rglob("*") if chemin.is_file()}
 
 
 @pytest.mark.parametrize("texte, attendu", [("v0.3.8", (0, 3, 8)), ("0.3.6.1", (0, 3, 6, 1)), ("v1.0.0-beta", None),
@@ -191,95 +186,6 @@ def test_installable(monkeypatch, tmp_path):
         raise PermissionError("Accès refusé")
     monkeypatch.setattr(Path, "touch", protege)
     assert not mise_a_jour.installable(nouvelle, tmp_path)  # dossier protégé (Program Files…)
-
-
-def test_remplacer(tmp_path):
-    app = application(tmp_path / "app", b"ancien", {"vieux.txt": b"v"})
-    (app / "notes.txt").write_bytes(b"a moi")
-    source = application(tmp_path / "source", b"neuf", {"neuf.txt": b"n"})
-    assert mise_a_jour.remplacer(source, app)
-    assert (app / "BilanSantePC.exe").read_bytes() == b"neuf"
-    assert sorted(chemin.name for chemin in (app / "_internal").iterdir()) == ["neuf.txt"]
-    assert (app / "notes.txt").read_bytes() == b"a moi"  # le reste du dossier n'est pas touché
-    assert (app / ".ancienne-version" / "_internal" / "vieux.txt").read_bytes() == b"v"
-
-
-def test_remplacer_remet_l_ancienne_version_en_cas_d_echec(monkeypatch, tmp_path):
-    app = application(tmp_path / "app", b"ancien", {"vieux.txt": b"v"})
-    avant = contenu(app)
-    source = application(tmp_path / "source", b"neuf", {"neuf.txt": b"n"})
-
-    def copie_ratee(source_, cible, **_options):
-        (Path(cible) / "moitie.txt").parent.mkdir(parents=True)
-        (Path(cible) / "moitie.txt").write_bytes(b"m")
-        raise OSError("Disque plein")
-    monkeypatch.setattr(mise_a_jour.shutil, "copytree", copie_ratee)
-    assert not mise_a_jour.remplacer(source, app)
-    assert {nom: donnees for nom, donnees in contenu(app).items() if not nom.startswith(".ancienne")} == avant
-
-
-def installee(monkeypatch, tmp_path) -> Path:
-    """Une application installée et sa nouvelle version, décompressée et lancée en mode installation."""
-    app = application(tmp_path / "app", b"ancien", {"vieux.txt": b"v"})
-    source = application(app / ".mise-a-jour" / "BilanSantePC", b"neuf", {"neuf.txt": b"n"})
-    monkeypatch.setattr(sys, "executable", str(source / "BilanSantePC.exe"))
-    return app
-
-
-def test_installer(monkeypatch, tmp_path):
-    app = installee(monkeypatch, tmp_path)
-    lancements = []
-    monkeypatch.setattr(mise_a_jour, "attendre_fermeture", lambda pid: pid == 1234)
-    monkeypatch.setattr(mise_a_jour, "_lancer", lambda arguments, dossier: lancements.append((arguments, dossier)))
-    assert mise_a_jour.installer_depuis(["BilanSantePC.exe", "--installer", str(app), "1234"]) == 0
-    assert (app / "BilanSantePC.exe").read_bytes() == b"neuf"
-    assert lancements == [([str(app / "BilanSantePC.exe"), mise_a_jour.ARGUMENT_FAITE], app)]
-
-
-def test_installer_rate_rouvre_l_ancienne_version(monkeypatch, tmp_path):
-    app = installee(monkeypatch, tmp_path)
-    lancements = []
-    monkeypatch.setattr(mise_a_jour, "attendre_fermeture", lambda _pid: True)
-    monkeypatch.setattr(mise_a_jour, "remplacer", lambda _source, _app: False)
-    monkeypatch.setattr(mise_a_jour, "_lancer", lambda arguments, _dossier: lancements.append(arguments))
-    assert not mise_a_jour.installer(app, 1234)
-    assert lancements == [[str(app / "BilanSantePC.exe"), mise_a_jour.ARGUMENT_RATEE]]
-
-
-def test_installer_attend_la_fermeture(monkeypatch, tmp_path):
-    app = installee(monkeypatch, tmp_path)
-    monkeypatch.setattr(mise_a_jour, "attendre_fermeture", lambda _pid: False)
-    assert not mise_a_jour.installer(app, 1234)  # et rien n'est relancé (fixture)
-    assert (app / "BilanSantePC.exe").read_bytes() == b"ancien"
-
-
-def test_installer_refuse_un_autre_dossier(monkeypatch, tmp_path):
-    app = installee(monkeypatch, tmp_path)
-    autre = application(tmp_path / "autre", b"autre", {"x.txt": b"x"})
-    monkeypatch.setattr(mise_a_jour, "attendre_fermeture", lambda _pid: True)
-    assert not mise_a_jour.installer(autre, 1234)  # la mise à jour de `app` ne remplace pas `autre`
-    assert (autre / "BilanSantePC.exe").read_bytes() == b"autre"
-    monkeypatch.setattr(sys, "executable", str(tmp_path / "ailleurs" / "BilanSantePC.exe"))
-    assert not mise_a_jour.installer(app, 1234)  # lancé d'ailleurs que du dossier temporaire
-    assert (app / "BilanSantePC.exe").read_bytes() == b"ancien"
-
-
-@pytest.mark.parametrize("arguments", [["--installer"], ["--installer", "C:\\app"], ["--installer", "C:\\app", "x"]])
-def test_installer_avec_des_arguments_invalides(arguments):
-    assert mise_a_jour.installer_depuis(["BilanSantePC.exe", *arguments]) == 1
-
-
-def test_attendre_fermeture():
-    fini = subprocess.Popen([sys.executable, "-c", "pass"])
-    fini.wait()
-    assert mise_a_jour.attendre_fermeture(fini.pid)  # déjà fermé
-    actif = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
-    try:
-        assert not mise_a_jour.attendre_fermeture(actif.pid, 0.2)
-    finally:
-        actif.kill()
-        actif.wait()
-    assert mise_a_jour.attendre_fermeture(actif.pid)
 
 
 def test_lancer_installation(monkeypatch, tmp_path):

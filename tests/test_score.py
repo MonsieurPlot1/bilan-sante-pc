@@ -269,6 +269,14 @@ class TestCasExtremes(unittest.TestCase):
         self.assertEqual(resultat["scores"]["disque"], 0)
         self.assertEqual(resultat["score"], 70)
         self.assertIn("plein à 99 %", resultat["conseils"][0])
+        self.assertIn("Un disque presque plein ralentit Windows.", resultat["conseils"][0])
+
+    def test_disque_bien_rempli_mais_pas_presque_plein(self):
+        conseil = score.calculer(pc(disque=disque(80)))["conseils"][0]
+        self.assertIn("plein à 80 %", conseil)
+        self.assertNotIn("presque plein", conseil)  # à 80 %, il reste de la marge : pas d'alarme
+        self.assertIn("mieux vaut garder de la marge", conseil)
+        self.assertIn("L'onglet Stockage", conseil)
 
     def test_40_programmes(self):
         resultat = score.calculer(pc(demarrage=demarrage(40)))
@@ -429,6 +437,11 @@ class TestPilotes(unittest.TestCase):
                          "617.14) : les pilotes récents corrigent des bugs et rendent les jeux récents plus fluides. "
                          "Windows Update propose aussi 1 pilote (Garmin USB GPS). Le bouton installe tout d'un coup : "
                          "Windows te demandera l'autorisation et l'écran peut clignoter un instant.")
+
+    def test_un_seul_pilote(self):
+        conseil = score.conseil_pilotes(pilotes(mises_a_jour=[{"id": "x", "nom": "Garmin USB GPS"}]))
+        self.assertEqual(conseil, "Windows Update propose 1 pilote (Garmin USB GPS). Le bouton installe ce pilote : "
+                                  "Windows te demandera l'autorisation.")
 
     def test_windows_update_seul(self):
         conseil = score.conseil_pilotes(pilotes(mises_a_jour=[{"id": "x", "nom": "A"}, {"id": "y", "nom": "B"}]))

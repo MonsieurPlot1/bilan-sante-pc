@@ -10,7 +10,6 @@ Rien d'autre n'est installé ni modifié. Aucun point de restauration n'est cré
 
 import base64
 import ctypes
-import http.client
 import json
 import logging
 import re

@@ -67,9 +67,11 @@ def test_avant_analyse(fenetre):
 
 def test_affichage(fenetre, disque):
     page = fenetre.stockage
-    page.afficher(resultat_du_faux_disque(disque), animer=False)
+    resultat = resultat_du_faux_disque(disque)
+    page.afficher(resultat, animer=False)
     lignes = page.lignes_categories()
-    assert len(lignes) == 12
+    vides = [c["cle"] for c in resultat["categories"] if not c["taille"]]
+    assert vides and len(lignes) == 12 - len(vides)  # les catégories vides ne sont pas montrées
     # Du plus gros au plus petit.
     assert [ligne.categorie["cle"] for ligne in lignes[:3]] == ["systeme", "jeux", "videos"]
     plus_gros = [page.liste_plus_gros.itemAt(i).widget() for i in range(page.liste_plus_gros.count())]
@@ -169,7 +171,8 @@ def test_resultat_garde_au_changement_de_mode(fenetre, disque):
     try:
         fenetre.mode.click()
         QTest.qWait(fenetre_module.DUREE_FONDU + 200)
-        assert fenetre.stockage.resultat is resultat and len(fenetre.stockage.lignes_categories()) == 12
+        assert fenetre.stockage.resultat is resultat
+        assert len(fenetre.stockage.lignes_categories()) == len([c for c in resultat["categories"] if c["taille"]])
         assert fenetre.pages.currentIndex() == fenetre_module.ONGLET_STOCKAGE  # on reste sur l'onglet
     finally:
         theme.fichier_reglages().unlink(missing_ok=True)
@@ -297,7 +300,7 @@ def test_supprimer(fenetre, disque, monkeypatch):
     boutons_supprimer(videos)[0].click()
     assert confirmations == [(str(film), False, 300, 1, "videos")] and supprimes == [str(film)]
     videos = next(ligne for ligne in page.lignes_categories() if ligne.categorie["cle"] == "videos")
-    assert videos.ouvert and videos.categorie["taille"] == 0  # toujours dépliée, à jour
+    assert videos.ouvert and videos.categorie["taille"] == 0  # toujours là et dépliée, même vide : à jour
     assert taille(page, "corbeille") == 25 and taille(page, "systeme") == systeme  # rien ne passe par la Corbeille
     assert page.utilise.text() == "9,5 Ko utilisés"  # 9 700 octets : la place est libérée
     assert "film.mkv" not in [textes(ligne)[0] for ligne in page_stockage.lignes(page.liste_plus_gros)]

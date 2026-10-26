@@ -28,11 +28,6 @@ from ui.widgets import (Annonce, BarreHaut, Carte, CarteConseil, DefilementDoux,
 
 journal = logging.getLogger(__name__)
 
-# Colonnes du détail dépliable de chaque carte (les cartes sans colonnes n'ont pas de détail).
-COLONNES = {"demarrage": ["Programme", "Éditeur", "Chemin"], "disque": ["Élément", "Taille", "Détail"],
-            "fichiers": [], "ressources": ["Programme", "Mémoire"], "redemarrage": [], "alimentation": [],
-            "jeux": [], "pilotes": ["Appareil", "Pilote installé", "Mise à jour"], "batterie": []}
-
 DUREE_FONDU = 300  # millisecondes : passage en douceur entre le mode clair et le mode sombre
 DUREE_ONGLET = 180  # millisecondes : passage en douceur d'un onglet à l'autre
 DELAI_RECHERCHE = 3000  # millisecondes après l'ouverture : la recherche de mise à jour ne freine pas le démarrage
@@ -41,9 +36,6 @@ ONGLET_STOCKAGE, ONGLET_CONNEXION = 1, 2
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # boutons de la barre de titre sombres
 DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR = 34, 35, 36  # Windows 11 : liseré, barre de titre
 WTA_NONCLIENT, WTNCA_NODRAWCAPTION, WTNCA_NODRAWICON = 1, 0x1, 0x2  # barre de titre sans titre ni icône
-
-# Mot court affiché au-dessus de la phrase d'interprétation (la couleur n'est jamais seule).
-ETATS = {"vert": "Bon état", "orange": "À surveiller", "rouge": "À améliorer", "gris": "Analyse incomplète"}
 
 
 class Analyse(QThread):
@@ -278,16 +270,19 @@ class Fenetre(QMainWindow):
 
     def _cartes(self) -> QHBoxLayout:
         """Deux colonnes indépendantes : chaque carte garde la hauteur de son contenu."""
-        self.cartes = {cle: Carte(cle, nom, COLONNES[cle]) for cle, nom, _ in analyse.MODULES}
+        self.cartes = {cle: Carte(cle, nom, analyse.COLONNES[cle]) for cle, nom, _ in analyse.MODULES}
         self.cartes["batterie"].hide()  # affichée seulement si une batterie est détectée
+        # Boutons d'action des cartes : montrés seulement quand il y a quelque chose à faire (voir afficher).
         self.vider = bouton(" Vider la Corbeille", "", "effacer", theme.TEXTE, 13, enabled=False)
         self.vider.clicked.connect(self.vider_corbeille)
+        self.vider.hide()
         self.cartes["fichiers"].layout().addWidget(self.vider, alignment=Qt.AlignmentFlag.AlignLeft)
         voir = bouton("Voir ce qui prend de la place", "lien", "stockage", theme.ACCENT_CLAIR, 12)
         voir.clicked.connect(lambda: self.changer_page(ONGLET_STOCKAGE))
         self.cartes["disque"].layout().addWidget(voir, alignment=Qt.AlignmentFlag.AlignLeft)
         self.bouton_pilotes = bouton(" Mettre à jour les pilotes", "", "telechargement", theme.TEXTE, 13, enabled=False)
         self.bouton_pilotes.clicked.connect(self.mettre_a_jour_pilotes)
+        self.bouton_pilotes.hide()
         self.cartes["pilotes"].layout().addWidget(self.bouton_pilotes, alignment=Qt.AlignmentFlag.AlignLeft)
         colonnes = [QVBoxLayout(), QVBoxLayout()]
         for position, carte in enumerate(self.cartes.values()):
@@ -340,6 +335,17 @@ class Fenetre(QMainWindow):
             for position in range(self.liste_conseils.count()):
                 apparaitre(self.liste_conseils.itemAt(position).widget(), delai=position * 90)
 
+    def _etat(self, texte: str, niveau: str) -> None:
+        """Pastille au-dessus de la phrase du score : un mot, dans la couleur du niveau."""
+        self.etat.setText(texte)
+        self.etat.setProperty("niveau", niveau)
+        repolir(self.etat)
+
+    def _bouton_vider_pret(self, pleine: bool) -> None:
+        """« Vider la Corbeille » : seulement quand elle contient quelque chose (un bouton grisé ne servirait à rien)."""
+        self.vider.setVisible(pleine)
+        self.vider.setEnabled(pleine)
+
     def _texte_comparaison(self, lignes: list[str]) -> None:
         """Une vraie comparaison : le score mis en avant, le reste plus discret. Un message seul : texte simple."""
         lignes = [html.escape(ligne) for ligne in lignes]
@@ -347,13 +353,16 @@ class Fenetre(QMainWindow):
             self.comparaison.setText(f"<span style='color:{theme.TEXTE_2}'>{''.join(lignes)}</span>")
             return
         tete, *reste = lignes
-        detail = f"color:{theme.TEXTE_2}; line-height:150%; margin-top:6px"
+        # Une ligne par paragraphe, séparés d'un petit espace : une ligne trop longue qui passe à la ligne reste
+        # serrée et ne passe pas pour la ligne suivante.
+        detail = f"color:{theme.TEXTE_2}; margin-top:6px; margin-bottom:0"
         self.comparaison.setText(f"<div style='font-size:13.5pt; font-weight:700'>{tete}</div>"
-                                 f"<div style='{detail}'>{'<br>'.join(reste)}</div>")
+                                 + "".join(f"<p style='{detail}'>{ligne}</p>" for ligne in reste))
 
     def lancer(self) -> None:
         self.bouton.setEnabled(False)
         self.bouton.setText("  Analyse en cours…")
+        self._etat("Analyse en cours", "gris")
         self.phrase.setText("Analyse de ton PC en cours…")
         self.bilan_en_cours = True
         self._autoriser_mode()
@@ -364,7 +373,7 @@ class Fenetre(QMainWindow):
         self.glissement.stop()
         self.progression.setValue(0)
         self.progression.show()
-        self.info.setText("Analyse en cours… (la mesure des dossiers peut prendre une minute)")
+        self.info.setText("La mesure des dossiers peut prendre une minute.")
         self.analyse = Analyse()
         self.analyse.etape.connect(self.avancer)
         self.analyse.termine.connect(self.afficher)
@@ -376,8 +385,8 @@ class Fenetre(QMainWindow):
         self.glissement.stop()
         self.glissement.setEndValue(finies * 100)  # depuis la position du moment
         self.glissement.start()
-        self.info.setText(f"Analyse en cours : {nom} ({finies} sur {total} finies)…" if finies
-                          else f"Analyse en cours : {nom}…")
+        self.info.setText(f"En cours : {nom} ({finies} parties sur {total} finies)…" if finies
+                          else f"En cours : {nom}…")
 
     def afficher(self, resultat: dict, animer: bool = True) -> None:
         self.resultat = resultat
@@ -386,9 +395,7 @@ class Fenetre(QMainWindow):
         # La lueur prend la couleur de l'état du PC, une fois l'anneau rempli.
         self.ambiance.definir_teinte("neutre" if note is None else niveau, animer, self.jauge.animation.duration())
         self.jauge.definir(note, theme.VIFS[niveau], animer)
-        self.etat.setText(ETATS[niveau])
-        self.etat.setProperty("niveau", niveau)
-        repolir(self.etat)
+        self._etat(analyse.ETATS[niveau], niveau)
         self.phrase.setText(phrase)
         self.info.setText(f"Analyse du {resultat['date']:%d/%m/%Y à %H:%M}, terminée en {resultat['duree']:.0f} s.")
 
@@ -400,10 +407,10 @@ class Fenetre(QMainWindow):
             module = resultat["modules"][cle]
             ratio = bilan["scores"][cle] / bilan["bareme"][cle] if bilan and cle in bilan["scores"] else None
             carte.remplir(analyse.points_module(resultat, cle), ratio, module["constats"] if module else [],
-                          lignes_detail(cle, module) if module else [], resultat["erreurs"].get(cle), animer)
+                          analyse.lignes_detail(cle, module) if module else [], resultat["erreurs"].get(cle), animer)
 
         module_fichiers = resultat["modules"].get("fichiers")
-        self.vider.setEnabled(bool(module_fichiers and module_fichiers["corbeille"]))
+        self._bouton_vider_pret(bool(module_fichiers and module_fichiers["corbeille"]))
         self._bouton_pilotes_pret()
 
         conseils = analyse.conseils(resultat)
@@ -463,8 +470,8 @@ class Fenetre(QMainWindow):
         self.annonce.montrer("Historique effacé.", "valide")
 
     def vider_corbeille(self) -> None:
-        """Une des deux seules actions qui modifient le PC (avec « Supprimer » de l'onglet Stockage), et
-        seulement sur ce clic : Windows demande lui-même confirmation."""
+        """Une des rares actions qui modifient le PC (voir CLAUDE.md), seulement sur ce clic : Windows demande lui-même
+        confirmation."""
         try:
             avant = fichiers.corbeille()
             fichiers.vider_corbeille(int(self.winId()))
@@ -481,7 +488,7 @@ class Fenetre(QMainWindow):
         self.resultat["modules"]["fichiers"] = module
         self.cartes["fichiers"].remplir(analyse.points_module(self.resultat, "fichiers"), None, module["constats"],
                                         [], None)
-        self.vider.setEnabled(bool(module["corbeille"]))
+        self._bouton_vider_pret(bool(module["corbeille"]))
         self.annonce.montrer(f"Corbeille vidée : {taille_lisible(libere)} libérés. "
                              "Relance l'analyse pour mettre le score à jour.", "valide", 6000)
 
@@ -693,9 +700,12 @@ class Fenetre(QMainWindow):
     # --- Pilotes ---
 
     def _bouton_pilotes_pret(self) -> None:
+        """« Mettre à jour les pilotes » : seulement s'il y a des pilotes à installer, ou pendant leur installation."""
         module = self.resultat and self.resultat["modules"].get("pilotes")
+        a_installer = bool(module and module["a_installer"])
         self.bouton_pilotes.setText(" Mettre à jour les pilotes")
-        self.bouton_pilotes.setEnabled(bool(module and module["a_installer"]) and self.pilotes_a_installer is None)
+        self.bouton_pilotes.setVisible(a_installer or self.pilotes_a_installer is not None)
+        self.bouton_pilotes.setEnabled(a_installer and self.pilotes_a_installer is None)
 
     def mettre_a_jour_pilotes(self) -> None:
         """Bouton « Mettre à jour les pilotes » (carte Pilotes ou conseil) : après confirmation, télécharge le pilote
@@ -777,8 +787,9 @@ class Fenetre(QMainWindow):
             return
         self.suivi_pilotes.stop()
         self.processus_pilotes = None
-        resultat = installation_pilotes.bilan(installation_pilotes.lire_etat(), self.pilotes_a_installer["mises_a_jour"],
-                                              self.pilotes_a_installer["nvidia"])
+        a_installer = self.pilotes_a_installer
+        resultat = installation_pilotes.bilan(installation_pilotes.lire_etat(), a_installer["mises_a_jour"],
+                                              a_installer["nvidia"])
         installation_pilotes.nettoyer()
         if resultat["installes"] and not resultat["echecs"]:
             self.resultat["modules"]["pilotes"]["a_installer"] = 0  # à jour jusqu'à la prochaine analyse
@@ -820,38 +831,6 @@ class Fenetre(QMainWindow):
         for travail in travaux:
             travail.wait()
         super().closeEvent(evenement)
-
-
-def lignes_detail(cle: str, module: dict) -> list[list[str]]:
-    """Lignes du détail dépliable d'une carte."""
-    if cle == "demarrage":
-        return [[p["nom"], p["editeur"] or "inconnu", p["chemin"]] for p in module["programmes"]]
-    if cle == "pilotes":
-        return lignes_pilotes(module)
-    if cle == "disque":
-        lignes = [[f"Disque {d['disque']}", taille_lisible(d["libre"]) + " libres",
-                   f"{d['pourcentage']:.0f} % utilisé sur {taille_lisible(d['total'])}"] for d in module["disques"]]
-        return lignes + [[d["chemin"], taille_lisible(d["taille"]), "dossier du profil"]
-                         for d in module["gros_dossiers"]]
-    if cle == "ressources":
-        return [[p["nom"], taille_lisible(p["octets"])] for p in module["processus"]]
-    return []
-
-
-def lignes_pilotes(module: dict) -> list[list[str]]:
-    """Ce qui s'installe d'un clic d'abord, puis chaque pilote des composants du PC, du plus vieux au plus récent."""
-    nvidia, lignes = module["nvidia"], []
-    if pilotes.nvidia_a_installer(nvidia):
-        lignes.append([nvidia["carte"], nvidia["installee"], f"{nvidia['derniere']['version']} disponible (NVIDIA)"])
-    for mise_a_jour in module["mises_a_jour"] or []:
-        lignes.append([mise_a_jour["nom"], "", "Windows Update"])
-    a_verifier = f"à vérifier avec {module['outil']['nom']}" if module["outil"] else "à vérifier chez le fabricant"
-    for pilote in module["pilotes"]:
-        if lignes and pilotes.nvidia_a_installer(nvidia) and pilote["nom"] == nvidia["carte"]:
-            continue  # déjà en tête
-        quand = f" du {pilote['date']:%d/%m/%Y}" if pilote["date"] else ""
-        lignes.append([pilote["nom"], pilote["version"] + quand, a_verifier if pilote in module["anciens"] else ""])
-    return lignes
 
 
 @cache  # chargée une fois : appelée à chaque étape du fondu

@@ -56,9 +56,8 @@ affiche toutes dans le style de l'application, jamais la bulle grise de Qt.
 - Onglet à part, hors du bilan : connexion (`modules/connexion.py`, page `ui/connexion.py`), la liaison avec la box (lue auprès de Windows) et le test de débit sur clic. Les tests n'utilisent jamais le réseau (fixture `reseau_interdit`).
 - Hors du bilan : mises à jour (`modules/mise_a_jour.py`, bouton « Mettre à jour » de la barre du haut).
   L'installateur téléchargé (Inno Setup, `installateur.iss`), lancé sans questions avec `/ATTENDRE=<pid>`, remplace
-  l'application une fois celle-ci fermée, puis la rouvre. L'ancien mode `--installer` (les versions jusqu'à la
-  v0.4.1 installent un zip avec) ne reste que pour la première version publiée avec un installateur. Les tests
-  n'utilisent jamais le réseau et ne lancent rien (fixture `reseau_et_lancement_interdits`).
+  l'application une fois celle-ci fermée, puis la rouvre. Les tests n'utilisent jamais le réseau et ne lancent rien
+  (fixture `reseau_et_lancement_interdits`).
 - Barème et seuils dans `config.py`, calcul du score et conseils dans `modules/score.py`.
 
 ## Style
@@ -90,5 +89,5 @@ Code commenté en français, fonctions courtes, type hints, pas de dépendance i
 - Quand tu proposes un tag : indique la dernière version existante (git tag --sort=-v:refname), explique en une phrase ce qui a changé, suggère la version adaptée (CORRECTIF ou MINEURE) et demande-moi de choisir : la version suggérée, une autre version que je tape, ou pas de tag pour cette fois.
 - Une fois le tag validé, dans cet ordre : mets à jour VERSION dans config.py, ajoute l'entrée correspondante dans CHANGELOG.md, fais un commit "Version vX.Y.Z", crée le tag annoté avec git tag -a vX.Y.Z -F <fichier>. Le message du tag = une ligne de titre « vX.Y.Z : résumé en une phrase », une ligne vide, puis le contenu de l'entrée vX.Y.Z du CHANGELOG (ce qui a changé).
 - Ne fais PAS de git push (ni du code ni des tags) sans que je te le demande explicitement. Quand je le demande, le tag se pousse avec git push origin vX.Y.Z.
-- Juste après avoir poussé un tag, crée sa release GitHub : gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <entrée vX.Y.Z du CHANGELOG> --verify-tag, avec --prerelease tant qu'on est en v0.x. Toujours avec l'installateur en pièce jointe (les mises à jour de l'appli le téléchargent et le lancent) : `dist\BilanSantePC-Installation-vX.Y.Z.exe`, fait par `build.bat` après le commit de version. Vérifie avant que l'application qu'il installe démarre et que son journal donne la bonne version. Plus de zip, à ma demande, sauf pour la première version publiée avec un installateur : son zip `BilanSantePC-vX.Y.Z-windows.zip` (dossier `BilanSantePC` à sa racine) permet aux versions jusqu'à la v0.4.1 de s'y mettre à jour.
+- Juste après avoir poussé un tag, crée sa release GitHub : gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <entrée vX.Y.Z du CHANGELOG> --verify-tag, avec --prerelease tant qu'on est en v0.x. Toujours avec l'installateur en pièce jointe (les mises à jour de l'appli le téléchargent et le lancent) : `dist\BilanSantePC-Installation-vX.Y.Z.exe`, fait par `build.bat` après le commit de version. Vérifie avant que l'application qu'il installe démarre et que son journal donne la bonne version. Plus de zip, à ma demande (la v0.5.0 a été la dernière à en avoir un, pour les versions jusqu'à la v0.4.1).
 - Si un tag existe déjà ou si la version est plus basse que la dernière, préviens-moi au lieu de continuer.

@@ -2,9 +2,8 @@
 barre du disque, confirmations, annonces et infobulles. Les matières (verre, lueur, ombres) sont dans ui/verre.py."""
 
 from datetime import datetime
-from typing import Callable, NamedTuple
-
 from math import ceil
+from typing import Callable, NamedTuple
 
 from PySide6.QtCore import (QEasingCurve, QEvent, QModelIndex, QPoint, QPointF, QPropertyAnimation, QRect, QRectF,
                             QSequentialAnimationGroup, QSize, Qt, QTimer, QVariantAnimation, Signal)
@@ -16,11 +15,13 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QD
 
 import config
 from ui import theme
+from ui.analyse import niveau_ratio
 from ui.verre import Verre, arrondi, dessiner_ombre, flouter, peindre_verre
 
 # Teinte de la tuile d'icône de chaque partie du bilan (jamais une couleur d'état).
 TUILES = {"demarrage": "violet", "disque": "bleu", "fichiers": "aqua", "ressources": "magenta",
-          "redemarrage": "gris", "alimentation": "bleu", "jeux": "magenta", "pilotes": "violet", "batterie": "aqua", "historique": "bleu"}
+          "redemarrage": "gris", "alimentation": "bleu", "jeux": "magenta", "pilotes": "violet", "batterie": "aqua",
+          "historique": "bleu"}
 
 
 def couleur_alpha(couleur: str, alpha: int) -> QColor:
@@ -438,7 +439,7 @@ class Carte(Verre):
 
     def remplir(self, points: str, ratio: float | None, constats: list[str], lignes: list[list[str]],
                 erreur: str | None, animer: bool = True) -> None:
-        niveau = "gris" if ratio is None else theme.niveau_ratio(ratio)
+        niveau = "gris" if ratio is None else niveau_ratio(ratio)
         self.points.setText(points)
         self.points.setProperty("niveau", "rouge" if erreur else niveau)
         repolir(self.points)

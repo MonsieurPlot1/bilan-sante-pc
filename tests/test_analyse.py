@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 import journal
-from tests.test_score import (GO, alimentation, batterie, demarrage, disque, fichiers, jeux, pilotes, redemarrage,
-                              ressources)
+from tests.test_score import (GO, alimentation, batterie, demarrage, disque, fichiers, jeux, nvidia, pilotes,
+                              redemarrage, ressources)
 from ui import analyse
 
 
@@ -101,7 +101,15 @@ def test_rapport_html_sans_nom_utilisateur(monkeypatch):
     assert r"%USERPROFILE%\Downloads" in page and r"%USERPROFILE%\AppData\outil.exe" in page
     assert "<script>" not in page and "&lt;script&gt;" in page  # texte échappé
     assert "src=" not in page and "<link" not in page  # un seul fichier, sans ressource externe
-    assert "Conseils" in page and "Mémoire et processeur : erreur" in page and "? / 100" in page
+    assert "Conseils" in page and "<h2>Mémoire et processeur</h2><span class='pastille rouge'>erreur</span>" in page
+    assert "aria-label='Score : ? sur 100'" in page  # analyse incomplète : pas de score
+
+
+def test_rapport_html_reprend_les_tableaux_de_l_application(monkeypatch):
+    faux_modules(monkeypatch, pilotes=lambda: {"constats": [], **pilotes(nvidia=nvidia(), anciens=1)})
+    page = analyse.rapport_html(analyse.analyser())
+    assert "<th>Pilote installé</th>" in page and "621.01 disponible (NVIDIA)" in page  # comme la carte Pilotes
+    assert "<th>Élément</th>" in page and "Disque C:" in page
 
 
 def test_arriere_plan_baisse_puis_retablit_la_priorite():

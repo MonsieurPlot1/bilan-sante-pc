@@ -324,7 +324,8 @@ def constats(nvidia: dict | None, mises_a_jour: list[dict] | None, bloques: bool
     if mises_a_jour is None:
         lignes.append("Windows Update n'a pas pu être consulté.")
     elif mises_a_jour:
-        noms = ", ".join(mise_a_jour["nom"] for mise_a_jour in mises_a_jour[:3]) + ("…" if len(mises_a_jour) > 3 else "")
+        noms = (", ".join(mise_a_jour["nom"] for mise_a_jour in mises_a_jour[:3])
+                + ("…" if len(mises_a_jour) > 3 else ""))
         lignes.append(f"Windows Update propose {len(mises_a_jour)} pilote{'s' if len(mises_a_jour) > 1 else ''} : "
                       f"{noms}.")
     else:
@@ -347,7 +348,8 @@ def scan() -> dict:
     pilotes = [pilote for pilote in pilotes_installes() if du_pc(pilote, fabricant)]
     carte = next((pilote for pilote in pilotes if pilote["categorie"] == "Carte graphique"
                   and pilote["fournisseur"].lower().startswith("nvidia")), None)
-    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="pilotes") as executeur:  # Windows et NVIDIA en même temps
+    # Windows Update (PowerShell, quelques secondes) et NVIDIA (réseau) en même temps.
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="pilotes") as executeur:
         windows = executeur.submit(interroger_windows)
         nvidia = verifier_nvidia(carte) if carte else None
         windows = windows.result()
